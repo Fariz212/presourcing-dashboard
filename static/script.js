@@ -553,7 +553,12 @@ function teamModalHtml(d){
 function wireModalEvents(){
   if (!modal) return;
 
-  const close = ()=>{ modal=null; render(); };
+  const close = ()=>{ 
+    modal = null; 
+    let root = document.getElementById('modal-root');
+    if(root) root.innerHTML = ''; // Baris ini yang akan menghapus modal dari layar
+    render(); 
+  };
   
   const c1 = document.getElementById('m-close'); if(c1) c1.onclick = close;
   const c2 = document.getElementById('m-cancel'); if(c2) c2.onclick = close;
