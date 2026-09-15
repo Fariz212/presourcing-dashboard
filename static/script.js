@@ -549,6 +549,26 @@ function teamModalHtml(d){
   </div>`;
 }
 
+// ---------- FUNGSI SIMPAN SEMENTARA ----------
+function syncModalData() {
+  if(!modal || modal.type !== 'project') return;
+  const d = modal.data;
+  d.name = val('m-name'); d.requestorName = val('m-req-name'); d.requestorDept = val('m-req-dept');
+  d.priority = val('m-priority'); d.status = val('m-status'); d.leadId = val('m-lead');
+  d.createdAt = val('m-created') || todayStr(); d.closedAt = val('m-closed') || null;
+  d.sphMode = val('m-sphmode');
+  if(d.sphMode==='project'){
+    d.projectSphAwal = numOrNull(document.getElementById('m-proj-awal').value);
+    d.projectSphFinal = numOrNull(document.getElementById('m-proj-final').value);
+  }
+  
+  document.querySelectorAll('.sow-name').forEach(el=> d.sows[+el.dataset.si].name = el.value);
+  document.querySelectorAll('.boq-name').forEach(el=> d.sows[+el.dataset.si].boqs[+el.dataset.bi].name = el.value);
+  document.querySelectorAll('.it-product').forEach(el=>{ const [si,bi,ii]=el.dataset.path.split(':').map(Number); d.sows[si].boqs[bi].items[ii].product = el.value; });
+  document.querySelectorAll('.it-awal').forEach(el=>{ const [si,bi,ii]=el.dataset.path.split(':').map(Number); d.sows[si].boqs[bi].items[ii].sphAwal = numOrNull(el.value); });
+  document.querySelectorAll('.it-final').forEach(el=>{ const [si,bi,ii]=el.dataset.path.split(':').map(Number); d.sows[si].boqs[bi].items[ii].sphFinal = numOrNull(el.value); });
+}
+
 // ---------- wire modal events with safety checks ----------
 function wireModalEvents(){
   if (!modal) return;
@@ -556,7 +576,7 @@ function wireModalEvents(){
   const close = ()=>{ 
     modal = null; 
     let root = document.getElementById('modal-root');
-    if(root) root.innerHTML = ''; // Baris ini yang akan menghapus modal dari layar
+    if(root) root.innerHTML = ''; 
     render(); 
   };
   
@@ -582,17 +602,19 @@ function wireModalEvents(){
     return;
   }
 
-  // project modal events
+  // project modal events (Tiap nambah/hapus selalu panggil syncModalData dulu)
   const sphmode = document.getElementById('m-sphmode');
-  if(sphmode) sphmode.onchange = ()=>{ modal.data.sphMode = sphmode.value; render(); };
+  if(sphmode) sphmode.onchange = ()=>{ syncModalData(); modal.data.sphMode = sphmode.value; render(); };
 
   const addSowBtn = document.getElementById('m-add-sow');
   if(addSowBtn) addSowBtn.onclick = ()=>{
+    syncModalData();
     modal.data.sows.push({id:uid('sow'), name:'', boqs:[{id:uid('boq'), name:'', items:[{id:uid('item'), product:'', picIds:[], sphAwal:null, sphFinal:null}]}]});
     render();
   };
 
   document.querySelectorAll('[data-add-boq]').forEach(el=> el.onclick=()=>{
+    syncModalData();
     const si = +el.dataset.addBoq;
     modal.data.sows[si].boqs.push({id:uid('boq'), name:'', items:[{id:uid('item'), product:'', picIds:[], sphAwal:null, sphFinal:null}]});
     render();
@@ -600,27 +622,32 @@ function wireModalEvents(){
 
   document.querySelectorAll('[data-add-item]').forEach(el=>{
     const [si,bi] = el.dataset.addItem.split(':').map(Number);
-    el.onclick = ()=>{ modal.data.sows[si].boqs[bi].items.push({id:uid('item'), product:'', picIds:[], sphAwal:null, sphFinal:null}); render(); };
+    el.onclick = ()=>{ 
+      syncModalData();
+      modal.data.sows[si].boqs[bi].items.push({id:uid('item'), product:'', picIds:[], sphAwal:null, sphFinal:null}); 
+      render(); 
+    };
   });
 
   document.querySelectorAll('[data-del-sow]').forEach(el=>{
     const si = +el.dataset.delSow;
-    el.onclick = ()=>{ modal.data.sows.splice(si,1); render(); };
+    el.onclick = ()=>{ syncModalData(); modal.data.sows.splice(si,1); render(); };
   });
 
   document.querySelectorAll('[data-del-boq]').forEach(el=>{
     const [si,bi] = el.dataset.delBoq.split(':').map(Number);
-    el.onclick = ()=>{ modal.data.sows[si].boqs.splice(bi,1); render(); };
+    el.onclick = ()=>{ syncModalData(); modal.data.sows[si].boqs.splice(bi,1); render(); };
   });
 
   document.querySelectorAll('[data-del-item]').forEach(el=>{
     const [si,bi,ii] = el.dataset.delItem.split(':').map(Number);
-    el.onclick = ()=>{ modal.data.sows[si].boqs[bi].items.splice(ii,1); render(); };
+    el.onclick = ()=>{ syncModalData(); modal.data.sows[si].boqs[bi].items.splice(ii,1); render(); };
   });
 
   document.querySelectorAll('[data-pic]').forEach(el=>{
     const [si,bi,ii,name] = el.dataset.pic.split(':');
     el.onclick = ()=>{
+      syncModalData();
       const arr = modal.data.sows[+si].boqs[+bi].items[+ii].picIds;
       const idx = arr.indexOf(name);
       if(idx>=0) arr.splice(idx,1); else arr.push(name);
@@ -631,25 +658,13 @@ function wireModalEvents(){
   const saveBtn = document.getElementById('m-save');
   if(saveBtn){
     saveBtn.onclick = ()=>{
+      syncModalData(); // Cukup panggil fungsi ini saat save
       const d = modal.data;
-      d.name = val('m-name'); d.requestorName = val('m-req-name'); d.requestorDept = val('m-req-dept');
-      d.priority = val('m-priority'); d.status = val('m-status'); d.leadId = val('m-lead');
-      d.createdAt = val('m-created') || todayStr(); d.closedAt = val('m-closed') || null;
-      d.sphMode = val('m-sphmode');
-      if(d.sphMode==='project'){
-        d.projectSphAwal = numOrNull(document.getElementById('m-proj-awal').value);
-        d.projectSphFinal = numOrNull(document.getElementById('m-proj-final').value);
-      }
-      
-      document.querySelectorAll('.sow-name').forEach(el=> d.sows[+el.dataset.si].name = el.value);
-      document.querySelectorAll('.boq-name').forEach(el=> d.sows[+el.dataset.si].boqs[+el.dataset.bi].name = el.value);
-      document.querySelectorAll('.it-product').forEach(el=>{ const [si,bi,ii]=el.dataset.path.split(':').map(Number); d.sows[si].boqs[bi].items[ii].product = el.value; });
-      document.querySelectorAll('.it-awal').forEach(el=>{ const [si,bi,ii]=el.dataset.path.split(':').map(Number); d.sows[si].boqs[bi].items[ii].sphAwal = numOrNull(el.value); });
-      document.querySelectorAll('.it-final').forEach(el=>{ const [si,bi,ii]=el.dataset.path.split(':').map(Number); d.sows[si].boqs[bi].items[ii].sphFinal = numOrNull(el.value); });
-
       const idx = projects.findIndex(p=>p.id===d.id);
       if(idx>=0) projects[idx]=d; else projects.push(d);
       
+      let root = document.getElementById('modal-root');
+      if(root) root.innerHTML = '';
       modal = null;
       render();
       saveAll();
