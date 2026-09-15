@@ -6,6 +6,7 @@ let team = [];
 let activeTab = 'overview';
 let openProjectId = null;
 let modal = null; 
+let modalScroll = 0;
 let filters = { priority:'all', status:'all' };
 let storageOk = true;
 
@@ -432,11 +433,15 @@ function blankProject(){
   };
 }
 function openProjectModal(id){
+  modalScroll = 0; // Reset scroll
   const existing = id ? JSON.parse(JSON.stringify(projects.find(p=>p.id===id))) : blankProject();
   modal = { type:'project', data: existing, isNew: !id };
   render();
 }
-function openTeamModal(){ modal = { type:'team', data:{ names: team.join(', ') } }; render(); }
+function openTeamModal(){ 
+  modalScroll = 0; // Reset scroll
+  modal = { type:'team', data:{ names: team.join(', ') } }; render(); 
+}
 
 function renderModal(){
   let root = document.getElementById('modal-root');
@@ -444,6 +449,9 @@ function renderModal(){
   if(modal.type==='project') root.innerHTML = projectModalHtml(modal.data, modal.isNew);
   if(modal.type==='team') root.innerHTML = teamModalHtml(modal.data);
   wireModalEvents();
+  // Kembalikan posisi scroll agar tidak mantul ke atas
+  const m = document.querySelector('.modal');
+  if(m) m.scrollTop = modalScroll;
 }
 
 function projectModalHtml(d, isNew){
@@ -564,6 +572,9 @@ function teamModalHtml(d){
 // ---------- FUNGSI SIMPAN SEMENTARA ----------
 function syncModalData() {
   if(!modal || modal.type !== 'project') return;
+  // Tangkap posisi scroll saat ini sebelum form di-refresh
+  const m = document.querySelector('.modal');
+  if(m) modalScroll = m.scrollTop;
   const d = modal.data;
   d.name = val('m-name'); d.requestorName = val('m-req-name'); d.requestorDept = val('m-req-dept');
   d.priority = val('m-priority'); d.status = val('m-status'); d.leadId = val('m-lead');
@@ -624,14 +635,23 @@ function wireModalEvents(){
   const addSowBtn = document.getElementById('m-add-sow');
   if(addSowBtn) addSowBtn.onclick = ()=>{
     syncModalData();
-    modal.data.sows.push({id:uid('sow'), name:'', boqs:[{id:uid('boq'), name:'', items:[{id:uid('item'), product:'', picIds:[], sphAwal:null, sphFinal:null}]}]});
+    modal.data.sows.push({
+      id:uid('sow'), name:'', 
+      boqs:[{
+        id:uid('boq'), name:'', 
+        items:[{id:uid('item'), product:'', qty:1, vendor:'', notes:'', picIds:[], sphAwal:null, sphFinal:null}]
+      }]
+    });
     render();
   };
 
   document.querySelectorAll('[data-add-boq]').forEach(el=> el.onclick=()=>{
     syncModalData();
     const si = +el.dataset.addBoq;
-    modal.data.sows[si].boqs[bi].items.push({id:uid('item'), product:'', qty:1, vendor:'', notes:'', picIds:[], sphAwal:null, sphFinal:null});
+    modal.data.sows[si].boqs.push({
+      id:uid('boq'), name:'', 
+      items:[{id:uid('item'), product:'', qty:1, vendor:'', notes:'', picIds:[], sphAwal:null, sphFinal:null}]
+    });
     render();
   });
 
@@ -639,7 +659,9 @@ function wireModalEvents(){
     const [si,bi] = el.dataset.addItem.split(':').map(Number);
     el.onclick = ()=>{ 
       syncModalData();
-      modal.data.sows[si].boqs[bi].items.push({id:uid('item'), product:'', picIds:[], sphAwal:null, sphFinal:null}); 
+      modal.data.sows[si].boqs[bi].items.push({
+        id:uid('item'), product:'', qty:1, vendor:'', notes:'', picIds:[], sphAwal:null, sphFinal:null
+      }); 
       render(); 
     };
   });
