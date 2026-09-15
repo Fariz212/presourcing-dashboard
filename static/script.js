@@ -336,11 +336,18 @@ function renderProjectDetail(p){
         <div class="sow-title">SoW: ${sow.name}</div>
         ${(sow.boqs||[]).map(boq=>`
           <div class="boq-title">BoQ: ${boq.name}</div>
-          <div class="item-row hd"><div>Produk</div><div class="num">SPH Awal</div><div class="num">SPH Final</div><div class="num">Efficiency</div><div>PIC</div></div>
+          <div style="display:grid; grid-template-columns: 2fr 0.4fr 1fr 1fr 1fr 0.8fr 1.5fr; gap:8px; padding:5px 0; font-size:10.5px; color:var(--text-dim); border-bottom:1px solid var(--border);">
+            <div>Produk</div><div>Qty</div><div>Vendor</div><div class="num">SPH Awal</div><div class="num">SPH Final</div><div class="num">Efficiency</div><div>PIC</div>
+          </div>
           ${(boq.items||[]).map(it=>{
             const eff = p.sphMode==='item' ? efficiencyPct(it.sphAwal,it.sphFinal) : null;
-            return `<div class="item-row">
-              <div>${it.product}</div>
+            return `<div style="display:grid; grid-template-columns: 2fr 0.4fr 1fr 1fr 1fr 0.8fr 1.5fr; gap:8px; padding:7px 0; font-size:12.5px; border-bottom:1px solid var(--border-soft); align-items:start;">
+              <div>
+                <div style="font-weight:500;">${it.product || '—'}</div>
+                ${it.notes ? `<div style="font-size:11px; color:var(--text-muted); margin-top:3px;">📝 ${it.notes}</div>` : ''}
+              </div>
+              <div style="color:var(--text-muted);">${it.qty || '-'}</div>
+              <div style="color:var(--text-muted);">${it.vendor || '-'}</div>
               <div class="num mono">${p.sphMode==='item'?fmtIdr(it.sphAwal):'—'}</div>
               <div class="num mono">${p.sphMode==='item'?fmtIdr(it.sphFinal):'—'}</div>
               <div class="num mono">${p.sphMode==='item'?fmtPct(eff):'—'}</div>
@@ -421,7 +428,7 @@ function blankProject(){
     priority:'Medium', status:'ongoing', leadId: team[0]||'',
     sphMode:'item', projectSphAwal:null, projectSphFinal:null,
     createdAt: todayStr(), closedAt:null,
-    sows:[{ id:uid('sow'), name:'', boqs:[{ id:uid('boq'), name:'', items:[{ id:uid('item'), product:'', picIds:[], sphAwal:null, sphFinal:null }] }] }]
+    sows:[{ id:uid('sow'), name:'', boqs:[{ id:uid('boq'), name:'', items:[{ id:uid('item'), product:'', qty:1, vendor:'', notes:'', picIds:[], sphAwal:null, sphFinal:null }] }] }]
   };
 }
 function openProjectModal(id){
@@ -515,14 +522,19 @@ function boqBlockHtml(boq, si, bi){
 }
 function itemBlockHtml(it, si, bi, ii){
   return `<div class="item-block" data-item-idx="${ii}">
+    <div style="display:grid; grid-template-columns: 2fr 0.5fr 1.5fr; gap:12px; margin-bottom:12px;">
+      <div class="field" style="margin:0;"><label>Produk</label><input class="it-product" data-path="${si}:${bi}:${ii}" value="${escAttr(it.product)}" placeholder="CCTV"></div>
+      <div class="field" style="margin:0;"><label>Qty</label><input type="number" class="it-qty" data-path="${si}:${bi}:${ii}" value="${it.qty??1}"></div>
+      <div class="field" style="margin:0;"><label>Vendor</label><input class="it-vendor" data-path="${si}:${bi}:${ii}" value="${escAttr(it.vendor)}" placeholder="Nama Vendor"></div>
+    </div>
     <div class="grid3">
-      <div class="field"><label>Produk</label><input class="it-product" data-path="${si}:${bi}:${ii}" value="${escAttr(it.product)}" placeholder="CCTV"></div>
       <div class="field"><label>SPH Awal item</label><input type="number" class="it-awal" data-path="${si}:${bi}:${ii}" value="${it.sphAwal??''}"></div>
       <div class="field"><label>SPH Final item</label><input type="number" class="it-final" data-path="${si}:${bi}:${ii}" value="${it.sphFinal??''}"></div>
+      <div class="field"><label>PIC untuk item ini</label>
+        <div class="pic-select">${team.map(t=>`<div class="pic-opt ${it.picIds.includes(t)?'on':''}" data-pic="${si}:${bi}:${ii}:${t}">${t}</div>`).join('')}</div>
+      </div>
     </div>
-    <div class="field"><label>PIC untuk item ini</label>
-      <div class="pic-select">${team.map(t=>`<div class="pic-opt ${it.picIds.includes(t)?'on':''}" data-pic="${si}:${bi}:${ii}:${t}">${t}</div>`).join('')}</div>
-    </div>
+    <div class="field"><label>Notes (Opsional)</label><input class="it-notes" data-path="${si}:${bi}:${ii}" value="${escAttr(it.notes)}" placeholder="Catatan tambahan..."></div>
     <button class="mini-btn danger" data-del-item="${si}:${bi}:${ii}" type="button">Hapus item</button>
   </div>`;
 }
@@ -564,6 +576,9 @@ function syncModalData() {
   
   document.querySelectorAll('.sow-name').forEach(el=> d.sows[+el.dataset.si].name = el.value);
   document.querySelectorAll('.boq-name').forEach(el=> d.sows[+el.dataset.si].boqs[+el.dataset.bi].name = el.value);
+  document.querySelectorAll('.it-qty').forEach(el=>{ const [si,bi,ii]=el.dataset.path.split(':').map(Number); d.sows[si].boqs[bi].items[ii].qty = numOrNull(el.value); });
+  document.querySelectorAll('.it-vendor').forEach(el=>{ const [si,bi,ii]=el.dataset.path.split(':').map(Number); d.sows[si].boqs[bi].items[ii].vendor = el.value; });
+  document.querySelectorAll('.it-notes').forEach(el=>{ const [si,bi,ii]=el.dataset.path.split(':').map(Number); d.sows[si].boqs[bi].items[ii].notes = el.value; });
   document.querySelectorAll('.it-product').forEach(el=>{ const [si,bi,ii]=el.dataset.path.split(':').map(Number); d.sows[si].boqs[bi].items[ii].product = el.value; });
   document.querySelectorAll('.it-awal').forEach(el=>{ const [si,bi,ii]=el.dataset.path.split(':').map(Number); d.sows[si].boqs[bi].items[ii].sphAwal = numOrNull(el.value); });
   document.querySelectorAll('.it-final').forEach(el=>{ const [si,bi,ii]=el.dataset.path.split(':').map(Number); d.sows[si].boqs[bi].items[ii].sphFinal = numOrNull(el.value); });
@@ -616,7 +631,7 @@ function wireModalEvents(){
   document.querySelectorAll('[data-add-boq]').forEach(el=> el.onclick=()=>{
     syncModalData();
     const si = +el.dataset.addBoq;
-    modal.data.sows[si].boqs.push({id:uid('boq'), name:'', items:[{id:uid('item'), product:'', picIds:[], sphAwal:null, sphFinal:null}]});
+    modal.data.sows[si].boqs[bi].items.push({id:uid('item'), product:'', qty:1, vendor:'', notes:'', picIds:[], sphAwal:null, sphFinal:null});
     render();
   });
 
