@@ -273,6 +273,7 @@ def get_request_items_admin(ticket_id):
     items_list = [dict(row) for row in rows]
     return jsonify({"success": True, "data": items_list}), 200
 
+# 2. API untuk Admin Assign PIC & Update Status Tiketexit
 # 2. API untuk Admin Assign PIC & Update Status Tiket
 @app.route('/api/requests/assign', methods=['POST'])
 def assign_ticket():
@@ -327,18 +328,21 @@ def assign_ticket():
                 "sphFinal": None
             })
             
+        # Menggunakan datetime Python standar untuk tanggal hari ini
+        current_date = datetime.now().strftime('%Y-%m-%d')
+        
         new_project_entry = {
             "id": req['ticket_id'],
             "name": f"{req['title']} ({req['client_name'] or 'Klien Umum'})",
             "requestorName": req['requester_username'],
             "requestorDept": "Presales Team",
-            "priority": "High", # Bisa disesuaikan
+            "priority": "High", 
             "status": "ongoing",
             "leadId": pic_username,
             "sphMode": "item",
             "projectSphAwal": None,
             "projectSphFinal": None,
-            "createdAt": req['created_at'][:10] if req['created_at'] else todayStr(),
+            "createdAt": req['created_at'][:10] if req['created_at'] else current_date,
             "closedAt": None,
             "sows": [{
                 "id": f"sow_{req['ticket_id']}",
@@ -364,7 +368,7 @@ def assign_ticket():
         conn2.close()
 
     return jsonify({"success": True, "message": "Tiket berhasil di-assign dan disinkronkan ke dashboard!"}), 200
-    
+
 # --- API ENDPOINTS (DASHBOARD LAMA) ---
 @app.route('/api/presourcing', methods=['GET'])
 def get_data():
