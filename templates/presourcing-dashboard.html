@@ -379,18 +379,15 @@ tr.proj-row:hover{background:var(--panel-2);}
     }
 
     // 2. Fungsi Logout
-    async function handleLogout() {
-        try {
-            // Beritahu Backend untuk menghapus session
-            await fetch('/api/logout', { method: 'POST' });
-        } catch (err) {
-            console.error("Gagal menghubungi server untuk logout:", err);
-        } finally {
-            // Hapus data dari browser dan tendang ke halaman login
-            localStorage.removeItem('user');
-            window.location.href = '/login';
-        }
-    }
+// Fungsi Logout Anti-Loop
+function handleLogout() {
+    // 1. Bersihkan dulu data profil di memori browser
+    localStorage.removeItem('user');
+    
+    // 2. Arahkan ke rute Flask agar backend juga membersihkan session
+    // (Flask nanti akan otomatis melempar kita ke /login)
+    window.location.href = '/logout';
+}
 </script>
 
 
