@@ -26,9 +26,87 @@ def sa_portal():
     return render_template('sa-portal.html')
 
 # --- INISIALISASI DATABASE ---
+def migrate_existing_requests():
+    conn = sqlite3.connect(DB_NAME)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    
+    # 1. Ambil semua request yang sudah di-assign (ongoing atau done)
+    cursor.execute("SELECT * FROM requests WHERE status != 'unassigned'")
+    ongoing_requests = cursor.fetchall()
+    
+    if not ongoing_requests:
+        conn.close()
+        return
+
+    # 2. Ambil data projects yang ada di dashboard_state saat ini
+    cursor.execute("SELECT json_data FROM dashboard_state WHERE data_type = 'projects'")
+    row = cursor.fetchone()
+    projects_list = json.loads(row[0]) if row and row[0] else []
+    
+    existing_ids = {p['id'] for p in projects_list}
+    updated = False
+    
+    # 3. Masukkan data requests lama yang belum ada di dashboard_state
+    for req in ongoing_requests:
+        if req['ticket_id'] not in existing_ids:
+            # Ambil item BoQ terkait
+            cursor.execute("SELECT * FROM request_items WHERE ticket_id = ?", (req['ticket_id'],))
+            items = cursor.fetchall()
+            
+            formatted_items = []
+            for it in items:
+                formatted_items.append({
+                    "id": f"item_{it['id']}",
+                    "product": it['description'],
+                    "qty": it['quantity'],
+                    "vendor": it['vendor'] or "",
+                    "picIds": [req['pic_username'] or "Admin"],
+                    "sphAwal": None,
+                    "sphFinal": None
+                })
+                
+            current_date = datetime.now().strftime('%Y-%m-%d')
+            new_entry = {
+                "id": req['ticket_id'],
+                "name": f"{req['title']} ({req['client_name'] or 'Klien Umum'})",
+                "requestorName": req['requester_username'],
+                "requestorDept": "Presales Team",
+                "priority": "High",
+                "status": req['status'],
+                "leadId": req['pic_username'] or "Admin",
+                "sphMode": "item",
+                "projectSphAwal": None,
+                "projectSphFinal": None,
+                "createdAt": req['created_at'][:10] if req['created_at'] else current_date,
+                "closedAt": None,
+                "sows": [{
+                    "id": f"sow_{req['ticket_id']}",
+                    "name": "General Scope of Work",
+                    "boqs": [{
+                        "id": f"boq_{req['ticket_id']}",
+                        "name": "BoQ Lampiran SA",
+                        "items": formatted_items
+                    }]
+                }]
+            }
+            projects_list.insert(0, new_entry)
+            updated = True
+            
+    # 4. Simpan kembali jika ada data baru yang dimasukkan
+    if updated:
+        cursor.execute('''
+            INSERT INTO dashboard_state (data_type, json_data) VALUES ('projects', ?)
+            ON CONFLICT(data_type) DO UPDATE SET json_data=excluded.json_data
+        ''', (json.dumps(projects_list),))
+        conn.commit()
+        
+    conn.close()
+    
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
+    
     
     # 1. Tabel state dashboard lama (JSON)
     cursor.execute('''
@@ -96,6 +174,7 @@ def init_db():
         
     conn.commit()
     conn.close()
+    migrate_existing_requests()
 
 init_db()
 
@@ -273,7 +352,6 @@ def get_request_items_admin(ticket_id):
     items_list = [dict(row) for row in rows]
     return jsonify({"success": True, "data": items_list}), 200
 
-# 2. API untuk Admin Assign PIC & Update Status Tiketexit
 # 2. API untuk Admin Assign PIC & Update Status Tiket
 @app.route('/api/requests/assign', methods=['POST'])
 def assign_ticket():
