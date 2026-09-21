@@ -34,6 +34,7 @@ def migrate_existing_requests():
     # 1. Ambil semua request yang sudah di-assign (ongoing atau done)
     cursor.execute("SELECT * FROM requests WHERE status != 'unassigned'")
     ongoing_requests = cursor.fetchall()
+    print(f"--- [DEBUG MIGRASI] Ditemukan {len(ongoing_requests)} tiket ongoing/done di database ---")
     
     if not ongoing_requests:
         conn.close()
