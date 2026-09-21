@@ -182,6 +182,21 @@ def init_db():
             VALUES ('admin', 'admin123', 'Admin Presourcing', 'Presourcing Control', 'admin')
         ''')
         
+    # Inject akun MASTER (sebagai Admin)
+    cursor.execute("SELECT COUNT(*) FROM users WHERE username = 'master'")
+    if cursor.fetchone()[0] == 0:
+        cursor.execute('''
+            INSERT INTO users (username, password, full_name, department, role) 
+            VALUES ('master', 'master123', 'Master Admin', 'System Control', 'admin')
+        ''')
+
+    # Inject akun TESTER (sebagai SA)
+    cursor.execute("SELECT COUNT(*) FROM users WHERE username = 'tester'")
+    if cursor.fetchone()[0] == 0:
+        cursor.execute('''
+            INSERT INTO users (username, password, full_name, department, role) 
+            VALUES ('tester', 'tester123', 'QA Tester', 'Testing Team', 'sa')
+        ''')
     conn.commit()
     conn.close()
     migrate_existing_requests()
