@@ -255,11 +255,13 @@ modal.addEventListener('click', (e) => { if(e.target === modal) closeModal(); })
 
 // 3. Fungsionalitas Tombol Download Template
 function downloadTemplate() {
-    // Membuat file dummy excel template atau mengarahkan ke endpoint/file statis
-    // Di sini kita buat link unduh otomatis untuk template standar
+    // Menggunakan Flask url_for untuk mengambil path file statis secara dinamis
+    const downloadUrl = "{{ url_for('static', filename='Template_BoQ_Presourcing_Pro.xlsx') }}";
+    
+    // Memicu proses unduh otomatis di browser SA
     const link = document.createElement('a');
-    link.href = '/static/Template_BoQ_Presourcing.xlsx'; // Pastikan file template ada di folder static atau atur path-nya
-    link.download = 'Template_BoQ_Presourcing.xlsx';
+    link.href = downloadUrl;
+    link.download = 'Template_BoQ_Presourcing_Pro.xlsx';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
