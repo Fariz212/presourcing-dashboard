@@ -3,8 +3,8 @@ import shutil
 import os
 
 # Nama database sudah disesuaikan
-DB_FILE = 'presourcing_db.sqlite' 
-BACKUP_FILE = 'presourcing_db_backup.sqlite'
+DB_FILE = 'presourcing_db' 
+BACKUP_FILE = 'presourcing_db_backup'
 
 def migrate_database():
     # 1. PROSES BACKUP
