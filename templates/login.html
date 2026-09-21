@@ -140,13 +140,10 @@ body {
 </div>
 
 <script>
-// 1. Pengecekan Akses (Routing Pintar)
-// Jika user sudah pernah login (datanya ada di browser), langsung lempar ke halaman yang sesuai
-const savedUser = localStorage.getItem('user');
-if (savedUser) {
-    const u = JSON.parse(savedUser);
-    window.location.href = u.role === 'admin' ? '/' : '/portal';
-}
+// 1. Sinkronisasi Sesi Backend dan Frontend
+// Jika halaman login.html sampai ditampilkan oleh server, artinya session di backend sudah pasti kosong.
+// Hapus sisa ingatan di browser agar bersih dan tidak terjadi infinite loop!
+localStorage.removeItem('user');
 
 // 2. Fungsi untuk bolak-balik form Login dan Register
 function toggleView(view) {
