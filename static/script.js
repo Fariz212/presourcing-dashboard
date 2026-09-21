@@ -329,6 +329,9 @@ function renderProjectDetail(p){
       <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
         <div style="font-size:12px; color:var(--text-muted);">Lead Presource: <strong style="color:var(--text);">${p.leadId||'—'}</strong> · PIC terlibat: ${uniq.join(', ')||'—'}</div>
         <div style="display:flex; gap:6px;">
+          <!-- Tombol Download Excel per Project -->
+          <button class="mini-btn" onclick="downloadProjectReport('${p.id}')">📥 Download Excel</button>
+          
           <button class="mini-btn" data-edit-project="${p.id}">Edit</button>
           <button class="mini-btn danger" data-delete-project="${p.id}">Hapus</button>
         </div>
@@ -420,6 +423,13 @@ function wireEvents(){
   document.querySelectorAll('[data-edit-project]').forEach(el=> el.onclick=(e)=>{ e.stopPropagation(); openProjectModal(el.dataset.editProject); });
   document.querySelectorAll('[data-delete-project]').forEach(el=> el.onclick=(e)=>{ e.stopPropagation(); if(confirm('Hapus project ini?')){ projects = projects.filter(p=>p.id!==el.dataset.deleteProject); saveAll(); render(); } });
   const btnTeam = document.getElementById('btn-manage-team'); if(btnTeam) btnTeam.onclick = ()=> openTeamModal();
+}
+
+// ----------- download project ---------
+
+// ---------- FUNGSI DOWNLOAD REPORT EXCEL PROJECT ----------
+function downloadProjectReport(projectId) {
+    window.location.href = `/api/download_report?project_id=${projectId}`;
 }
 
 // ---------- modal functions ----------
