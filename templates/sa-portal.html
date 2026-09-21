@@ -191,12 +191,17 @@ tr:hover td { background: #F8FAFC; }
 </div>
 
 <script>
-// Pengecekan Akses (Masih Mode Longgar)
+// 1. Pengecekan User & Tampilkan Profil
 const savedUser = localStorage.getItem('user');
+let currentUser = null;
+
 if (savedUser) {
-    const u = JSON.parse(savedUser);
-    document.getElementById('display-name').innerText = u.full_name;
-    document.getElementById('display-dept').innerText = u.department;
+    currentUser = JSON.parse(savedUser);
+    document.getElementById('display-name').innerText = currentUser.full_name;
+    document.getElementById('display-dept').innerText = currentUser.department;
+    
+    // Tarik data request saat halaman pertama kali dibuka
+    fetchRequests();
 }
 
 function logout() {
@@ -204,26 +209,112 @@ function logout() {
     window.location.href = '/login';
 }
 
-// Logika Modal
+// 2. Logika Modal (Buka / Tutup Pop-up)
 const modal = document.getElementById('request-modal');
-function openModal() {
-    modal.classList.add('active');
+function openModal() { modal.classList.add('active'); }
+function closeModal() { 
+    modal.classList.remove('active'); 
+    document.getElementById('request-form').reset(); 
 }
-function closeModal() {
-    modal.classList.remove('active');
-    document.getElementById('request-form').reset();
+modal.addEventListener('click', (e) => { if(e.target === modal) closeModal(); });
+
+// 3. AMBIL DATA REQUEST DARI SERVER
+async function fetchRequests() {
+    if (!currentUser) return;
+    try {
+        const res = await fetch(`/api/requests?username=${currentUser.username}&role=${currentUser.role}`);
+        const result = await res.json();
+        
+        if (result.success) {
+            renderTable(result.data);
+        }
+    } catch (error) {
+        console.error("Gagal mengambil data:", error);
+    }
 }
 
-// Tutup modal kalau klik area luar
-modal.addEventListener('click', (e) => {
-    if(e.target === modal) closeModal();
-});
+// 4. TAMPILKAN DATA KE TABEL HTML
+function renderTable(data) {
+    const tbody = document.getElementById('table-body');
+    
+    // Kalau belum ada request sama sekali
+    if (data.length === 0) {
+        tbody.innerHTML = `
+            <tr id="empty-row">
+                <td colspan="5">
+                    <div class="empty-state">
+                        <div class="icon">📭</div>
+                        <h3>Belum ada request aktif</h3>
+                        <p>Anda belum mengajukan kebutuhan presourcing. Klik tombol "Buat Request Baru" di atas untuk memulai.</p>
+                    </div>
+                </td>
+            </tr>
+        `;
+        return;
+    }
 
-// Simulasi Submit
-document.getElementById('request-form').onsubmit = (e) => {
+    // Kalau ada data, render baris tabelnya
+    tbody.innerHTML = ''; 
+    data.forEach(req => {
+        // Atur warna badge sesuai status
+        let badgeClass = 'new';
+        let statusText = 'New';
+        
+        if (req.status === 'unassigned') { badgeClass = 'new'; statusText = 'Menunggu PIC'; }
+        else if (req.status === 'ongoing') { badgeClass = 'ongoing'; statusText = 'Diproses'; }
+        else if (req.status === 'done') { badgeClass = 'done'; statusText = 'Selesai'; }
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td><b>${req.ticket_id}</b></td>
+            <td>${req.title}</td>
+            <td>${req.sla_date}</td>
+            <td><span class="badge ${badgeClass}">${statusText}</span></td>
+            <td><button class="btn btn-outline" style="padding: 4px 8px; font-size: 12px;" onclick="alert('Catatan: ${req.notes}')">Lihat Detail</button></td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+// 5. KIRIM DATA REQUEST BARU KE SERVER (SUBMIT)
+document.getElementById('request-form').onsubmit = async (e) => {
     e.preventDefault();
-    alert('Simulasi: Request berhasil dikirim ke Inbox Admin!');
-    closeModal();
+    
+    const btn = e.target.querySelector('button[type="submit"]');
+    const originalText = btn.innerText;
+    btn.innerText = 'Mengirim...';
+    btn.disabled = true; // Kunci tombol agar tidak double-klik
+
+    // Siapkan data untuk dikirim
+    const payload = {
+        title: document.getElementById('req-title').value,
+        sla_date: document.getElementById('req-date').value,
+        notes: document.getElementById('req-notes').value,
+        requester_username: currentUser.username // Tempelkan ID pengirim
+    };
+
+    try {
+        const res = await fetch('/api/requests', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const result = await res.json();
+        
+        if (result.success) {
+            alert(`Berhasil! Nomor Tiket Anda: ${result.ticket_id}`);
+            closeModal();
+            fetchRequests(); // Refresh tabel secara otomatis tanpa reload halaman
+        } else {
+            alert('Gagal mengirim request.');
+        }
+    } catch (error) {
+        console.error("Error:", error);
+        alert('Terjadi kesalahan jaringan saat mengirim data.');
+    } finally {
+        btn.innerText = originalText;
+        btn.disabled = false;
+    }
 };
 </script>
 
