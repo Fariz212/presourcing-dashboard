@@ -288,6 +288,7 @@ function renderTable(data) {
         else if (req.status === 'done') { badgeClass = 'done'; statusText = 'Selesai'; }
 
         const tr = document.createElement('tr');
+        // Ganti bagian tombol aksi di renderTable() sa-portal.html
         tr.innerHTML = `
             <td><b>${req.ticket_id}</b></td>
             <td>
@@ -298,8 +299,8 @@ function renderTable(data) {
             <td><span class="badge ${badgeClass}">${statusText}</span></td>
             <td>
                 <button class="btn btn-outline" style="padding: 6px 12px; font-size: 12px;" 
-                    onclick="alert('Detail Tiket ${req.ticket_id}\\nKlien: ${req.client_name}\\nCatatan: ${req.notes}')">
-                    🔍 Lihat Detail
+                    onclick="viewTicketItems('${req.ticket_id}', '${req.title.replace(/'/g, "\\'")}')">
+                    📋 Lihat Daftar Item
                 </button>
             </td>
         `;
@@ -378,6 +379,88 @@ document.getElementById('request-form').onsubmit = async (e) => {
         btn.disabled = false;
     }
 };
+
+async function viewTicketItems(ticketId, projectTitle) {
+    // Buat/buka modal khusus untuk menampilkan item
+    const modalHtml = `
+        <div class="modal-overlay active" id="items-modal">
+            <div class="modal-card" style="max-width: 800px;">
+                <div class="modal-header">
+                    <h3>Detail Item BoQ: ${ticketId}</h3>
+                    <button class="modal-close" onclick="closeItemsModal()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <p style="margin-top:0; color:var(--text-muted);"><b>Project:</b> ${projectTitle}</p>
+                    <div id="items-content-area" style="max-height: 400px; overflow-y: auto;">
+                        <p>Memuat data item...</p>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline" onclick="closeItemsModal()">Tutup</button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Suntikkan modal ke body jika belum ada
+    let existingModal = document.getElementById('items-modal');
+    if (existingModal) existingModal.remove();
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+    // Ambil data item dari backend
+    try {
+        const res = await fetch(`/api/request_items/${ticketId}`);
+        const result = await res.json();
+        
+        const contentArea = document.getElementById('items-content-area');
+        
+        if (result.success && result.data.length > 0) {
+            let tableHtml = `
+                <table style="width: 100%; font-size: 13px; border-collapse: collapse;">
+                    <thead>
+                        <tr style="background: #F8FAFC; border-bottom: 2px solid var(--border);">
+                            <th style="padding: 8px;">No</th>
+                            <th style="padding: 8px;">Scope of Work</th>
+                            <th style="padding: 8px;">Bill of Quantity</th>
+                            <th style="padding: 8px;">Deskripsi Item</th>
+                            <th style="padding: 8px; text-align: right;">Qty</th>
+                            <th style="padding: 8px;">UoM</th>
+                            <th style="padding: 8px;">Brand</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            
+            result.data.forEach((it, idx) => {
+                tableHtml += `
+                    <tr style="border-bottom: 1px solid var(--border-soft);">
+                        <td style="padding: 8px;">${it.item_no || (idx + 1)}</td>
+                        <td style="padding: 8px;">${it.sosh_name || it.sow_name}</td>
+                        <td style="padding: 8px;">${it.boq_section}</td>
+                        <td style="padding: 8px; font-weight: 500;">${it.description}</td>
+                        <td style="padding: 8px; text-align: right;" class="mono">${it.quantity}</td>
+                        <td style="padding: 8px;">${it.uom || '-'}</td>
+                        <td style="padding: 8px;">${it.preferred_brand || '-'}</td>
+                    </tr>
+                `;
+            });
+            
+            tableHtml += `</tbody></table>`;
+            contentArea.innerHTML = tableHtml;
+        } else {
+            contentArea.innerHTML = `<p style="text-align: center; color: var(--text-muted); padding: 20px;">Belum ada file BoQ yang di-upload untuk tiket ini.</p>`;
+        }
+    } catch (error) {
+        console.error("Gagal memuat item:", error);
+        document.getElementById('items-content-area').innerHTML = `<p style="color: var(--danger);">Gagal memuat data dari server.</p>`;
+    }
+}
+
+function closeItemsModal() {
+    const m = document.getElementById('items-modal');
+    if (m) m.remove();
+}
+
 </script>
 
 </body>

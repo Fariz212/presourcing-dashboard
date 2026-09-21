@@ -246,6 +246,19 @@ def upload_boq():
         if 'conn' in locals():
             conn.close()
 
+# API untuk SA melihat daftar item BoQ yang sudah di-upload berdasarkan ticket_id
+@app.route('/api/request_items/<ticket_id>', methods=['GET'])
+def get_request_items(ticket_id):
+    conn = sqlite3.connect(DB_NAME)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM request_items WHERE ticket_id = ?", (ticket_id,))
+    rows = cursor.fetchall()
+    conn.close()
+    
+    items_list = [dict(row) for row in rows]
+    return jsonify({"success": True, "data": items_list}), 200
+
 # --- API ENDPOINTS (DASHBOARD LAMA) ---
 @app.route('/api/presourcing', methods=['GET'])
 def get_data():
