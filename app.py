@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify, render_template, session
 from flask_cors import CORS
+import pandas as pd
 import sqlite3
 import json
 import os
@@ -50,19 +51,38 @@ def init_db():
         )
     ''')
     
-    # 3. Tabel BARU: Requests (Untuk Ticketing/Inbox System)
-    # Sangat fleksibel: Menyimpan detail tiket, status, requester, dan PIC.
+    # 3. Tabel Requests (Diperbarui: Tambah client_name & competitor_info)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS requests (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             ticket_id TEXT UNIQUE NOT NULL,
             title TEXT NOT NULL,
+            client_name TEXT,
+            competitor_info TEXT,
             sla_date TEXT NOT NULL,
             notes TEXT,
             status TEXT DEFAULT 'unassigned', 
             requester_username TEXT NOT NULL,
             pic_username TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
+    # 4. Tabel BARU: Request Items (Untuk detail BoQ Excel)
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS request_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ticket_id TEXT NOT NULL,
+            sow_name TEXT DEFAULT 'General Scope',
+            boq_section TEXT DEFAULT 'General Items',
+            item_no TEXT,
+            description TEXT NOT NULL,
+            preferred_brand TEXT,
+            quantity INTEGER,
+            uom TEXT,
+            delivery_time TEXT,
+            vendor TEXT,
+            FOREIGN KEY (ticket_id) REFERENCES requests(ticket_id)
         )
     ''')
     
@@ -113,40 +133,48 @@ def login():
 
 # --- API ENDPOINTS (REQUEST & TICKETING) ---
 
-# 1. SA Membuat Request Baru
+# 1. SA Membuat Request Baru (Diperbarui untuk client_name & competitor_info)
 @app.route('/api/requests', methods=['POST'])
 def create_request():
     payload = request.json
-    # Bikin ID Tiket otomatis, contoh: REQ-202609-001
     timestamp_str = datetime.now().strftime("%Y%m%d%H%M%S")
     ticket_id = f"REQ-{timestamp_str}" 
     
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     cursor.execute('''
-        INSERT INTO requests (ticket_id, title, sla_date, notes, requester_username, status)
-        VALUES (?, ?, ?, ?, ?, 'unassigned')
-    ''', (ticket_id, payload.get('title'), payload.get('sla_date'), payload.get('notes'), payload.get('requester_username')))
+        INSERT INTO requests (
+            ticket_id, title, client_name, competitor_info, 
+            sla_date, notes, requester_username, status
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'unassigned')
+    ''', (
+        ticket_id, 
+        payload.get('title'), 
+        payload.get('client_name'),      
+        payload.get('competitor_info'),  
+        payload.get('sla_date'), 
+        payload.get('notes'), 
+        payload.get('requester_username')
+    ))
     conn.commit()
     conn.close()
     
     return jsonify({"success": True, "message": "Request berhasil dibuat", "ticket_id": ticket_id}), 201
 
-# 2. Mengambil Data Request (Untuk Portal SA dan Inbox Admin)
+# 2. Mengambil Data Request
 @app.route('/api/requests', methods=['GET'])
 def get_requests():
     username = request.args.get('username')
     role = request.args.get('role')
     
     conn = sqlite3.connect(DB_NAME)
-    conn.row_factory = sqlite3.Row # Biar hasilnya berbentuk dictionary (JSON-friendly)
+    conn.row_factory = sqlite3.Row 
     cursor = conn.cursor()
     
     if role == 'admin':
-        # Admin bisa melihat semua tiket
         cursor.execute("SELECT * FROM requests ORDER BY created_at DESC")
     else:
-        # SA cuma bisa melihat tiket yang dia buat sendiri
         cursor.execute("SELECT * FROM requests WHERE requester_username = ? ORDER BY created_at DESC", (username,))
         
     rows = cursor.fetchall()
@@ -155,6 +183,68 @@ def get_requests():
     requests_list = [dict(row) for row in rows]
     return jsonify({"success": True, "data": requests_list}), 200
 
+# 3. SA Mengunggah File BoQ Excel (Dengan Smart Fallback)
+@app.route('/api/upload_boq', methods=['POST'])
+def upload_boq():
+    ticket_id = request.form.get('ticket_id')
+    if not ticket_id:
+        return jsonify({"success": False, "message": "Ticket ID tidak ditemukan"}), 400
+
+    if 'file' not in request.files:
+        return jsonify({"success": False, "message": "Tidak ada file yang diunggah"}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"success": False, "message": "Nama file kosong"}), 400
+
+    try:
+        df = pd.read_excel(file).fillna("")
+
+        required_columns = ["Item No", "Deskripsi Item", "Qty"]
+        for col in required_columns:
+            if col not in df.columns:
+                 return jsonify({"success": False, "message": f"Kolom wajib '{col}' tidak ditemukan di Excel"}), 400
+
+        conn = sqlite3.connect(DB_NAME)
+        cursor = conn.cursor()
+
+        for index, row in df.iterrows():
+            item_no = str(row.get("Item No", ""))
+            description = row.get("Deskripsi Item", "")
+            quantity = row.get("Qty", 0)
+            uom = row.get("UoM", "")
+            preferred_brand = row.get("Preferred Brand", "")
+            delivery_time = row.get("Delivery Time (RFS)", "")
+            
+            sow_name_raw = str(row.get("Scope of Work (Opsional)", "")).strip()
+            sow_name = sow_name_raw if sow_name_raw != "" else "General Scope"
+
+            boq_section_raw = str(row.get("Bill of Quantity (Opsional)", "")).strip()
+            boq_section = boq_section_raw if boq_section_raw != "" else "General Items"
+
+            vendor_raw = str(row.get("Vendor (Opsional)", "")).strip()
+            vendor = vendor_raw if vendor_raw != "" and vendor_raw != "-" else None
+
+            cursor.execute('''
+                INSERT INTO request_items (
+                    ticket_id, sow_name, boq_section, item_no, description, 
+                    preferred_brand, quantity, uom, delivery_time, vendor
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                ticket_id, sow_name, boq_section, item_no, description, 
+                preferred_brand, quantity, uom, delivery_time, vendor
+            ))
+        
+        conn.commit()
+        return jsonify({"success": True, "message": "File BoQ berhasil diunggah dan disimpan ke database!"}), 200
+
+    except Exception as e:
+        if 'conn' in locals():
+            conn.rollback()
+        return jsonify({"success": False, "message": f"Terjadi kesalahan saat memproses file: {str(e)}"}), 500
+    finally:
+        if 'conn' in locals():
+            conn.close()
 
 # --- API ENDPOINTS (DASHBOARD LAMA) ---
 @app.route('/api/presourcing', methods=['GET'])

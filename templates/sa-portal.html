@@ -12,6 +12,7 @@
   --text-main: #0F172A; --text-muted: #64748B; 
   --primary: #2563EB; --primary-hover: #1D4ED8;
   --danger: #EF4444; --danger-hover: #DC2626;
+  --green: #059669;
 }
 
 * { box-sizing: border-box; }
@@ -85,25 +86,29 @@ tr:hover td { background: #F8FAFC; }
 }
 .modal-overlay.active { display: flex; opacity: 1; }
 .modal-card {
-  background: var(--panel); width: 100%; max-width: 500px;
+  background: var(--panel); width: 100%; max-width: 550px;
   border-radius: 16px; box-shadow: 0 20px 25px -5px rgba(0,0,0,.1);
   transform: translateY(20px); transition: transform 0.3s ease;
+  max-height: 90vh; overflow-y: auto;
 }
 .modal-overlay.active .modal-card { transform: translateY(0); }
-.modal-header { padding: 20px 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+.modal-header { padding: 20px 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; background: var(--panel); z-index: 5; }
 .modal-header h3 { margin: 0; font-size: 18px; }
 .modal-close { background: none; border: none; font-size: 24px; cursor: pointer; color: var(--text-muted); line-height: 1; }
 .modal-body { padding: 24px; }
-.modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 12px; background: #F8FAFC; border-radius: 0 0 16px 16px; }
+.modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 12px; background: #F8FAFC; border-radius: 0 0 16px 16px; position: sticky; bottom: 0; }
 
 /* --- FORM FIELDS --- */
-.field { margin-bottom: 20px; }
-.field label { display: block; font-size: 13px; font-weight: 600; color: var(--text-main); margin-bottom: 8px; }
+.field { margin-bottom: 16px; }
+.field label { display: block; font-size: 13px; font-weight: 600; color: var(--text-main); margin-bottom: 6px; }
 .field input, .field textarea { 
-  width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 8px; 
+  width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; 
   font-family: inherit; font-size: 14px; box-sizing: border-box; transition: border-color 0.2s;
 }
 .field input:focus, .field textarea:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
+
+/* --- UPLOAD SECTION STYLING --- */
+.upload-card { background: #F8FAFC; border: 1px dashed var(--border); border-radius: 8px; padding: 16px; margin-top: 10px; }
 </style>
 </head>
 <body>
@@ -137,14 +142,13 @@ tr:hover td { background: #F8FAFC; }
         <thead>
           <tr>
             <th>Ticket ID</th>
-            <th>Nama Project</th>
+            <th>Nama Project / Klien</th>
             <th>Target SLA</th>
             <th>Status</th>
             <th>Aksi</th>
           </tr>
         </thead>
         <tbody id="table-body">
-          <!-- Data Kosong -->
           <tr id="empty-row">
             <td colspan="5">
               <div class="empty-state">
@@ -160,11 +164,11 @@ tr:hover td { background: #F8FAFC; }
   </div>
 </div>
 
-<!-- MODAL FORM -->
+<!-- MODAL FORM BUAT TIKET -->
 <div class="modal-overlay" id="request-modal">
   <div class="modal-card">
     <div class="modal-header">
-      <h3>Buat Request Baru</h3>
+      <h3>Buat Request Presourcing Baru</h3>
       <button class="modal-close" onclick="closeModal()">&times;</button>
     </div>
     <form id="request-form">
@@ -174,19 +178,60 @@ tr:hover td { background: #F8FAFC; }
           <input type="text" id="req-title" required placeholder="Contoh: Pengadaan Server Kemenkes 2026">
         </div>
         <div class="field">
+          <label>Nama Pelanggan / End-User</label>
+          <input type="text" id="req-client" required placeholder="Contoh: PT Angkasa Multimedia">
+        </div>
+        <div class="field">
+          <label>Informasi Kompetitor</label>
+          <input type="text" id="req-competitor" placeholder="Contoh: Telkom, Lintasarta, atau 'Belum ada info'">
+        </div>
+        <div class="field">
           <label>Target Selesai (SLA)</label>
           <input type="date" id="req-date" required>
         </div>
         <div class="field">
-          <label>Catatan / Link BoQ</label>
-          <textarea id="req-notes" rows="4" placeholder="Paste link Google Drive/Excel atau tulis detail singkat..."></textarea>
+          <label>Catatan Tambahan (Opsional)</label>
+          <textarea id="req-notes" rows="3" placeholder="Tulis detail singkat jika diperlukan..."></textarea>
         </div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-outline" onclick="closeModal()">Batal</button>
-        <button type="submit" class="btn btn-primary">Kirim Request</button>
+        <button type="submit" class="btn btn-primary" id="btn-submit-req">Kirim Request</button>
       </div>
     </form>
+  </div>
+</div>
+
+<!-- MODAL DETAIL & UPLOAD BOQ EXCEL -->
+<div class="modal-overlay" id="detail-modal">
+  <div class="modal-card" style="max-width: 600px;">
+    <div class="modal-header">
+      <h3 id="modal-ticket-title">Detail Tiket</h3>
+      <button class="modal-close" onclick="closeDetailModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p style="margin-top:0; color:var(--text-muted); font-size:13px;" id="modal-ticket-info"></p>
+      
+      <div class="upload-card">
+        <h4 style="margin:0 0 6px 0; font-size:14px;">📁 Upload File BoQ (Excel)</h4>
+        <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px;">
+          Gunakan format standar. Kolom wajib: <b>Item No</b>, <b>Deskripsi Item</b>, <b>Qty</b>.
+        </p>
+        
+        <!-- Input file & Hidden Ticket ID -->
+        <input type="file" id="boqFileInput" accept=".xlsx, .xls" style="margin-bottom: 10px; width: 100%;">
+        <input type="hidden" id="activeTicketId" value="">
+        
+        <button type="button" class="btn btn-primary" onclick="uploadBoqExcel()" style="font-size: 13px; padding: 8px 14px;">
+          ⬆️ Unggah BoQ ke Database
+        </button>
+        
+        <div id="uploadStatus" style="margin-top: 10px; font-size: 13px; font-weight: 500;"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-outline" onclick="closeDetailModal()">Tutup</button>
+    </div>
   </div>
 </div>
 
@@ -199,9 +244,9 @@ if (savedUser) {
     currentUser = JSON.parse(savedUser);
     document.getElementById('display-name').innerText = currentUser.full_name;
     document.getElementById('display-dept').innerText = currentUser.department;
-    
-    // Tarik data request saat halaman pertama kali dibuka
     fetchRequests();
+} else {
+    window.location.href = '/login';
 }
 
 function logout() {
@@ -209,7 +254,7 @@ function logout() {
     window.location.href = '/login';
 }
 
-// 2. Logika Modal (Buka / Tutup Pop-up)
+// 2. Logika Modal Buat Request
 const modal = document.getElementById('request-modal');
 function openModal() { modal.classList.add('active'); }
 function closeModal() { 
@@ -217,6 +262,19 @@ function closeModal() {
     document.getElementById('request-form').reset(); 
 }
 modal.addEventListener('click', (e) => { if(e.target === modal) closeModal(); });
+
+// Logika Modal Detail / Upload BoQ
+const detailModal = document.getElementById('detail-modal');
+function openDetailModal(ticketId, title, client) {
+    document.getElementById('activeTicketId').value = ticketId;
+    document.getElementById('modal-ticket-title').innerText = `Tiket: ${ticketId}`;
+    document.getElementById('modal-ticket-info').innerHTML = `<b>Project:</b> ${title}<br><b>Klien:</b> ${client || '-'}`;
+    document.getElementById('uploadStatus').innerHTML = '';
+    document.getElementById('boqFileInput').value = '';
+    detailModal.classList.add('active');
+}
+function closeDetailModal() { detailModal.classList.remove('active'); }
+detailModal.addEventListener('click', (e) => { if(e.target === detailModal) closeDetailModal(); });
 
 // 3. AMBIL DATA REQUEST DARI SERVER
 async function fetchRequests() {
@@ -237,7 +295,6 @@ async function fetchRequests() {
 function renderTable(data) {
     const tbody = document.getElementById('table-body');
     
-    // Kalau belum ada request sama sekali
     if (data.length === 0) {
         tbody.innerHTML = `
             <tr id="empty-row">
@@ -253,24 +310,29 @@ function renderTable(data) {
         return;
     }
 
-    // Kalau ada data, render baris tabelnya
     tbody.innerHTML = ''; 
     data.forEach(req => {
-        // Atur warna badge sesuai status
         let badgeClass = 'new';
-        let statusText = 'New';
+        let statusText = 'Menunggu PIC';
         
-        if (req.status === 'unassigned') { badgeClass = 'new'; statusText = 'Menunggu PIC'; }
-        else if (req.status === 'ongoing') { badgeClass = 'ongoing'; statusText = 'Diproses'; }
+        if (req.status === 'ongoing') { badgeClass = 'ongoing'; statusText = 'Diproses'; }
         else if (req.status === 'done') { badgeClass = 'done'; statusText = 'Selesai'; }
 
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td><b>${req.ticket_id}</b></td>
-            <td>${req.title}</td>
+            <td>
+                ${req.title}
+                <div style="font-size: 12px; color: var(--text-muted);">Klien: ${req.client_name || '-'}</div>
+            </td>
             <td>${req.sla_date}</td>
             <td><span class="badge ${badgeClass}">${statusText}</span></td>
-            <td><button class="btn btn-outline" style="padding: 4px 8px; font-size: 12px;" onclick="alert('Catatan: ${req.notes}')">Lihat Detail</button></td>
+            <td>
+                <button class="btn btn-outline" style="padding: 6px 12px; font-size: 12px;" 
+                    onclick="openDetailModal('${req.ticket_id}', '${req.title.replace(/'/g, "\\'")}', '${(req.client_name || '').replace(/'/g, "\\'")}')">
+                    📁 Upload BoQ / Detail
+                </button>
+            </td>
         `;
         tbody.appendChild(tr);
     });
@@ -280,17 +342,18 @@ function renderTable(data) {
 document.getElementById('request-form').onsubmit = async (e) => {
     e.preventDefault();
     
-    const btn = e.target.querySelector('button[type="submit"]');
+    const btn = document.getElementById('btn-submit-req');
     const originalText = btn.innerText;
     btn.innerText = 'Mengirim...';
-    btn.disabled = true; // Kunci tombol agar tidak double-klik
+    btn.disabled = true;
 
-    // Siapkan data untuk dikirim
     const payload = {
         title: document.getElementById('req-title').value,
+        client_name: document.getElementById('req-client').value,
+        competitor_info: document.getElementById('req-competitor').value,
         sla_date: document.getElementById('req-date').value,
         notes: document.getElementById('req-notes').value,
-        requester_username: currentUser.username // Tempelkan ID pengirim
+        requester_username: currentUser.username
     };
 
     try {
@@ -304,7 +367,7 @@ document.getElementById('request-form').onsubmit = async (e) => {
         if (result.success) {
             alert(`Berhasil! Nomor Tiket Anda: ${result.ticket_id}`);
             closeModal();
-            fetchRequests(); // Refresh tabel secara otomatis tanpa reload halaman
+            fetchRequests(); 
         } else {
             alert('Gagal mengirim request.');
         }
@@ -316,6 +379,49 @@ document.getElementById('request-form').onsubmit = async (e) => {
         btn.disabled = false;
     }
 };
+
+// 6. FUNGSI UPLOAD BOQ EXCEL KE BACKEND
+async function uploadBoqExcel() {
+    const fileInput = document.getElementById('boqFileInput');
+    const ticketId = document.getElementById('activeTicketId').value;
+    const statusDiv = document.getElementById('uploadStatus');
+
+    if (!ticketId) {
+        alert("Ticket ID tidak valid.");
+        return;
+    }
+
+    if (fileInput.files.length === 0) {
+        alert("Silakan pilih file Excel (.xlsx / .xls) terlebih dahulu!");
+        return;
+    }
+
+    const file = fileInput.files[0];
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('ticket_id', ticketId);
+
+    statusDiv.innerHTML = "<span style='color: var(--primary);'>⏳ Mengunggah dan memproses file Excel... Mohon tunggu.</span>";
+
+    try {
+        const response = await fetch('/api/upload_boq', {
+            method: 'POST',
+            body: formData 
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+            statusDiv.innerHTML = `<span style='color: var(--green);'>✅ Sukses: ${result.message}</span>`;
+            fileInput.value = ""; 
+        } else {
+            statusDiv.innerHTML = `<span style='color: var(--danger);'>❌ Gagal: ${result.message}</span>`;
+        }
+    } catch (error) {
+        console.error("Error uploading file:", error);
+        statusDiv.innerHTML = `<span style='color: var(--danger);'>❌ Terjadi kesalahan jaringan atau server.</span>`;
+    }
+}
 </script>
 
 </body>

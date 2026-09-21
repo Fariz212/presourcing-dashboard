@@ -216,7 +216,40 @@ tr.proj-row:hover{background:var(--panel-2);}
   document.addEventListener('DOMContentLoaded', () => {
       fetchInbox();
   });
+
+  // Fungsi untuk mengambil dan menampilkan detail BoQ dari database berdasarkan ticket_id
+async function reviewTicket(ticketId) {
+    try {
+        // Kita bisa buat endpoint sederhana atau ambil dari data request
+        const res = await fetch(`/api/requests?role=admin`);
+        const result = await res.json();
+        
+        if (result.success) {
+            const ticket = result.data.find(r => r.ticket_id === ticketId);
+            if (!ticket) return alert("Tiket tidak ditemukan.");
+
+            // Tampilkan informasi detail tiket beserta info Klien & Kompetitor
+            let detailHtml = `
+                <h3>Review Tiket: ${ticket.ticket_id}</h3>
+                <p><b>Project:</b> ${ticket.title}</p>
+                <p><b>Nama Klien:</b> ${ticket.client_name || '-'}</p>
+                <p><b>Kompetitor:</b> ${ticket.competitor_info || '-'}</p>
+                <p><b>Catatan SA:</b> ${ticket.notes || '-'}</p>
+                <hr>
+                <h4>Detail BoQ / Items yang di-upload:</h4>
+                <p style="color: var(--text-muted); font-size: 13px;">(Data BoQ dari Excel SA akan ditampilkan di sini atau di tabel terpisah)</p>
+            `;
+            
+            // Kamu bisa membuat modal atau alert rapi untuk menampilkan ini ke admin
+            alert(`Review Tiket ${ticket.ticket_id}\nKlien: ${ticket.client_name}\nKompetitor: ${ticket.competitor_info}\nCatatan: ${ticket.notes}`);
+        }
+    } catch (error) {
+        console.error("Gagal meriview tiket:", error);
+    }
+}
 </script>
+
+
 
 </body>
 </html>
