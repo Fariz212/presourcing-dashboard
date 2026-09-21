@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Portal SA - Presourcing</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+:root {
+  --ink: #F8FAFC; --panel: #FFFFFF; --border: #CBD5E1; 
+  --text: #1E293B; --text-muted: #64748B; 
+  --primary: #2563EB; --primary-hover: #1D4ED8;
+}
+
+body {
+  margin: 0; background: var(--ink); color: var(--text);
+  font-family: 'Space Grotesk', sans-serif;
+}
+
+.navbar {
+  background: var(--panel); border-bottom: 1px solid var(--border);
+  padding: 16px 32px; display: flex; justify-content: space-between; align-items: center;
+}
+.navbar h2 { margin: 0; font-size: 20px; color: #0F172A; }
+.user-info { font-size: 14px; font-weight: 500; display: flex; align-items: center; gap: 16px; }
+
+.btn-outline {
+  padding: 6px 12px; border: 1px solid #EF4444; color: #EF4444; 
+  background: transparent; border-radius: 6px; cursor: pointer; font-weight: 600; font-family: inherit;
+}
+.btn-outline:hover { background: #FEE2E2; }
+
+.container { max-width: 800px; margin: 40px auto; padding: 0 20px; }
+
+.card {
+  background: var(--panel); padding: 24px; border-radius: 12px;
+  border: 1px solid var(--border); box-shadow: 0 4px 6px -2px rgba(0,0,0,.03);
+  margin-bottom: 24px;
+}
+
+.card h3 { margin-top: 0; border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 20px;}
+
+.field { margin-bottom: 16px; }
+.field label { display: block; font-size: 13px; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; }
+.field input, .field textarea { 
+  width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px; 
+  font-family: inherit; font-size: 14px; box-sizing: border-box;
+}
+
+.btn-primary { 
+  padding: 10px 20px; background: var(--primary); color: #fff; 
+  border: none; border-radius: 6px; font-weight: 600; cursor: pointer;
+}
+.btn-primary:hover { background: var(--primary-hover); }
+
+/* Status Badge */
+.badge { padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+.bg-waiting { background: #FEF08A; color: #854D0E; }
+</style>
+</head>
+<body>
+
+<div class="navbar">
+  <h2>Portal Presales / SA</h2>
+  <div class="user-info">
+    <span>Halo, <b id="display-name">Tester UI</b> (<span id="display-dept">Bebas Akses</span>)</span>
+    <button class="btn-outline" onclick="logout()">Keluar</button>
+  </div>
+</div>
+
+<div class="container">
+  <!-- Form Buat Request Baru -->
+  <div class="card">
+    <h3>Buat Request Presourcing Baru</h3>
+    <form id="request-form">
+      <div class="field">
+        <label>Nama Project / Kebutuhan</label>
+        <input type="text" id="req-title" required placeholder="Contoh: Pengadaan Server Kemenkes 2026">
+      </div>
+      <div class="field">
+        <label>Target Selesai (SLA)</label>
+        <input type="date" id="req-date" required>
+      </div>
+      <div class="field">
+        <label>Catatan / Link BoQ (Google Drive/Excel)</label>
+        <textarea id="req-notes" rows="4" placeholder="Tuliskan spesifikasi singkat atau paste link dokumen di sini..."></textarea>
+      </div>
+      <button type="submit" class="btn-primary">Kirim Request ke Presourcing</button>
+    </form>
+  </div>
+
+  <!-- Tabel Request Saya -->
+  <div class="card">
+    <h3>Daftar Request Saya</h3>
+    <p style="font-size: 14px; color: var(--text-muted);">Belum ada request yang diajukan.</p>
+  </div>
+</div>
+
+<script>
+// Pengecekan Akses (Versi Longgar untuk Testing)
+const savedUser = localStorage.getItem('user');
+if (savedUser) {
+    const u = JSON.parse(savedUser);
+    document.getElementById('display-name').innerText = u.full_name;
+    document.getElementById('display-dept').innerText = u.department;
+} 
+// Jika belum login, script dibiarkan jalan (tidak di-redirect) agar UI bisa di-cek.
+
+function logout() {
+    localStorage.removeItem('user');
+    window.location.href = '/login';
+}
+
+document.getElementById('request-form').onsubmit = (e) => {
+    e.preventDefault();
+    alert('Tombol ditekan! Nanti data ini akan otomatis masuk ke Inbox Admin.');
+};
+</script>
+
+</body>
+</html>
