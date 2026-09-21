@@ -235,7 +235,10 @@ if (savedUser) {
     document.getElementById('display-dept').innerText = currentUser.department;
     fetchRequests();
 } else {
-    window.location.href = '/login';
+    // Jika localStorage kosong, bersihkan juga session di backend lewat fetch diam-diam, baru lempar ke login
+    fetch('/api/logout', { method: 'POST' }).finally(() => {
+        window.location.href = '/login';
+    });
 }
 
 function logout() {
