@@ -138,6 +138,14 @@ tr.proj-row:hover{background:var(--panel-2);}
   <div class="panel" style="border-left: 4px solid var(--primary); margin-bottom: 0;">
     <div class="panel-hd">
       <div>
+        <!-- Letakkan ini di dalam header kanan -->
+        <div style="display: flex; align-items: center; gap: 16px;">
+        <div style="text-align: right; line-height: 1.2;">
+        <div id="user-greeting" style="font-size: 14px; font-weight: 600; color: var(--text);">Halo, User</div>
+        <div id="user-role-badge" style="font-size: 11px; color: var(--text-muted); text-transform: uppercase;">Role</div>
+        </div>
+        <button onclick="handleLogout()" style="padding: 8px 12px; background: transparent; border: 1px solid #ef4444; color: #ef4444; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 13px;">Logout</button>
+        </div>
         <h2 style="font-size: 16px;">📬 Inbox Request (Dari Presales)</h2>
         <div style="font-size: 12.5px; color: var(--text-muted); margin-top: 4px;">Tiket baru yang belum di-assign ke tim Presourcing.</div>
       </div>
@@ -362,7 +370,28 @@ tr.proj-row:hover{background:var(--panel-2);}
       }
   }
 </script>
+<script>
+    // 1. Tampilkan Data Profil saat halaman dimuat
+    const activeUser = JSON.parse(localStorage.getItem('user'));
+    if (activeUser) {
+        document.getElementById('user-greeting').innerText = "Halo, " + activeUser.full_name;
+        document.getElementById('user-role-badge').innerText = activeUser.role === 'admin' ? 'Administrator' : activeUser.department;
+    }
 
+    // 2. Fungsi Logout
+    async function handleLogout() {
+        try {
+            // Beritahu Backend untuk menghapus session
+            await fetch('/api/logout', { method: 'POST' });
+        } catch (err) {
+            console.error("Gagal menghubungi server untuk logout:", err);
+        } finally {
+            // Hapus data dari browser dan tendang ke halaman login
+            localStorage.removeItem('user');
+            window.location.href = '/login';
+        }
+    }
+</script>
 
 
 </body>
