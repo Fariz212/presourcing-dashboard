@@ -3,118 +3,227 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Portal SA - Presourcing</title>
+<title>SA Portal - Presourcing</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
 :root {
-  --ink: #F8FAFC; --panel: #FFFFFF; --border: #CBD5E1; 
-  --text: #1E293B; --text-muted: #64748B; 
+  --ink: #F8FAFC; --panel: #FFFFFF; --border: #E2E8F0; 
+  --text-main: #0F172A; --text-muted: #64748B; 
   --primary: #2563EB; --primary-hover: #1D4ED8;
+  --danger: #EF4444; --danger-hover: #DC2626;
 }
 
+* { box-sizing: border-box; }
 body {
-  margin: 0; background: var(--ink); color: var(--text);
+  margin: 0; background: var(--ink); color: var(--text-main);
   font-family: 'Space Grotesk', sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
+/* --- NAVBAR --- */
 .navbar {
   background: var(--panel); border-bottom: 1px solid var(--border);
-  padding: 16px 32px; display: flex; justify-content: space-between; align-items: center;
+  padding: 16px 40px; display: flex; justify-content: space-between; align-items: center;
+  position: sticky; top: 0; z-index: 10;
 }
-.navbar h2 { margin: 0; font-size: 20px; color: #0F172A; }
-.user-info { font-size: 14px; font-weight: 500; display: flex; align-items: center; gap: 16px; }
+.navbar .brand { display: flex; align-items: center; gap: 12px; }
+.navbar .brand h2 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.5px; }
+.navbar .brand span { font-size: 13px; background: #EEF2FF; color: var(--primary); padding: 4px 8px; border-radius: 6px; font-weight: 600; }
+.user-info { display: flex; align-items: center; gap: 20px; font-size: 14px; font-weight: 500; color: var(--text-muted); }
+.user-info b { color: var(--text-main); }
 
-.btn-outline {
-  padding: 6px 12px; border: 1px solid #EF4444; color: #EF4444; 
-  background: transparent; border-radius: 6px; cursor: pointer; font-weight: 600; font-family: inherit;
+/* --- BUTTONS --- */
+.btn {
+  padding: 10px 16px; border-radius: 8px; font-weight: 600; font-size: 14px;
+  cursor: pointer; transition: all 0.2s ease; border: none; font-family: inherit;
+  display: inline-flex; align-items: center; gap: 8px;
 }
-.btn-outline:hover { background: #FEE2E2; }
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover { background: var(--primary-hover); box-shadow: 0 4px 12px rgba(37,99,235,0.2); }
+.btn-outline { border: 1px solid var(--border); background: var(--panel); color: var(--text-main); }
+.btn-outline:hover { background: #F1F5F9; }
+.btn-danger-outline { border: 1px solid #FECACA; background: transparent; color: var(--danger); }
+.btn-danger-outline:hover { background: #FEF2F2; }
 
-.container { max-width: 800px; margin: 40px auto; padding: 0 20px; }
+/* --- MAIN CONTAINER --- */
+.container { max-width: 1100px; margin: 40px auto; padding: 0 24px; }
+.page-header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 24px; }
+.page-header h1 { margin: 0 0 8px 0; font-size: 28px; letter-spacing: -0.5px; }
+.page-header p { margin: 0; color: var(--text-muted); font-size: 15px; }
 
+/* --- TABLE CARD --- */
 .card {
-  background: var(--panel); padding: 24px; border-radius: 12px;
-  border: 1px solid var(--border); box-shadow: 0 4px 6px -2px rgba(0,0,0,.03);
-  margin-bottom: 24px;
+  background: var(--panel); border-radius: 12px; border: 1px solid var(--border);
+  box-shadow: 0 4px 6px -4px rgba(0,0,0,.05); overflow: hidden;
 }
+.table-wrapper { width: 100%; overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; text-align: left; }
+th { background: #F8FAFC; padding: 16px 24px; font-size: 13px; font-weight: 600; color: var(--text-muted); border-bottom: 1px solid var(--border); text-transform: uppercase; letter-spacing: 0.5px;}
+td { padding: 16px 24px; font-size: 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: #F8FAFC; }
 
-.card h3 { margin-top: 0; border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 20px;}
+/* --- BADGES --- */
+.badge { padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; display: inline-block; }
+.badge.new { background: #E0E7FF; color: #3730A3; }
+.badge.ongoing { background: #FEF3C7; color: #92400E; }
+.badge.done { background: #DCFCE7; color: #166534; }
 
-.field { margin-bottom: 16px; }
-.field label { display: block; font-size: 13px; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; }
+/* --- EMPTY STATE --- */
+.empty-state { text-align: center; padding: 60px 20px; }
+.empty-state .icon { font-size: 48px; margin-bottom: 16px; opacity: 0.5; }
+.empty-state h3 { margin: 0 0 8px 0; font-size: 18px; color: var(--text-main); }
+.empty-state p { margin: 0; color: var(--text-muted); font-size: 14px; max-width: 400px; margin: 0 auto; }
+
+/* --- MODAL (POPUP FORM) --- */
+.modal-overlay {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(15, 23, 42, 0.4); backdrop-filter: blur(4px);
+  display: none; align-items: center; justify-content: center; z-index: 100;
+  opacity: 0; transition: opacity 0.2s ease;
+}
+.modal-overlay.active { display: flex; opacity: 1; }
+.modal-card {
+  background: var(--panel); width: 100%; max-width: 500px;
+  border-radius: 16px; box-shadow: 0 20px 25px -5px rgba(0,0,0,.1);
+  transform: translateY(20px); transition: transform 0.3s ease;
+}
+.modal-overlay.active .modal-card { transform: translateY(0); }
+.modal-header { padding: 20px 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+.modal-header h3 { margin: 0; font-size: 18px; }
+.modal-close { background: none; border: none; font-size: 24px; cursor: pointer; color: var(--text-muted); line-height: 1; }
+.modal-body { padding: 24px; }
+.modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 12px; background: #F8FAFC; border-radius: 0 0 16px 16px; }
+
+/* --- FORM FIELDS --- */
+.field { margin-bottom: 20px; }
+.field label { display: block; font-size: 13px; font-weight: 600; color: var(--text-main); margin-bottom: 8px; }
 .field input, .field textarea { 
-  width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px; 
-  font-family: inherit; font-size: 14px; box-sizing: border-box;
+  width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 8px; 
+  font-family: inherit; font-size: 14px; box-sizing: border-box; transition: border-color 0.2s;
 }
-
-.btn-primary { 
-  padding: 10px 20px; background: var(--primary); color: #fff; 
-  border: none; border-radius: 6px; font-weight: 600; cursor: pointer;
-}
-.btn-primary:hover { background: var(--primary-hover); }
-
-/* Status Badge */
-.badge { padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
-.bg-waiting { background: #FEF08A; color: #854D0E; }
+.field input:focus, .field textarea:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
 </style>
 </head>
 <body>
 
-<div class="navbar">
-  <h2>Portal Presales / SA</h2>
+<nav class="navbar">
+  <div class="brand">
+    <h2>Presourcing</h2>
+    <span>SA Portal</span>
+  </div>
   <div class="user-info">
-    <span>Halo, <b id="display-name">Tester UI</b> (<span id="display-dept">Bebas Akses</span>)</span>
-    <button class="btn-outline" onclick="logout()">Keluar</button>
+    <span><b id="display-name">Tester UI</b> &middot; <span id="display-dept">Bebas Akses</span></span>
+    <button class="btn btn-danger-outline" onclick="logout()">Keluar</button>
+  </div>
+</nav>
+
+<div class="container">
+  <div class="page-header">
+    <div>
+      <h1>Daftar Request Saya</h1>
+      <p>Pantau status pengajuan RFI / Presourcing Anda di sini.</p>
+    </div>
+    <button class="btn btn-primary" onclick="openModal()">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+      Buat Request Baru
+    </button>
+  </div>
+
+  <div class="card">
+    <div class="table-wrapper">
+      <table id="requests-table">
+        <thead>
+          <tr>
+            <th>Ticket ID</th>
+            <th>Nama Project</th>
+            <th>Target SLA</th>
+            <th>Status</th>
+            <th>Aksi</th>
+          </tr>
+        </thead>
+        <tbody id="table-body">
+          <!-- Data Kosong -->
+          <tr id="empty-row">
+            <td colspan="5">
+              <div class="empty-state">
+                <div class="icon">📭</div>
+                <h3>Belum ada request aktif</h3>
+                <p>Anda belum mengajukan kebutuhan presourcing. Klik tombol "Buat Request Baru" di atas untuk memulai.</p>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 </div>
 
-<div class="container">
-  <!-- Form Buat Request Baru -->
-  <div class="card">
-    <h3>Buat Request Presourcing Baru</h3>
+<!-- MODAL FORM -->
+<div class="modal-overlay" id="request-modal">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h3>Buat Request Baru</h3>
+      <button class="modal-close" onclick="closeModal()">&times;</button>
+    </div>
     <form id="request-form">
-      <div class="field">
-        <label>Nama Project / Kebutuhan</label>
-        <input type="text" id="req-title" required placeholder="Contoh: Pengadaan Server Kemenkes 2026">
+      <div class="modal-body">
+        <div class="field">
+          <label>Nama Project / Kebutuhan</label>
+          <input type="text" id="req-title" required placeholder="Contoh: Pengadaan Server Kemenkes 2026">
+        </div>
+        <div class="field">
+          <label>Target Selesai (SLA)</label>
+          <input type="date" id="req-date" required>
+        </div>
+        <div class="field">
+          <label>Catatan / Link BoQ</label>
+          <textarea id="req-notes" rows="4" placeholder="Paste link Google Drive/Excel atau tulis detail singkat..."></textarea>
+        </div>
       </div>
-      <div class="field">
-        <label>Target Selesai (SLA)</label>
-        <input type="date" id="req-date" required>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" onclick="closeModal()">Batal</button>
+        <button type="submit" class="btn btn-primary">Kirim Request</button>
       </div>
-      <div class="field">
-        <label>Catatan / Link BoQ (Google Drive/Excel)</label>
-        <textarea id="req-notes" rows="4" placeholder="Tuliskan spesifikasi singkat atau paste link dokumen di sini..."></textarea>
-      </div>
-      <button type="submit" class="btn-primary">Kirim Request ke Presourcing</button>
     </form>
-  </div>
-
-  <!-- Tabel Request Saya -->
-  <div class="card">
-    <h3>Daftar Request Saya</h3>
-    <p style="font-size: 14px; color: var(--text-muted);">Belum ada request yang diajukan.</p>
   </div>
 </div>
 
 <script>
-// Pengecekan Akses (Versi Longgar untuk Testing)
+// Pengecekan Akses (Masih Mode Longgar)
 const savedUser = localStorage.getItem('user');
 if (savedUser) {
     const u = JSON.parse(savedUser);
     document.getElementById('display-name').innerText = u.full_name;
     document.getElementById('display-dept').innerText = u.department;
-} 
-// Jika belum login, script dibiarkan jalan (tidak di-redirect) agar UI bisa di-cek.
+}
 
 function logout() {
     localStorage.removeItem('user');
     window.location.href = '/login';
 }
 
+// Logika Modal
+const modal = document.getElementById('request-modal');
+function openModal() {
+    modal.classList.add('active');
+}
+function closeModal() {
+    modal.classList.remove('active');
+    document.getElementById('request-form').reset();
+}
+
+// Tutup modal kalau klik area luar
+modal.addEventListener('click', (e) => {
+    if(e.target === modal) closeModal();
+});
+
+// Simulasi Submit
 document.getElementById('request-form').onsubmit = (e) => {
     e.preventDefault();
-    alert('Tombol ditekan! Nanti data ini akan otomatis masuk ke Inbox Admin.');
+    alert('Simulasi: Request berhasil dikirim ke Inbox Admin!');
+    closeModal();
 };
 </script>
 
