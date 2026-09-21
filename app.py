@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template, session
+from flask import Flask, request, jsonify, render_template, session, redirect, url_for
 from flask_cors import CORS
 import pandas as pd
 import sqlite3
@@ -15,14 +15,23 @@ DB_NAME = 'presourcing_db.sqlite'
 # --- ROUTING HALAMAN HTML ---
 @app.route('/')
 def index():
+    # Kunci: Hanya yang login dan role-nya admin yang boleh masuk dashboard utama
+    if 'username' not in session or session.get('role') != 'admin':
+        return redirect(url_for('login_page'))
     return render_template('presourcing-dashboard.html')
 
 @app.route('/login')
 def login_page():
+    # Jika sudah punya sesi, jangan boleh buka halaman login lagi
+    if 'username' in session:
+        return redirect(url_for('index') if session.get('role') == 'admin' else url_for('sa_portal'))
     return render_template('login.html')
 
 @app.route('/portal')
 def sa_portal():
+    # Kunci: Siapapun yang belum login tidak boleh masuk portal SA
+    if 'username' not in session:
+        return redirect(url_for('login_page'))
     return render_template('sa-portal.html')
 
 # --- INISIALISASI DATABASE ---
@@ -207,9 +216,20 @@ def login():
     conn.close()
     
     if user:
+        # PENTING: Daftarkan data user ke dalam Session Backend Flask!
+        session['username'] = user[0]
+        session['full_name'] = user[1]
+        session['department'] = user[2]
+        session['role'] = user[3]
+        
         return jsonify({"success": True, "user": {"username": user[0], "full_name": user[1], "department": user[2], "role": user[3]}}), 200
+    
     return jsonify({"success": False, "message": "Username atau Password salah!"}), 401
 
+@app.route('/api/logout', methods=['POST'])
+def logout():
+    session.clear() # Hapus ingatan backend
+    return jsonify({"success": True, "message": "Berhasil logout"})
 
 # --- API ENDPOINTS (REQUEST & TICKETING) ---
 
