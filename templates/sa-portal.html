@@ -480,6 +480,20 @@ document.getElementById('request-form').onsubmit = async (e) => {
         btn.disabled = false;
     }
 };
+
+//logout Function
+    async function handleLogout() {
+        try {
+            // Beritahu Backend untuk menghapus session
+            await fetch('/api/logout', { method: 'POST' });
+        } catch (err) {
+            console.error("Gagal menghubungi server untuk logout:", err);
+        } finally {
+            // Hapus data dari browser dan tendang ke halaman login
+            localStorage.removeItem('user');
+            window.location.href = '/login';
+        }
+    }
 </script>
 
 </body>
