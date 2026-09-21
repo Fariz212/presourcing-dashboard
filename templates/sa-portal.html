@@ -123,7 +123,7 @@ tr:hover td { background: #F8FAFC; }
   </div>
   <div class="user-info">
     <span><b id="display-name">Tester UI</b> &middot; <span id="display-dept">Bebas Akses</span></span>
-    <button class="btn btn-danger-outline" onclick="logout()">Keluar</button>
+    <button class="btn btn-danger-outline" onclick="handleLogout()">Keluar</button>
   </div>
 </nav>
 
@@ -481,15 +481,17 @@ document.getElementById('request-form').onsubmit = async (e) => {
     }
 };
 
-//logout Function
-// Fungsi Logout Anti-Loop
-function handleLogout() {
-    // 1. Bersihkan dulu data profil di memori browser
-    localStorage.removeItem('user');
-    
-    // 2. Arahkan ke rute Flask agar backend juga membersihkan session
-    // (Flask nanti akan otomatis melempar kita ke /login)
-    window.location.href = '/logout';
+async function logout() {
+    try {
+        // 1. Perintahkan backend untuk menghapus session
+        await fetch('/api/logout', { method: 'POST' });
+    } catch (err) {
+        console.error("Gagal menghubungi server:", err);
+    } finally {
+        // 2. Hapus data lokal dan tendang ke halaman login
+        localStorage.removeItem('user');
+        window.location.href = '/login';
+    }
 }
 </script>
 

@@ -243,8 +243,10 @@ def login():
 
 @app.route('/api/logout', methods=['POST'])
 def logout():
-    session.clear() # Hapus ingatan backend
+    session.clear() # Membersihkan session di backend
     return jsonify({"success": True, "message": "Berhasil logout"})
+
+
 
 # --- API ENDPOINTS (REQUEST & TICKETING) ---
 
