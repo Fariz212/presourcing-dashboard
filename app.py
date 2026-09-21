@@ -1,9 +1,10 @@
-from flask import Flask, request, jsonify, render_template, session, redirect, url_for
+from flask import Flask, request, jsonify, render_template, session, redirect, url_for, send_file
 from flask_cors import CORS
 import pandas as pd
 import sqlite3
 import json
 import os
+import io
 from datetime import datetime
 
 app = Flask(__name__)
@@ -509,6 +510,90 @@ def save_data():
     conn.commit()
     conn.close()
     return jsonify({"message": "Data saved successfully"}), 200
+
+#API Download Report
+@app.route('/api/download_report', methods=['GET'])
+def download_report():
+    if 'username' not in session or session.get('role') != 'admin':
+        return jsonify({"success": False, "message": "Akses ditolak!"}), 403
+        
+    target_project_id = request.args.get('project_id') # Ambil parameter ID project jika ada
+    
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute("SELECT json_data FROM dashboard_state WHERE data_type = 'projects'")
+    row = cursor.fetchone()
+    conn.close()
+    
+    projects = json.loads(row[0]) if row and row[0] else []
+    
+    # Filter jika target_project_id spesifik diminta
+    if target_project_id:
+        projects = [p for p in projects if p.get('id') == target_project_id]
+    
+    report_data = []
+    for p in projects:
+        proj_id = p.get('id', '')
+        proj_name = p.get('name', '')
+        requestor = p.get('requestorName', '')
+        status = p.get('status', '')
+        lead_id = p.get('leadId', '')
+        created_at = p.get('createdAt', '')
+        
+        for sow in p.get('sows', []):
+            sow_name = sow.get('name', '')
+            for boq in sow.get('boqs', []):
+                boq_name = boq.get('name', '')
+                for item in boq.get('items', []):
+                    report_data.append({
+                        "Ticket / Project ID": proj_id,
+                        "Nama Project": proj_name,
+                        "Requestor": requestor,
+                        "PIC Assigned": lead_id,
+                        "Status": status,
+                        "Tanggal Dibuat": created_at,
+                        "Scope of Work": sow_name,
+                        "BoQ Section": boq_name,
+                        "Deskripsi Item": item.get('product', ''),
+                        "Qty": item.get('qty', 0),
+                        "Vendor": item.get('vendor', ''),
+                        "SPH Awal": item.get('sphAwal', ''),
+                        "SPH Final": item.get('sphFinal', '')
+                    })
+    
+    if not report_data:
+        report_data.append({
+            "Ticket / Project ID": target_project_id or "-",
+            "Nama Project": "Data project tidak ditemukan",
+            "Requestor": "-",
+            "PIC Assigned": "-",
+            "Status": "-",
+            "Tanggal Dibuat": "-",
+            "Scope of Work": "-",
+            "BoQ Section": "-",
+            "Deskripsi Item": "-",
+            "Qty": 0,
+            "Vendor": "-",
+            "SPH Awal": "-",
+            "SPH Final": "-"
+        })
+        
+    df = pd.DataFrame(report_data)
+    
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Detail Project')
+    output.seek(0)
+    
+    filename_prefix = target_project_id if target_project_id else "All_Projects"
+    filename = f"Report_{filename_prefix}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    
+    return send_file(
+        output,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name=filename
+    )
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5001))
