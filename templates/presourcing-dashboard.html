@@ -132,8 +132,91 @@ tr.proj-row:hover{background:var(--panel-2);}
 </style>
 </head>
 <body>
-<div class="app" id="app"></div>
-<!-- Memanggil JavaScript dari folder static Flask -->
+<div class="app" id="app">
+  <!-- INBOX SECTION (BARU) -->
+<div class="card" style="margin-bottom: 24px; border-left: 4px solid var(--primary);">
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+    <div>
+      <h3 style="margin: 0;">📬 Inbox Request (Dari Presales)</h3>
+      <p style="margin: 4px 0 0; font-size: 13px; color: var(--text-muted);">Tiket baru yang belum di-assign ke tim Presourcing.</p>
+    </div>
+    <button class="btn btn-outline" onclick="fetchInbox()">🔄 Refresh Inbox</button>
+  </div>
+  
+  <div class="table-wrapper">
+    <table id="inbox-table">
+      <thead>
+        <tr>
+          <th>Ticket ID</th>
+          <th>Requester</th>
+          <th>Kebutuhan / Project</th>
+          <th>SLA Date</th>
+          <th>Status</th>
+          <th>Aksi</th>
+        </tr>
+      </thead>
+      <tbody id="inbox-body">
+        <tr><td colspan="6" style="text-align: center;">Memuat data...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+</div>
+
+<!-- 1. Memanggil JavaScript eksternal (Ditutup langsung) -->
 <script src="{{ url_for('static', filename='script.js') }}"></script>
+
+<!-- 2. Tag script BARU khusus untuk fitur Inbox -->
+<script>
+  // --- FITUR INBOX REQUEST (BARU) ---
+
+  // Fungsi ini menarik semua data dari database (karena admin)
+  async function fetchInbox() {
+      try {
+          const res = await fetch('/api/requests?role=admin'); 
+          const result = await res.json();
+          
+          if (result.success) {
+              renderInbox(result.data);
+          }
+      } catch (error) {
+          console.error("Gagal menarik data inbox:", error);
+      }
+  }
+
+  function renderInbox(data) {
+      const tbody = document.getElementById('inbox-body');
+      tbody.innerHTML = ''; 
+
+      // Filter hanya tiket yang masih 'unassigned'
+      const newRequests = data.filter(req => req.status === 'unassigned');
+
+      if (newRequests.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #64748B;">🎉 Tidak ada request baru. Inbox bersih!</td></tr>`;
+          return;
+      }
+
+      newRequests.forEach(req => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+              <td><b>${req.ticket_id}</b></td>
+              <td><span style="background: #E2E8F0; padding: 2px 8px; border-radius: 4px; font-size: 12px;">@${req.requester_username}</span></td>
+              <td>${req.title}</td>
+              <td style="color: #EF4444; font-weight: 600;">${req.sla_date}</td>
+              <td><span style="background: #FEF08A; color: #854D0E; padding: 4px 8px; border-radius: 12px; font-size: 11px; font-weight: bold;">New Request</span></td>
+              <td>
+                  <button class="btn btn-primary" style="padding: 6px 12px; font-size: 12px;" onclick="alert('Catatan SA: ${req.notes}')">Review & Assign</button>
+              </td>
+          `;
+          tbody.appendChild(tr);
+      });
+  }
+
+  // Panggil fungsi ini otomatis saat dashboard dibuka
+  document.addEventListener('DOMContentLoaded', () => {
+      fetchInbox();
+  });
+</script>
+
 </body>
 </html>
