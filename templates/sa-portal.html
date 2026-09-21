@@ -86,7 +86,7 @@ tr:hover td { background: #F8FAFC; }
 }
 .modal-overlay.active { display: flex; opacity: 1; }
 .modal-card {
-  background: var(--panel); width: 100%; max-width: 550px;
+  background: var(--panel); width: 100%; max-width: 580px;
   border-radius: 16px; box-shadow: 0 20px 25px -5px rgba(0,0,0,.1);
   transform: translateY(20px); transition: transform 0.3s ease;
   max-height: 90vh; overflow-y: auto;
@@ -96,7 +96,7 @@ tr:hover td { background: #F8FAFC; }
 .modal-header h3 { margin: 0; font-size: 18px; }
 .modal-close { background: none; border: none; font-size: 24px; cursor: pointer; color: var(--text-muted); line-height: 1; }
 .modal-body { padding: 24px; }
-.modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 12px; background: #F8FAFC; border-radius: 0 0 16px 16px; position: sticky; bottom: 0; }
+.modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 12px; background: #F8FAFC; border-radius: 0 0 16px 16px; position: sticky; bottom: 0; z-index: 5; }
 
 /* --- FORM FIELDS --- */
 .field { margin-bottom: 16px; }
@@ -107,8 +107,8 @@ tr:hover td { background: #F8FAFC; }
 }
 .field input:focus, .field textarea:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
 
-/* --- UPLOAD SECTION STYLING --- */
-.upload-card { background: #F8FAFC; border: 1px dashed var(--border); border-radius: 8px; padding: 16px; margin-top: 10px; }
+/* --- UPLOAD BOX DALAM MODAL --- */
+.upload-box { background: #F8FAFC; border: 1px dashed var(--border); border-radius: 8px; padding: 14px; margin-top: 6px; }
 </style>
 </head>
 <body>
@@ -164,7 +164,7 @@ tr:hover td { background: #F8FAFC; }
   </div>
 </div>
 
-<!-- MODAL FORM BUAT TIKET -->
+<!-- MODAL FORM BUAT TIKET & UPLOAD EXCEL SEKALIGUS -->
 <div class="modal-overlay" id="request-modal">
   <div class="modal-card">
     <div class="modal-header">
@@ -191,47 +191,28 @@ tr:hover td { background: #F8FAFC; }
         </div>
         <div class="field">
           <label>Catatan Tambahan (Opsional)</label>
-          <textarea id="req-notes" rows="3" placeholder="Tulis detail singkat jika diperlukan..."></textarea>
+          <textarea id="req-notes" rows="2" placeholder="Tulis detail singkat jika diperlukan..."></textarea>
         </div>
+
+        <!-- Bagian Upload File BoQ Excel Terintegrasi -->
+        <div class="field">
+          <label>File BoQ Excel (Opsional)</label>
+          <div class="upload-box">
+            <p style="font-size: 12px; color: var(--text-muted); margin: 0 0 8px 0;">
+              Upload file BoQ standar (.xlsx / .xls). Bisa diunggah nanti jika belum siap.
+            </p>
+            <input type="file" id="boqFileInput" accept=".xlsx, .xls" style="font-size: 13px; width: 100%;">
+          </div>
+        </div>
+
+        <div id="uploadStatus" style="font-size: 13px; font-weight: 500; margin-top: 8px;"></div>
       </div>
+
       <div class="modal-footer">
         <button type="button" class="btn btn-outline" onclick="closeModal()">Batal</button>
-        <button type="submit" class="btn btn-primary" id="btn-submit-req">Kirim Request</button>
+        <button type="submit" class="btn btn-primary" id="btn-submit-req">Kirim Request & Upload</button>
       </div>
     </form>
-  </div>
-</div>
-
-<!-- MODAL DETAIL & UPLOAD BOQ EXCEL -->
-<div class="modal-overlay" id="detail-modal">
-  <div class="modal-card" style="max-width: 600px;">
-    <div class="modal-header">
-      <h3 id="modal-ticket-title">Detail Tiket</h3>
-      <button class="modal-close" onclick="closeDetailModal()">&times;</button>
-    </div>
-    <div class="modal-body">
-      <p style="margin-top:0; color:var(--text-muted); font-size:13px;" id="modal-ticket-info"></p>
-      
-      <div class="upload-card">
-        <h4 style="margin:0 0 6px 0; font-size:14px;">📁 Upload File BoQ (Excel)</h4>
-        <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px;">
-          Gunakan format standar. Kolom wajib: <b>Item No</b>, <b>Deskripsi Item</b>, <b>Qty</b>.
-        </p>
-        
-        <!-- Input file & Hidden Ticket ID -->
-        <input type="file" id="boqFileInput" accept=".xlsx, .xls" style="margin-bottom: 10px; width: 100%;">
-        <input type="hidden" id="activeTicketId" value="">
-        
-        <button type="button" class="btn btn-primary" onclick="uploadBoqExcel()" style="font-size: 13px; padding: 8px 14px;">
-          ⬆️ Unggah BoQ ke Database
-        </button>
-        
-        <div id="uploadStatus" style="margin-top: 10px; font-size: 13px; font-weight: 500;"></div>
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button type="button" class="btn btn-outline" onclick="closeDetailModal()">Tutup</button>
-    </div>
   </div>
 </div>
 
@@ -254,27 +235,15 @@ function logout() {
     window.location.href = '/login';
 }
 
-// 2. Logika Modal Buat Request
+// 2. Logika Modal
 const modal = document.getElementById('request-modal');
 function openModal() { modal.classList.add('active'); }
 function closeModal() { 
     modal.classList.remove('active'); 
     document.getElementById('request-form').reset(); 
+    document.getElementById('uploadStatus').innerHTML = '';
 }
 modal.addEventListener('click', (e) => { if(e.target === modal) closeModal(); });
-
-// Logika Modal Detail / Upload BoQ
-const detailModal = document.getElementById('detail-modal');
-function openDetailModal(ticketId, title, client) {
-    document.getElementById('activeTicketId').value = ticketId;
-    document.getElementById('modal-ticket-title').innerText = `Tiket: ${ticketId}`;
-    document.getElementById('modal-ticket-info').innerHTML = `<b>Project:</b> ${title}<br><b>Klien:</b> ${client || '-'}`;
-    document.getElementById('uploadStatus').innerHTML = '';
-    document.getElementById('boqFileInput').value = '';
-    detailModal.classList.add('active');
-}
-function closeDetailModal() { detailModal.classList.remove('active'); }
-detailModal.addEventListener('click', (e) => { if(e.target === detailModal) closeDetailModal(); });
 
 // 3. AMBIL DATA REQUEST DARI SERVER
 async function fetchRequests() {
@@ -323,14 +292,14 @@ function renderTable(data) {
             <td><b>${req.ticket_id}</b></td>
             <td>
                 ${req.title}
-                <div style="font-size: 12px; color: var(--text-muted);">Klien: ${req.client_name || '-'}</div>
+                <div style="font-size: 12px; color: var(--text-muted);">Klien: ${req.client_name || '-'} | Kompetitor: ${req.competitor_info || '-'}</div>
             </td>
             <td>${req.sla_date}</td>
             <td><span class="badge ${badgeClass}">${statusText}</span></td>
             <td>
                 <button class="btn btn-outline" style="padding: 6px 12px; font-size: 12px;" 
-                    onclick="openDetailModal('${req.ticket_id}', '${req.title.replace(/'/g, "\\'")}', '${(req.client_name || '').replace(/'/g, "\\'")}')">
-                    📁 Upload BoQ / Detail
+                    onclick="alert('Detail Tiket ${req.ticket_id}\\nKlien: ${req.client_name}\\nCatatan: ${req.notes}')">
+                    🔍 Lihat Detail
                 </button>
             </td>
         `;
@@ -338,15 +307,18 @@ function renderTable(data) {
     });
 }
 
-// 5. KIRIM DATA REQUEST BARU KE SERVER (SUBMIT)
+// 5. KIRIM DATA REQUEST BARU + OTOMATIS UPLOAD EXCEL JIKA ADA
 document.getElementById('request-form').onsubmit = async (e) => {
     e.preventDefault();
     
     const btn = document.getElementById('btn-submit-req');
+    const statusDiv = document.getElementById('uploadStatus');
     const originalText = btn.innerText;
-    btn.innerText = 'Mengirim...';
+    
+    btn.innerText = 'Memproses...';
     btn.disabled = true;
 
+    // Langkah A: Kirim data teks request utama
     const payload = {
         title: document.getElementById('req-title').value,
         client_name: document.getElementById('req-client').value,
@@ -364,13 +336,40 @@ document.getElementById('request-form').onsubmit = async (e) => {
         });
         const result = await res.json();
         
-        if (result.success) {
-            alert(`Berhasil! Nomor Tiket Anda: ${result.ticket_id}`);
-            closeModal();
-            fetchRequests(); 
-        } else {
-            alert('Gagal mengirim request.');
+        if (!result.success) {
+            alert('Gagal membuat request.');
+            return;
         }
+
+        const newTicketId = result.ticket_id;
+
+        // Langkah B: Jika SA memilih file Excel, langsung upload menggunakan ticket_id yang baru
+        const fileInput = document.getElementById('boqFileInput');
+        if (fileInput.files.length > 0) {
+            statusDiv.innerHTML = "<span style='color: var(--primary);'>⏳ Mengunggah file BoQ Excel...</span>";
+            
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            formData.append('ticket_id', newTicketId);
+
+            const uploadRes = await fetch('/api/upload_boq', {
+                method: 'POST',
+                body: formData
+            });
+            const uploadResult = await uploadRes.json();
+
+            if (uploadRes.ok && uploadResult.success) {
+                statusDiv.innerHTML = "<span style='color: var(--green);'>✅ Tiket & BoQ Excel Berhasil Diunggah!</span>";
+            } else {
+                statusDiv.innerHTML = `<span style='color: var(--danger);'>⚠️ Tiket dibuat, tapi BoQ gagal: ${uploadResult.message}</span>`;
+                setTimeout(() => {}, 3000);
+            }
+        }
+
+        alert(`Berhasil! Nomor Tiket Anda: ${newTicketId}`);
+        closeModal();
+        fetchRequests(); 
+
     } catch (error) {
         console.error("Error:", error);
         alert('Terjadi kesalahan jaringan saat mengirim data.');
@@ -379,49 +378,6 @@ document.getElementById('request-form').onsubmit = async (e) => {
         btn.disabled = false;
     }
 };
-
-// 6. FUNGSI UPLOAD BOQ EXCEL KE BACKEND
-async function uploadBoqExcel() {
-    const fileInput = document.getElementById('boqFileInput');
-    const ticketId = document.getElementById('activeTicketId').value;
-    const statusDiv = document.getElementById('uploadStatus');
-
-    if (!ticketId) {
-        alert("Ticket ID tidak valid.");
-        return;
-    }
-
-    if (fileInput.files.length === 0) {
-        alert("Silakan pilih file Excel (.xlsx / .xls) terlebih dahulu!");
-        return;
-    }
-
-    const file = fileInput.files[0];
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('ticket_id', ticketId);
-
-    statusDiv.innerHTML = "<span style='color: var(--primary);'>⏳ Mengunggah dan memproses file Excel... Mohon tunggu.</span>";
-
-    try {
-        const response = await fetch('/api/upload_boq', {
-            method: 'POST',
-            body: formData 
-        });
-
-        const result = await response.json();
-
-        if (response.ok && result.success) {
-            statusDiv.innerHTML = `<span style='color: var(--green);'>✅ Sukses: ${result.message}</span>`;
-            fileInput.value = ""; 
-        } else {
-            statusDiv.innerHTML = `<span style='color: var(--danger);'>❌ Gagal: ${result.message}</span>`;
-        }
-    } catch (error) {
-        console.error("Error uploading file:", error);
-        statusDiv.innerHTML = `<span style='color: var(--danger);'>❌ Terjadi kesalahan jaringan atau server.</span>`;
-    }
-}
 </script>
 
 </body>
