@@ -173,6 +173,9 @@ tr.proj-row:hover{background:var(--panel-2);}
 
 <!-- Tag script BARU khusus untuk fitur Inbox -->
 <script>
+  // Variabel cadangan jika belum didefinisikan oleh script.js eksternal
+  window.team = window.team || ["Decki Okmal Pratama", "Ahmad Fauzi", "Siti Rahma", "Budi Santoso"];
+
   async function fetchInbox() {
       try {
           const res = await fetch('/api/requests?role=admin'); 
@@ -190,25 +193,32 @@ tr.proj-row:hover{background:var(--panel-2);}
       const tbody = document.getElementById('inbox-body');
       tbody.innerHTML = ''; 
 
+      // Filter tiket yang statusnya unassigned
       const newRequests = data.filter(req => req.status === 'unassigned');
 
       if (newRequests.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 24px;">🎉 Tidak ada request baru. Inbox bersih!</td></tr>`;
+          tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 24px;">📭 Tidak ada request baru. Inbox bersih!</td></tr>`;
           return;
       }
+
+      // Simpan data global sementara agar mudah diakses modal
+      window.cachedRequests = data;
 
       newRequests.forEach(req => {
           const tr = document.createElement('tr');
           tr.innerHTML = `
               <td><b style="color: var(--text); font-family: 'JetBrains Mono', monospace;">${req.ticket_id}</b></td>
               <td><span class="tag tag-medium">@${req.requester_username}</span></td>
-              <td style="font-weight: 500;">${req.title}</td>
+              <td style="font-weight: 500;">
+                  ${req.title}
+                  <div style="font-size: 11.5px; color: var(--text-muted);">Klien: ${req.client_name || '-'}</div>
+              </td>
               <td style="color: var(--red); font-weight: 600;">${req.sla_date}</td>
               <td><span class="tag tag-high" style="font-weight: 700;">New Request</span></td>
               <td>
-                  <button class="btn-primary" style="padding: 6px 12px; font-size: 12px;" onclick="openReviewModal('${ticket.ticket_id}')">
-    Review & Assign
-</button>
+                  <button class="btn-primary" style="padding: 6px 12px; font-size: 12px;" onclick="openReviewModal('${req.ticket_id}')">
+                      Review & Assign
+                  </button>
               </td>
           `;
           tbody.appendChild(tr);
@@ -219,159 +229,132 @@ tr.proj-row:hover{background:var(--panel-2);}
       fetchInbox();
   });
 
-  // Fungsi untuk mengambil dan menampilkan detail BoQ dari database berdasarkan ticket_id
-async function reviewTicket(ticketId) {
-    try {
-        // Kita bisa buat endpoint sederhana atau ambil dari data request
-        const res = await fetch(`/api/requests?role=admin`);
-        const result = await res.json();
-        
-        if (result.success) {
-            const ticket = result.data.find(r => r.ticket_id === ticketId);
-            if (!ticket) return alert("Tiket tidak ditemukan.");
+  // 1. Fungsi saat tombol "Review & Assign" pada tiket di-klik
+  async function openReviewModal(ticketId) {
+      // Ambil data tiket dari cache atau window data
+      const list = window.cachedRequests || [];
+      const ticket = list.find(r => r.ticket_id === ticketId);
+      
+      const teamList = window.team || ["PIC 1", "PIC 2", "PIC 3"];
 
-            // Tampilkan informasi detail tiket beserta info Klien & Kompetitor
-            let detailHtml = `
-                <h3>Review Tiket: ${ticket.ticket_id}</h3>
-                <p><b>Project:</b> ${ticket.title}</p>
-                <p><b>Nama Klien:</b> ${ticket.client_name || '-'}</p>
-                <p><b>Kompetitor:</b> ${ticket.competitor_info || '-'}</p>
-                <p><b>Catatan SA:</b> ${ticket.notes || '-'}</p>
-                <hr>
-                <h4>Detail BoQ / Items yang di-upload:</h4>
-                <p style="color: var(--text-muted); font-size: 13px;">(Data BoQ dari Excel SA akan ditampilkan di sini atau di tabel terpisah)</p>
-            `;
-            
-            // Kamu bisa membuat modal atau alert rapi untuk menampilkan ini ke admin
-            alert(`Review Tiket ${ticket.ticket_id}\nKlien: ${ticket.client_name}\nKompetitor: ${ticket.competitor_info}\nCatatan: ${ticket.notes}`);
-        }
-    } catch (error) {
-        console.error("Gagal meriview tiket:", error);
-    }
-}
+      // Buat HTML modal interaktif
+      const modalHtml = `
+          <div class="modal-overlay active" id="review-modal">
+              <div class="modal-card" style="max-width: 700px;">
+                  <div class="modal-header">
+                      <h3>Review & Assign Tiket: ${ticketId}</h3>
+                      <button class="modal-close" onclick="closeReviewModal()">&times;</button>
+                  </div>
+                  <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
+                      <div style="margin-bottom: 16px; background: #F8FAFC; padding: 12px; border-radius: 8px;">
+                          <p style="margin: 0 0 6px 0;"><b>Project:</b> ${ticket ? ticket.title : '-'}</p>
+                          <p style="margin: 0 0 6px 0;"><b>Klien / End-User:</b> ${ticket && ticket.client_name ? ticket.client_name : '-'}</p>
+                          <p style="margin: 0 0 6px 0;"><b>Kompetitor:</b> ${ticket && ticket.competitor_info ? ticket.competitor_info : '-'}</p>
+                          <p style="margin: 0 0 6px 0;"><b>Target SLA:</b> ${ticket ? ticket.sla_date : '-'}</p>
+                          <p style="margin: 0;"><b>Catatan SA:</b> ${ticket && ticket.notes ? ticket.notes : '-'}</p>
+                      </div>
 
-// 1. Fungsi saat tombol "Review & Assign" pada tiket di-klik
-async function openReviewModal(ticketId) {
-    // Cari data tiket dari daftar yang ada di dashboard
-    const ticket = projects.find(p => p.ticket_id === ticketId) || allIncomingTickets.find(t => t.ticket_id === ticketId);
-    
-    // Buat HTML modal interaktif
-    const modalHtml = `
-        <div class="modal-overlay active" id="review-modal">
-            <div class="modal-card" style="max-width: 700px;">
-                <div class="modal-header">
-                    <h3>Review & Assign Tiket: ${ticketId}</h3>
-                    <button class="modal-close" onclick="closeReviewModal()">&times;</button>
-                </div>
-                <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
-                    <div style="margin-bottom: 16px; background: #F8FAFC; padding: 12px; border-radius: 8px;">
-                        <p style="margin: 0 0 6px 0;"><b>Project:</b> ${ticket ? ticket.title : '-'}</p>
-                        <p style="margin: 0 0 6px 0;"><b>Klien / End-User:</b> ${ticket && ticket.client_name ? ticket.client_name : '-'}</p>
-                        <p style="margin: 0 0 6px 0;"><b>Kompetitor:</b> ${ticket && ticket.competitor_info ? ticket.competitor_info : '-'}</p>
-                        <p style="margin: 0 0 6px 0;"><b>Target SLA:</b> ${ticket ? ticket.sla_date : '-'}</p>
-                        <p style="margin: 0;"><b>Catatan SA:</b> ${ticket && ticket.notes ? ticket.notes : '-'}</p>
-                    </div>
+                      <h4 style="margin: 16px 0 8px 0; font-size: 14px;">📦 Daftar Item BoQ dari SA:</h4>
+                      <div id="modal-boq-items-container" style="border: 1px solid var(--border); border-radius: 8px; padding: 8px; font-size: 13px;">
+                          Memuat rincian item BoQ...
+                      </div>
 
-                    <h4 style="margin: 16px 0 8px 0; font-size: 14px;">📦 Daftar Item BoQ dari SA:</h4>
-                    <div id="modal-boq-items-container" style="border: 1px solid var(--border); border-radius: 8px; padding: 8px; font-size: 13px;">
-                        Memuat rincian item BoQ...
-                    </div>
+                      <div class="field" style="margin-top: 20px;">
+                          <label style="font-weight: 600; display: block; margin-bottom: 6px;">Tugaskan ke PIC Presourcing:</label>
+                          <select id="assign-pic-select" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--border); font-family: inherit;">
+                              <option value="">-- Pilih Anggota Tim --</option>
+                              ${teamList.map(member => `<option value="${member}">${member}</option>`).join('')}
+                          </select>
+                      </div>
+                  </div>
+                  <div class="modal-footer">
+                      <button type="button" class="btn-ghost" onclick="closeReviewModal()">Batal</button>
+                      <button type="button" class="btn-primary" onclick="submitAssign('${ticketId}')">Simpan & Assign PIC</button>
+                  </div>
+              </div>
+          </div>
+      `;
 
-                    <div class="field" style="margin-top: 20px;">
-                        <label style="font-weight: 600; display: block; margin-bottom: 6px;">Tugaskan ke PIC Presourcing:</label>
-                        <select id="assign-pic-select" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--border); font-family: inherit;">
-                            <option value="">-- Pilih Anggota Tim --</option>
-                            ${team.map(member => `<option value="${member}">${member}</option>`).join('')}
-                        </select>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn-ghost" onclick="closeReviewModal()">Batal</button>
-                    <button type="button" class="btn-primary" onclick="submitAssign('${ticketId}')">Simpan & Assign PIC</button>
-                </div>
-            </div>
-        </div>
-    `;
+      // Tampilkan modal ke layar
+      let existing = document.getElementById('review-modal');
+      if (existing) existing.remove();
+      document.body.insertAdjacentHTML('beforeend', modalHtml);
 
-    // Tampilkan modal ke layar
-    let existing = document.getElementById('review-modal');
-    if (existing) existing.remove();
-    document.body.insertAdjacentHTML('beforeend', modalHtml);
+      // Ambil data item BoQ dari database untuk tiket ini
+      try {
+          const res = await fetch(`/api/request_items/${ticketId}`);
+          const result = await res.json();
+          const container = document.getElementById('modal-boq-items-container');
 
-    // Ambil data item BoQ dari database untuk tiket ini
-    try {
-        const res = await fetch(`/api/request_items/${ticketId}`);
-        const result = await res.json();
-        const container = document.getElementById('modal-boq-items-container');
+          if (result.success && result.data.length > 0) {
+              let html = `
+                  <table style="width: 100%; border-collapse: collapse;">
+                      <thead>
+                          <tr style="border-bottom: 1px solid var(--border); color: var(--text-muted); font-size: 12px;">
+                              <th style="padding: 6px; text-align: left;">No</th>
+                              <th style="padding: 6px; text-align: left;">Deskripsi Item</th>
+                              <th style="padding: 6px; text-align: right;">Qty</th>
+                              <th style="padding: 6px; text-align: left;">Brand</th>
+                          </tr>
+                      </thead>
+                      <tbody>
+              `;
+              result.data.forEach((it, idx) => {
+                  html += `
+                      <tr style="border-bottom: 1px solid var(--border-soft);">
+                          <td style="padding: 6px;">${it.item_no || (idx + 1)}</td>
+                          <td style="padding: 6px; font-weight: 500;">${it.description}</td>
+                          <td style="padding: 6px; text-align: right;" class="mono">${it.quantity}</td>
+                          <td style="padding: 6px;">${it.preferred_brand || '-'}</td>
+                      </tr>
+                  `;
+              });
+              html += `</tbody></table>`;
+              container.innerHTML = html;
+          } else {
+              container.innerHTML = `<p style="text-align: center; color: var(--text-muted); padding: 10px;">Tidak ada item BoQ tercatat.</p>`;
+          }
+      } catch (err) {
+          console.error("Gagal mengambil item BoQ:", err);
+          document.getElementById('modal-boq-items-container').innerHTML = `<p style="color: var(--red);">Gagal memuat item dari server.</p>`;
+      }
+  }
 
-        if (result.success && result.data.length > 0) {
-            let html = `
-                <table style="width: 100%; border-collapse: collapse;">
-                    <thead>
-                        <tr style="border-bottom: 1px solid var(--border); color: var(--text-muted); font-size: 12px;">
-                            <th style="padding: 6px; text-align: left;">No</th>
-                            <th style="padding: 6px; text-align: left;">Deskripsi Item</th>
-                            <th style="padding: 6px; text-align: right;">Qty</th>
-                            <th style="padding: 6px; text-align: left;">Brand</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-            `;
-            result.data.forEach((it, idx) => {
-                html += `
-                    <tr style="border-bottom: 1px solid var(--border-soft);">
-                        <td style="padding: 6px;">${it.item_no || (idx + 1)}</td>
-                        <td style="padding: 6px; font-weight: 500;">${it.description}</td>
-                        <td style="padding: 6px; text-align: right;" class="mono">${it.quantity}</td>
-                        <td style="padding: 6px;">${it.preferred_brand || '-'}</td>
-                    </tr>
-                `;
-            });
-            html += `</tbody></table>`;
-            container.innerHTML = html;
-        } else {
-            container.innerHTML = `<p style="text-align: center; color: var(--text-muted); padding: 10px;">Tidak ada item BoQ tercatat.</p>`;
-        }
-    } catch (err) {
-        console.error("Gagal mengambil item BoQ:", err);
-        document.getElementById('modal-boq-items-container').innerHTML = `<p style="color: var(--red);">Gagal memuat item dari server.</p>`;
-    }
-}
+  function closeReviewModal() {
+      const modal = document.getElementById('review-modal');
+      if (modal) modal.remove();
+  }
 
-function closeReviewModal() {
-    const modal = document.getElementById('review-modal');
-    if (modal) modal.remove();
-}
+  // 2. Fungsi untuk mengirim data Assign ke Backend
+  async function submitAssign(ticketId) {
+      const picSelect = document.getElementById('assign-pic-select');
+      const picUsername = picSelect ? picSelect.value : '';
+      
+      if (!picUsername) {
+          alert("Silakan pilih salah satu anggota tim PIC terlebih dahulu!");
+          return;
+      }
 
-// 2. Fungsi untuk mengirim data Assign ke Backend
-async function submitAssign(ticketId) {
-    const picUsername = document.getElementById('assign-pic-select').value;
-    if (!picUsername) {
-        alert("Silakan pilih salah satu anggota tim PIC terlebih dahulu!");
-        return;
-    }
+      try {
+          const response = await fetch('/api/requests/assign', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ ticket_id: ticketId, pic_username: picUsername })
+          });
+          const result = await response.json();
 
-    try {
-        const response = await fetch('/api/requests/assign', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ticket_id: ticketId, pic_username: picUsername })
-        });
-        const result = await response.json();
-
-        if (response.ok && result.success) {
-            alert(`Sukses! Tiket ${ticketId} berhasil ditugaskan ke ${picUsername}.`);
-            closeReviewModal();
-            // Refresh data di dashboard admin
-            loadAll(); 
-        } else {
-            alert(`Gagal assign: ${result.message}`);
-        }
-    } catch (error) {
-        console.error("Error assigning ticket:", error);
-        alert("Terjadi kesalahan jaringan saat menyimpan penugasan.");
-    }
-}
+          if (response.ok && result.success) {
+              alert(`Sukses! Tiket ${ticketId} berhasil ditugaskan ke ${picUsername}.`);
+              closeReviewModal();
+              fetchInbox(); // Refresh tabel inbox
+          } else {
+              alert(`Gagal assign: ${result.message}`);
+          }
+      } catch (error) {
+          console.error("Error assigning ticket:", error);
+          alert("Terjadi kesalahan jaringan saat menyimpan penugasan.");
+      }
+  }
 </script>
 
 
