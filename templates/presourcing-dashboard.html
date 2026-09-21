@@ -173,9 +173,6 @@ tr.proj-row:hover{background:var(--panel-2);}
 
 <!-- Tag script BARU khusus untuk fitur Inbox -->
 <script>
-  // Variabel cadangan jika belum didefinisikan oleh script.js eksternal
-  window.team = window.team || ["Decki Okmal Pratama", "Ahmad Fauzi", "Siti Rahma", "Budi Santoso"];
-
   async function fetchInbox() {
       try {
           const res = await fetch('/api/requests?role=admin'); 
@@ -193,7 +190,6 @@ tr.proj-row:hover{background:var(--panel-2);}
       const tbody = document.getElementById('inbox-body');
       tbody.innerHTML = ''; 
 
-      // Filter tiket yang statusnya unassigned
       const newRequests = data.filter(req => req.status === 'unassigned');
 
       if (newRequests.length === 0) {
@@ -201,7 +197,6 @@ tr.proj-row:hover{background:var(--panel-2);}
           return;
       }
 
-      // Simpan data global sementara agar mudah diakses modal
       window.cachedRequests = data;
 
       newRequests.forEach(req => {
@@ -229,24 +224,24 @@ tr.proj-row:hover{background:var(--panel-2);}
       fetchInbox();
   });
 
-  // 1. Fungsi saat tombol "Review & Assign" pada tiket di-klik
+  // 1. Fungsi saat tombol "Review & Assign" di-klik (Menggunakan kelas modal & overlay CSS bawaan)
   async function openReviewModal(ticketId) {
-      // Ambil data tiket dari cache atau window data
       const list = window.cachedRequests || [];
       const ticket = list.find(r => r.ticket_id === ticketId);
       
-      const teamList = window.team || ["PIC 1", "PIC 2", "PIC 3"];
+      // Mengambil variabel team dari script.js utama, dengan fallback jika belum ada
+      const teamList = (typeof team !== 'undefined' && Array.isArray(team)) ? team : ["Decki Okmal Pratama", "Ahmad Fauzi", "Siti Rahma", "Budi Santoso"];
 
-      // Buat HTML modal interaktif
+      // Menggunakan kelas .overlay dan .modal bawaan CSS admin agar posisinya di tengah & rapi
       const modalHtml = `
-          <div class="modal-overlay active" id="review-modal">
-              <div class="modal-card" style="max-width: 700px;">
-                  <div class="modal-header">
+          <div class="overlay" id="review-modal">
+              <div class="modal">
+                  <div class="modal-hd">
                       <h3>Review & Assign Tiket: ${ticketId}</h3>
-                      <button class="modal-close" onclick="closeReviewModal()">&times;</button>
+                      <button class="btn-ghost" style="padding: 4px 8px;" onclick="closeReviewModal()">&times;</button>
                   </div>
-                  <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
-                      <div style="margin-bottom: 16px; background: #F8FAFC; padding: 12px; border-radius: 8px;">
+                  <div class="modal-body">
+                      <div style="margin-bottom: 16px; background: #FAFAFA; padding: 12px 14px; border-radius: 6px; border: 1px solid var(--border);">
                           <p style="margin: 0 0 6px 0;"><b>Project:</b> ${ticket ? ticket.title : '-'}</p>
                           <p style="margin: 0 0 6px 0;"><b>Klien / End-User:</b> ${ticket && ticket.client_name ? ticket.client_name : '-'}</p>
                           <p style="margin: 0 0 6px 0;"><b>Kompetitor:</b> ${ticket && ticket.competitor_info ? ticket.competitor_info : '-'}</p>
@@ -254,20 +249,20 @@ tr.proj-row:hover{background:var(--panel-2);}
                           <p style="margin: 0;"><b>Catatan SA:</b> ${ticket && ticket.notes ? ticket.notes : '-'}</p>
                       </div>
 
-                      <h4 style="margin: 16px 0 8px 0; font-size: 14px;">📦 Daftar Item BoQ dari SA:</h4>
-                      <div id="modal-boq-items-container" style="border: 1px solid var(--border); border-radius: 8px; padding: 8px; font-size: 13px;">
+                      <h4 style="margin: 16px 0 8px 0; font-size: 13px; font-weight: 600;">📦 Daftar Item BoQ dari SA:</h4>
+                      <div id="modal-boq-items-container" style="border: 1px solid var(--border); border-radius: 6px; padding: 10px; font-size: 12.5px; background: #FFFFFF;">
                           Memuat rincian item BoQ...
                       </div>
 
                       <div class="field" style="margin-top: 20px;">
-                          <label style="font-weight: 600; display: block; margin-bottom: 6px;">Tugaskan ke PIC Presourcing:</label>
-                          <select id="assign-pic-select" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--border); font-family: inherit;">
+                          <label>Tugaskan ke PIC Presourcing:</label>
+                          <select id="assign-pic-select">
                               <option value="">-- Pilih Anggota Tim --</option>
                               ${teamList.map(member => `<option value="${member}">${member}</option>`).join('')}
                           </select>
                       </div>
                   </div>
-                  <div class="modal-footer">
+                  <div class="modal-ft">
                       <button type="button" class="btn-ghost" onclick="closeReviewModal()">Batal</button>
                       <button type="button" class="btn-primary" onclick="submitAssign('${ticketId}')">Simpan & Assign PIC</button>
                   </div>
@@ -275,12 +270,11 @@ tr.proj-row:hover{background:var(--panel-2);}
           </div>
       `;
 
-      // Tampilkan modal ke layar
       let existing = document.getElementById('review-modal');
       if (existing) existing.remove();
       document.body.insertAdjacentHTML('beforeend', modalHtml);
 
-      // Ambil data item BoQ dari database untuk tiket ini
+      // Ambil data item BoQ dari database
       try {
           const res = await fetch(`/api/request_items/${ticketId}`);
           const result = await res.json();
@@ -290,7 +284,7 @@ tr.proj-row:hover{background:var(--panel-2);}
               let html = `
                   <table style="width: 100%; border-collapse: collapse;">
                       <thead>
-                          <tr style="border-bottom: 1px solid var(--border); color: var(--text-muted); font-size: 12px;">
+                          <tr style="border-bottom: 1px solid var(--border); color: var(--text-muted); font-size: 11px;">
                               <th style="padding: 6px; text-align: left;">No</th>
                               <th style="padding: 6px; text-align: left;">Deskripsi Item</th>
                               <th style="padding: 6px; text-align: right;">Qty</th>
