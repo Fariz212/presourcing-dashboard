@@ -259,6 +259,42 @@ def get_request_items(ticket_id):
     items_list = [dict(row) for row in rows]
     return jsonify({"success": True, "data": items_list}), 200
 
+# API untuk Master Assign
+# 1. API untuk Admin Mengambil Detail Item BoQ berdasarkan ticket_id
+@app.route('/api/request_items/<ticket_id>', methods=['GET'])
+def get_request_items_admin(ticket_id):
+    conn = sqlite3.connect(DB_NAME)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM request_items WHERE ticket_id = ?", (ticket_id,))
+    rows = cursor.fetchall()
+    conn.close()
+    
+    items_list = [dict(row) for row in rows]
+    return jsonify({"success": True, "data": items_list}), 200
+
+# 2. API untuk Admin Assign PIC & Update Status Tiket
+@app.route('/api/requests/assign', methods=['POST'])
+def assign_ticket():
+    payload = request.json
+    ticket_id = payload.get('ticket_id')
+    pic_username = payload.get('pic_username')
+    
+    if not ticket_id or not pic_username:
+        return jsonify({"success": False, "message": "Ticket ID dan PIC harus diisi!"}), 400
+        
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute('''
+        UPDATE requests 
+        SET pic_username = ?, status = 'ongoing' 
+        WHERE ticket_id = ?
+    ''', (pic_username, ticket_id))
+    conn.commit()
+    conn.close()
+    
+    return jsonify({"success": True, "message": "Tiket berhasil di-assign ke PIC!"}), 200
+
 # --- API ENDPOINTS (DASHBOARD LAMA) ---
 @app.route('/api/presourcing', methods=['GET'])
 def get_data():
