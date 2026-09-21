@@ -334,9 +334,9 @@ function renderProjectDetail(p){
         </div>
       </div>
       ${(p.sows||[]).map(sow=>`
-        <div class="sow-title">Scope of Work: ${sow.name}</div>
+        <div class="sow-title">SoW: ${sow.name}</div>
         ${(sow.boqs||[]).map(boq=>`
-          <div class="boq-title">Bill of Quantity: ${boq.name}</div>
+          <div class="boq-title">BoQ: ${boq.name}</div>
           <div style="display:grid; grid-template-columns: 2fr 0.4fr 1fr 1fr 1fr 0.8fr 1.5fr; gap:8px; padding:5px 0; font-size:10.5px; color:var(--text-dim); border-bottom:1px solid var(--border);">
             <div>Produk</div><div>Qty</div><div>Vendor</div><div class="num">SPH Awal</div><div class="num">SPH Final</div><div class="num">Efficiency</div><div>PIC</div>
           </div>
