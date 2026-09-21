@@ -484,7 +484,7 @@ document.getElementById('request-form').onsubmit = async (e) => {
     }
 };
 
-async function logout() {
+async function handleLogout() {
     try {
         // 1. Perintahkan backend untuk menghapus session
         await fetch('/api/logout', { method: 'POST' });
