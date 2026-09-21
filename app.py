@@ -284,17 +284,87 @@ def assign_ticket():
         return jsonify({"success": False, "message": "Ticket ID dan PIC harus diisi!"}), 400
         
     conn = sqlite3.connect(DB_NAME)
+    conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
+    
+    # 1. Update status di tabel requests
     cursor.execute('''
         UPDATE requests 
         SET pic_username = ?, status = 'ongoing' 
         WHERE ticket_id = ?
     ''', (pic_username, ticket_id))
+    
+    # Ambil detail request yang baru di-assign
+    cursor.execute("SELECT * FROM requests WHERE ticket_id = ?", (ticket_id,))
+    req = cursor.fetchone()
+    
+    # Ambil item BoQ terkait
+    cursor.execute("SELECT * FROM request_items WHERE ticket_id = ?", (ticket_id,))
+    items = cursor.fetchall()
+    
     conn.commit()
     conn.close()
     
-    return jsonify({"success": True, "message": "Tiket berhasil di-assign ke PIC!"}), 200
+    # 2. Sinkronkan juga ke dashboard_state (projects) agar langsung terbaca oleh script.js
+    if req:
+        conn2 = sqlite3.connect(DB_NAME)
+        cursor2 = conn2.cursor()
+        cursor2.execute("SELECT json_data FROM dashboard_state WHERE data_type = 'projects'")
+        row = cursor2.fetchone()
+        
+        projects_list = json.loads(row[0]) if row and row[0] else []
+        
+        # Konversi item BoQ ke format yang dibaca script.js
+        formatted_items = []
+        for it in items:
+            formatted_items.append({
+                "id": f"item_{it['id']}",
+                "product": it['description'],
+                "qty": it['quantity'],
+                "vendor": it['vendor'] or "",
+                "picIds": [pic_username],
+                "sphAwal": None,
+                "sphFinal": None
+            })
+            
+        new_project_entry = {
+            "id": req['ticket_id'],
+            "name": f"{req['title']} ({req['client_name'] or 'Klien Umum'})",
+            "requestorName": req['requester_username'],
+            "requestorDept": "Presales Team",
+            "priority": "High", # Bisa disesuaikan
+            "status": "ongoing",
+            "leadId": pic_username,
+            "sphMode": "item",
+            "projectSphAwal": None,
+            "projectSphFinal": None,
+            "createdAt": req['created_at'][:10] if req['created_at'] else todayStr(),
+            "closedAt": None,
+            "sows": [{
+                "id": f"sow_{req['ticket_id']}",
+                "name": "General Scope of Work",
+                "boqs": [{
+                    "id": f"boq_{req['ticket_id']}",
+                    "name": "BoQ Lampiran SA",
+                    "items": formatted_items
+                }]
+            }]
+        }
+        
+        # Masukkan ke list projects jika belum ada
+        if not any(p['id'] == req['ticket_id'] for p in projects_list):
+            projects_list.insert(0, new_project_entry)
+            
+        cursor2.execute('''
+            INSERT INTO dashboard_state (data_type, json_data) VALUES ('projects', ?)
+            ON CONFLICT(data_type) DO UPDATE SET json_data=excluded.json_data
+        ''', (json.dumps(projects_list),))
+        
+        conn2.commit()
+        conn2.close()
 
+    return jsonify({"success": True, "message": "Tiket berhasil di-assign dan disinkronkan ke dashboard!"}), 200
+    
 # --- API ENDPOINTS (DASHBOARD LAMA) ---
 @app.route('/api/presourcing', methods=['GET'])
 def get_data():
