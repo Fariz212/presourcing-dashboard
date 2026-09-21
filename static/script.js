@@ -514,7 +514,7 @@ function projectModalHtml(d, isNew){
 }
 function sowBlockHtml(sow, si){
   return `<div class="sow-block" data-sow-idx="${si}">
-    <div class="field"><label>Nama SoW</label><input class="sow-name" data-si="${si}" value="${escAttr(sow.name)}" placeholder="SoW Security & Monitoring"></div>
+    <div class="field"><label>Scope of Work</label><input class="sow-name" data-si="${si}" value="${escAttr(sow.name)}" placeholder="SoW Security & Monitoring"></div>
     ${sow.boqs.map((boq,bi)=>boqBlockHtml(boq,si,bi)).join('')}
     <button class="mini-btn" data-add-boq="${si}" type="button">+ Tambah BoQ</button>
     <button class="mini-btn danger" data-del-sow="${si}" type="button" style="float:right;">Hapus SoW</button>
@@ -522,7 +522,7 @@ function sowBlockHtml(sow, si){
 }
 function boqBlockHtml(boq, si, bi){
   return `<div class="boq-block" data-boq-idx="${bi}">
-    <div class="field"><label>Nama BoQ</label><input class="boq-name" data-si="${si}" data-bi="${bi}" value="${escAttr(boq.name)}" placeholder="BoQ Utama"></div>
+    <div class="field"><label>Bill of Quantity</label><input class="boq-name" data-si="${si}" data-bi="${bi}" value="${escAttr(boq.name)}" placeholder="BoQ Utama"></div>
     ${boq.items.map((it,ii)=>itemBlockHtml(it,si,bi,ii)).join('')}
     <button class="mini-btn" data-add-item="${si}:${bi}" type="button">+ Tambah item/produk</button>
     <button class="mini-btn danger" data-del-boq="${si}:${bi}" type="button" style="float:right;">Hapus BoQ</button>
