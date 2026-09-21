@@ -1,5 +1,5 @@
 // ---------- storage keys & setup ----------
-const API_URL = 'http://3.107.94.65:5000/api/presourcing';
+const API_URL = '/api/presourcing';
 
 let projects = [];
 let team = [];
