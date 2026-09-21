@@ -319,7 +319,7 @@ tr.proj-row:hover{background:var(--panel-2);}
       if (modal) modal.remove();
   }
 
-  // 2. Fungsi untuk mengirim data Assign ke Backend
+// 2. Fungsi untuk mengirim data Assign ke Backend (Diperbarui agar otomatis merefresh data dashboard)
   async function submitAssign(ticketId) {
       const picSelect = document.getElementById('assign-pic-select');
       const picUsername = picSelect ? picSelect.value : '';
@@ -340,7 +340,18 @@ tr.proj-row:hover{background:var(--panel-2);}
           if (response.ok && result.success) {
               alert(`Sukses! Tiket ${ticketId} berhasil ditugaskan ke ${picUsername}.`);
               closeReviewModal();
-              fetchInbox(); // Refresh tabel inbox
+              
+              // 1. Refresh Inbox agar tiket yang sudah di-assign hilang dari daftar antrean
+              fetchInbox(); 
+              
+              // 2. Panggil fungsi bawaan script.js untuk merefresh tabel project (jika ada)
+              if (typeof loadProjects === 'function') {
+                  loadProjects();
+              } else if (typeof loadAll === 'function') {
+                  loadAll();
+              } else {
+                  location.reload(); // Cadangan terakhir: reload halaman otomatis agar data tersinkronisasi sempurna
+              }
           } else {
               alert(`Gagal assign: ${result.message}`);
           }
