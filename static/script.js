@@ -330,6 +330,7 @@ function renderProjectDetail(p){
         <div style="font-size:12px; color:var(--text-muted);">Lead Presource: <strong style="color:var(--text);">${p.leadId||'—'}</strong> · PIC terlibat: ${uniq.join(', ')||'—'}</div>
         <div style="display:flex; gap:6px;">
           <!-- Tombol Download Excel per Project -->
+          <button class="mini-btn" onclick="uploadRevisiBoq('${p.id}')">🔄 Revisi Excel BoQ</button>
           <button class="mini-btn" onclick="downloadProjectReport('${p.id}')">📥 Download Excel</button>
           
           <button class="mini-btn" data-edit-project="${p.id}">Edit</button>
