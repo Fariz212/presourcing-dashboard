@@ -281,26 +281,53 @@ def create_request():
     
     return jsonify({"success": True, "message": "Request berhasil dibuat", "ticket_id": ticket_id}), 201
 
-# 2. Mengambil Data Request
 @app.route('/api/requests', methods=['GET'])
 def get_requests():
     username = request.args.get('username')
     role = request.args.get('role')
     
-    conn = sqlite3.connect(DB_NAME)
-    conn.row_factory = sqlite3.Row 
-    cursor = conn.cursor()
-    
-    if role == 'admin':
-        cursor.execute("SELECT * FROM requests ORDER BY created_at DESC")
-    else:
-        cursor.execute("SELECT * FROM requests WHERE requester_username = ? ORDER BY created_at DESC", (username,))
+    if not username:
+        return jsonify({"success": False, "message": "Username diperlukan"}), 400
+
+    try:
+        conn = sqlite3.connect(DB_NAME)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
         
-    rows = cursor.fetchall()
-    conn.close()
-    
-    requests_list = [dict(row) for row in rows]
-    return jsonify({"success": True, "data": requests_list}), 200
+        # 1. Ambil data dasar tiket milik SA tersebut dari SQL
+        cursor.execute("SELECT * FROM requests WHERE requester_username = ?", (username,))
+        requests_data = [dict(row) for row in cursor.fetchall()]
+        
+        # 2. SINKRONISASI DENGAN ADMIN DASHBOARD
+        # Ambil data JSON untuk melihat siapa PIC yang ditugaskan dan status terbarunya
+        cursor.execute("SELECT json_data FROM dashboard_state WHERE data_type = 'projects'")
+        json_row = cursor.fetchone()
+        
+        if json_row and json_row['json_data']:
+            admin_projects = json.loads(json_row['json_data'])
+            # Buat kamus pemetaan (mapping) ID tiket ke data admin
+            admin_map = {p['id']: p for p in admin_projects}
+            
+            # Gabungkan datanya
+            for req in requests_data:
+                ticket_id = req['ticket_id']
+                if ticket_id in admin_map:
+                    # Ambil status terbaru dari Admin
+                    req['status'] = admin_map[ticket_id].get('status', req['status'])
+                    # Ambil nama Lead PIC
+                    req['leadId'] = admin_map[ticket_id].get('leadId', '')
+                else:
+                    req['leadId'] = ''
+        else:
+            for req in requests_data:
+                req['leadId'] = ''
+
+        return jsonify({"success": True, "data": requests_data})
+
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+    finally:
+        conn.close()
 
 # 3. SA Mengunggah File BoQ Excel (Dengan Smart Fallback)
 @app.route('/api/upload_boq', methods=['POST'])
