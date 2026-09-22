@@ -298,10 +298,20 @@ def get_requests():
         # 1. AMBIL DATA DARI SQL BERDASARKAN PERAN (ADMIN vs SA)
         if role == 'admin':
             # Master/Admin ingin melihat seluruh tiket untuk di-review di inbox
-            cursor.execute("SELECT * FROM requests ORDER BY created_at DESC")
+            cursor.execute('''
+                SELECT r.*, u.full_name, u.department 
+                FROM requests r 
+                LEFT JOIN users u ON r.requester_username = u.username 
+                ORDER BY r.created_at DESC
+            ''')
         else:
             # SA hanya melihat tiket miliknya sendiri
-            cursor.execute("SELECT * FROM requests WHERE requester_username = ?", (username,))
+            cursor.execute('''
+                SELECT r.*, u.full_name, u.department 
+                FROM requests r 
+                LEFT JOIN users u ON r.requester_username = u.username 
+                WHERE r.requester_username = ?
+            ''', (username,))
             
         requests_data = [dict(row) for row in cursor.fetchall()]
         
@@ -331,7 +341,7 @@ def get_requests():
         return jsonify({"success": False, "message": str(e)}), 500
     finally:
         conn.close()
-        
+
 # 3. SA Mengunggah File BoQ Excel (Dengan Smart Fallback)
 @app.route('/api/upload_boq', methods=['POST'])
 def upload_boq():
