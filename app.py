@@ -679,17 +679,17 @@ def revisi_boq():
                         vendor = row.get("Vendor (Opsional)", "")
                         
                         if desc_key in json_old_items_map:
-                            # Jika nama produk sama, pertahankan ID, PIC, SPH lama. Hanya ubah Qty & Vendor
                             existing_json_item = json_old_items_map[desc_key]
                             existing_json_item['qty'] = qty
+                            existing_json_item['uom'] = str(row.get("UoM", "")) # <-- Tambahan UoM
                             existing_json_item['vendor'] = vendor
                             updated_json_items.append(existing_json_item)
                         else:
-                            # Jika ini produk baru, buat ID baru ala frontend
                             updated_json_items.append({
                                 "id": f"item_{uuid.uuid4().hex[:8]}", 
                                 "product": desc_raw, 
                                 "qty": qty, 
+                                "uom": str(row.get("UoM", "")), # <-- Tambahan UoM
                                 "vendor": vendor, 
                                 "picIds": [], 
                                 "sphAwal": None, 
