@@ -330,7 +330,7 @@ function renderProjectDetail(p){
         <div style="font-size:12px; color:var(--text-muted);">Lead Presource: <strong style="color:var(--text);">${p.leadId||'—'}</strong> · PIC terlibat: ${uniq.join(', ')||'—'}</div>
         <div style="display:flex; gap:6px;">
           <!-- Tombol Download Excel per Project -->
-          <button class="mini-btn" onclick="uploadRevisiBoq('${p.id}')">🔄 Revisi Excel BoQ</button>
+          <button class="mini-btn" onclick="event.stopPropagation(); triggerRevisiBoq('${p.id}')">🔄 Revisi Excel BoQ</button>
           <button class="mini-btn" onclick="downloadProjectReport('${p.id}')">📥 Download Excel</button>
           
           <button class="mini-btn" data-edit-project="${p.id}">Edit</button>
@@ -638,18 +638,28 @@ function wireModalEvents(){
     }
     return;
   }
-  
-// ---------- FUNGSI REVISI BOQ ----------
+
+// ---------- FUNGSI REVISI BOQ (ANTI-BLOCKED) ----------
 function triggerRevisiBoq(projectId) {
+    // 1. Buat input file
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
     fileInput.accept = '.xlsx, .xls';
+    fileInput.style.display = 'none'; // Sembunyikan
     
+    // 2. Tempelkan ke body agar diizinkan oleh semua browser
+    document.body.appendChild(fileInput);
+    
+    // 3. Tangani saat file dipilih
     fileInput.onchange = async (e) => {
         const file = e.target.files[0];
+        
+        // Hapus input dari DOM setelah file dipilih agar bersih
+        document.body.removeChild(fileInput); 
+        
         if (!file) return;
 
-        if (!confirm(`Unggah revisi BoQ untuk project ini? Item yang sama akan diperbarui qty/vendor-nya. Item baru ditambahkan, dan item yang hilang dihapus.`)) {
+        if (!confirm(`Unggah revisi BoQ untuk project ini?\n\nItem yang sama akan diperbarui qty/vendor-nya. Item baru ditambahkan, dan item yang hilang dihapus.`)) {
             return;
         }
 
@@ -676,6 +686,7 @@ function triggerRevisiBoq(projectId) {
         }
     };
     
+    // 4. Picu klik
     fileInput.click();
 }
   // project modal events (Tiap nambah/hapus selalu panggil syncModalData dulu)
