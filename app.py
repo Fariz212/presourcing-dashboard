@@ -5,6 +5,7 @@ import sqlite3
 import json
 import os
 import io
+import uuid
 from datetime import datetime
 
 app = Flask(__name__)
@@ -653,29 +654,47 @@ def revisi_boq():
             if old_desc_key not in descriptions_in_new_excel:
                 cursor.execute("DELETE FROM request_items WHERE id = ?", (old_data['id'],))
                 
-        # Sinkronisasi ke JSON dashboard_state
+# SINKRONISASI KE DASHBOARD_STATE JSON (DIUBAH)
         cursor.execute("SELECT json_data FROM dashboard_state WHERE data_type = 'projects'")
         json_row = cursor.fetchone()
         if json_row and json_row['json_data']:
             projects = json.loads(json_row['json_data'])
             for p in projects:
                 if p['id'] == ticket_id:
-                    if not p.get('sows'): p['sows'] = [{'boqs': [{'items': []}]}]
+                    if not p.get('sows'): p['sows'] = [{'id': f"sow_{uuid.uuid4().hex[:6]}", 'name': 'SoW Utama', 'boqs': [{'id': f"boq_{uuid.uuid4().hex[:6]}", 'name': 'BoQ Utama', 'items': []}]}]
                     boq_items = p['sows'][0]['boqs'][0]['items']
                     
-                    json_old_items_map = {it['id']: it for it in boq_items}
+                    # PERBAIKAN: Petakan item lama berdasarkan NAMA PRODUK (Huruf Kecil)
+                    json_old_items_map = {str(it.get('product', '')).strip().lower(): it for it in boq_items}
                     updated_json_items = []
                     
-                    for proc in new_items_processed:
-                        if not proc['is_new'] and proc['id'] in json_old_items_map:
-                            existing_json_item = json_old_items_map[proc['id']]
-                            existing_json_item['qty'] = proc['qty']
-                            existing_json_item['vendor'] = proc['vendor']
+                    # Ulangi pembacaan Excel untuk update JSON
+                    for index, row in df.iterrows():
+                        desc_raw = str(row.get("Deskripsi Item", "")).strip()
+                        if not desc_raw:
+                            continue
+                            
+                        desc_key = desc_raw.lower()
+                        qty = row.get("Qty", 0)
+                        vendor = row.get("Vendor (Opsional)", "")
+                        
+                        if desc_key in json_old_items_map:
+                            # Jika nama produk sama, pertahankan ID, PIC, SPH lama. Hanya ubah Qty & Vendor
+                            existing_json_item = json_old_items_map[desc_key]
+                            existing_json_item['qty'] = qty
+                            existing_json_item['vendor'] = vendor
                             updated_json_items.append(existing_json_item)
                         else:
+                            # Jika ini produk baru, buat ID baru ala frontend
                             updated_json_items.append({
-                                "id": proc['id'], "product": proc['product'], "qty": proc['qty'], 
-                                "vendor": proc['vendor'], "picIds": [], "sphAwal": None, "sphFinal": None
+                                "id": f"item_{uuid.uuid4().hex[:8]}", 
+                                "product": desc_raw, 
+                                "qty": qty, 
+                                "vendor": vendor, 
+                                "picIds": [], 
+                                "sphAwal": None, 
+                                "sphFinal": None,
+                                "notes": ""
                             })
                     
                     p['sows'][0]['boqs'][0]['items'] = updated_json_items

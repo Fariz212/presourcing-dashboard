@@ -59,7 +59,8 @@ function seedData(){
 // ---------- persistence ----------
 async function loadAll(){
   try {
-    const response = await fetch(API_URL);
+    const timestamp = new Date().getTime();
+    const response = await fetch(`${API_URL}?t=${timestamp}`);
     if (!response.ok) throw new Error("Gagal terhubung ke Backend");
     
     const data = await response.json();
