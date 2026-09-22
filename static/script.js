@@ -433,6 +433,57 @@ function downloadProjectReport(projectId) {
     window.location.href = `/api/download_report?project_id=${projectId}`;
 }
 
+// ---------- FUNGSI REVISI BOQ (ANTI-BLOCKED) ----------
+function triggerRevisiBoq(projectId) {
+    // 1. Buat input file
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.xlsx, .xls';
+    fileInput.style.display = 'none'; // Sembunyikan
+    
+    // 2. Tempelkan ke body agar diizinkan oleh semua browser
+    document.body.appendChild(fileInput);
+    
+    // 3. Tangani saat file dipilih
+    fileInput.onchange = async (e) => {
+        const file = e.target.files[0];
+        
+        // Hapus input dari DOM setelah file dipilih agar bersih
+        document.body.removeChild(fileInput); 
+        
+        if (!file) return;
+
+        if (!confirm(`Unggah revisi BoQ untuk project ini?\n\nItem yang sama akan diperbarui qty/vendor-nya. Item baru ditambahkan, dan item yang hilang dihapus.`)) {
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('ticket_id', projectId);
+
+        try {
+            const res = await fetch('/api/revisi_boq', {
+                method: 'POST',
+                body: formData
+            });
+            const result = await res.json();
+            
+            if (res.ok && result.success) {
+                alert(result.message);
+                loadAll(); // Tarik ulang data JSON terbaru
+            } else {
+                alert(`Gagal merevisi BoQ: ${result.message}`);
+            }
+        } catch (error) {
+            console.error("Error revisi BoQ:", error);
+            alert('Terjadi kesalahan saat mengunggah file.');
+        }
+    };
+    
+    // 4. Picu klik
+    fileInput.click();
+}
+
 // ---------- modal functions ----------
 function blankProject(){
   return {
@@ -639,56 +690,6 @@ function wireModalEvents(){
     return;
   }
 
-// ---------- FUNGSI REVISI BOQ (ANTI-BLOCKED) ----------
-function triggerRevisiBoq(projectId) {
-    // 1. Buat input file
-    const fileInput = document.createElement('input');
-    fileInput.type = 'file';
-    fileInput.accept = '.xlsx, .xls';
-    fileInput.style.display = 'none'; // Sembunyikan
-    
-    // 2. Tempelkan ke body agar diizinkan oleh semua browser
-    document.body.appendChild(fileInput);
-    
-    // 3. Tangani saat file dipilih
-    fileInput.onchange = async (e) => {
-        const file = e.target.files[0];
-        
-        // Hapus input dari DOM setelah file dipilih agar bersih
-        document.body.removeChild(fileInput); 
-        
-        if (!file) return;
-
-        if (!confirm(`Unggah revisi BoQ untuk project ini?\n\nItem yang sama akan diperbarui qty/vendor-nya. Item baru ditambahkan, dan item yang hilang dihapus.`)) {
-            return;
-        }
-
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('ticket_id', projectId);
-
-        try {
-            const res = await fetch('/api/revisi_boq', {
-                method: 'POST',
-                body: formData
-            });
-            const result = await res.json();
-            
-            if (res.ok && result.success) {
-                alert(result.message);
-                loadAll(); // Tarik ulang data JSON terbaru
-            } else {
-                alert(`Gagal merevisi BoQ: ${result.message}`);
-            }
-        } catch (error) {
-            console.error("Error revisi BoQ:", error);
-            alert('Terjadi kesalahan saat mengunggah file.');
-        }
-    };
-    
-    // 4. Picu klik
-    fileInput.click();
-}
   // project modal events (Tiap nambah/hapus selalu panggil syncModalData dulu)
   const sphmode = document.getElementById('m-sphmode');
   if(sphmode) sphmode.onchange = ()=>{ syncModalData(); modal.data.sphMode = sphmode.value; render(); };
@@ -769,6 +770,7 @@ function triggerRevisiBoq(projectId) {
     };
   }
 }
+
 
 function val(id){ const el=document.getElementById(id); return el?el.value:''; }
 function numOrNull(v){ return (v===''||v==null) ? null : Number(v); }
