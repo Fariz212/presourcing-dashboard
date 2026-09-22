@@ -364,7 +364,8 @@ async function fetchRequests() {
 function renderTable(data) {
     const tbody = document.getElementById('table-body');
     
-    if (data.length === 0) {
+    // Pastikan data ada dan berupa array
+    if (!data || !Array.isArray(data) || data.length === 0) {
         tbody.innerHTML = `
             <tr id="empty-row">
                 <td colspan="5">
@@ -385,20 +386,27 @@ function renderTable(data) {
         let statusText = 'Menunggu PIC';
         
         if (req.status === 'ongoing') { badgeClass = 'ongoing'; statusText = 'Diproses'; }
-        else if (req.status === 'done') { badgeClass = 'done'; statusText = 'Selesai'; }
+        else if (req.status === 'done' || req.status === 'win') { badgeClass = 'done'; statusText = 'Selesai / Win'; }
+        else if (req.status === 'lose') { badgeClass = 'rejected'; statusText = 'Kalah'; }
+
+        // Sanitasi teks agar aman dari error kutipan di dalam string HTML onclick
+        const safeTitle = req.title ? req.title.replace(/'/g, "\\'").replace(/"/g, '&quot;') : '';
+        const safeTicketId = req.ticket_id || '';
+        const safeStatus = req.status || 'unassigned';
+        const safeLeadId = req.leadId || '';
 
         const tr = document.createElement('tr');
         tr.innerHTML = `
-            <td><b>${req.ticket_id}</b></td>
+            <td><b>${safeTicketId}</b></td>
             <td>
-                ${req.title}
+                ${req.title || 'Tanpa Nama Project'}
                 <div style="font-size: 12px; color: var(--text-muted);">Klien: ${req.client_name || '-'} | Kompetitor: ${req.competitor_info || '-'}</div>
             </td>
-            <td>${req.sla_date}</td>
+            <td>${req.sla_date || '-'}</td>
             <td><span class="badge ${badgeClass}">${statusText}</span></td>
             <td>
                 <button class="btn btn-outline" style="padding: 6px 12px; font-size: 12px;" 
-                    onclick="viewTicketItems('${req.ticket_id}', '${req.title.replace(/'/g, "\\'")}', '${req.status}', '${req.leadId || ''}')">
+                    onclick="viewTicketItems('${safeTicketId}', '${safeTitle}', '${safeStatus}', '${safeLeadId}')">
                     📋 Lihat Daftar Item
                 </button>
             </td>
