@@ -209,9 +209,17 @@ tr.proj-row:hover{background:var(--panel-2);}
 
       newRequests.forEach(req => {
           const tr = document.createElement('tr');
+          
+          // Menggunakan full_name jika ada, fallback ke username jika kosong
+          const requesterDisplay = req.full_name || req.requester_username;
+          const deptDisplay = req.department || 'Presales Team';
+
           tr.innerHTML = `
               <td><b style="color: var(--text); font-family: 'JetBrains Mono', monospace;">${req.ticket_id}</b></td>
-              <td><span class="tag tag-medium">@${req.requester_username}</span></td>
+              <td>
+                  <div style="font-weight: 600; color: var(--text);">${requesterDisplay}</div>
+                  <div style="font-size: 11px; color: var(--text-muted);">@${req.requester_username} &middot; ${deptDisplay}</div>
+              </td>
               <td style="font-weight: 500;">
                   ${req.title}
                   <div style="font-size: 11.5px; color: var(--text-muted);">Klien: ${req.client_name || '-'}</div>
