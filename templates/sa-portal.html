@@ -398,7 +398,7 @@ function renderTable(data) {
             <td><span class="badge ${badgeClass}">${statusText}</span></td>
             <td>
                 <button class="btn btn-outline" style="padding: 6px 12px; font-size: 12px;" 
-                    onclick="viewTicketItems('${req.ticket_id}', '${req.title.replace(/'/g, "\\'")}')">
+                    onclick="viewTicketItems('${req.ticket_id}', '${req.title.replace(/'/g, "\\'")}', '${req.status}', '${req.leadId || ''}')">
                     📋 Lihat Daftar Item
                 </button>
             </td>
@@ -408,7 +408,7 @@ function renderTable(data) {
 }
 
 // 6. FUNGSI LIHAT DAFTAR ITEM BOQ (UNTUK SA)
-async function viewTicketItems(ticketId, projectTitle, status) {
+async function viewTicketItems(ticketId, projectTitle, status, leadId) {
     const modalHtml = `
         <div class="modal-overlay active" id="items-modal">
             <div class="modal-card" style="max-width: 800px;">
@@ -417,7 +417,7 @@ async function viewTicketItems(ticketId, projectTitle, status) {
                     <button class="modal-close" onclick="closeItemsModal()">&times;</button>
                 </div>
                 <div class="modal-body">
-                  ${getTimelineHtml(status)}
+                  ${getTimelineHtml(status, leadId)}
                     <p style="margin-top:0; color:var(--text-muted);"><b>Project:</b> ${projectTitle}</p>
                     <div id="items-content-area" style="max-height: 400px; overflow-y: auto;">
                         <p>Memuat data item...</p>
@@ -581,6 +581,10 @@ function getTimelineHtml(status) {
     const isOngoing = status === 'ongoing';
     const isWin = status === 'win';
     const isLose = status === 'lose';
+    // Logika tampilan nama PIC
+    const picDisplay = leadId && leadId !== 'null' && leadId !== '' 
+        ? `<div style="margin-top: 5px; font-size: 11px; font-weight: 600; color: var(--primary); background: #e0f2fe; padding: 2px 8px; border-radius: 12px; display: inline-block;">🧑‍💻 PIC: ${leadId}</div>` 
+        : `<div style="margin-top: 5px; font-size: 11px; color: #94a3b8; font-style: italic;">Menunggu Assign</div>`;
 
     return `
     <div class="tracking-wrapper">
@@ -596,6 +600,7 @@ function getTimelineHtml(status) {
             <div class="step ${isOngoing || isWin || isLose ? 'completed' : 'active'}">
                 <div class="step-circle">${isOngoing || isWin || isLose ? '✓' : '2'}</div>
                 <div class="step-label">Diproses Tim</div>
+                ${(isOngoing || isWin || isLose) ? picDisplay : ''}
             </div>
             
             <!-- Step 3: Selesai (SPH Final) -->
