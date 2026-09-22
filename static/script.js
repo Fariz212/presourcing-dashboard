@@ -638,7 +638,46 @@ function wireModalEvents(){
     }
     return;
   }
+  
+// ---------- FUNGSI REVISI BOQ ----------
+function triggerRevisiBoq(projectId) {
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.xlsx, .xls';
+    
+    fileInput.onchange = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
 
+        if (!confirm(`Unggah revisi BoQ untuk project ini? Item yang sama akan diperbarui qty/vendor-nya. Item baru ditambahkan, dan item yang hilang dihapus.`)) {
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('ticket_id', projectId);
+
+        try {
+            const res = await fetch('/api/revisi_boq', {
+                method: 'POST',
+                body: formData
+            });
+            const result = await res.json();
+            
+            if (res.ok && result.success) {
+                alert(result.message);
+                loadAll(); // Tarik ulang data JSON terbaru
+            } else {
+                alert(`Gagal merevisi BoQ: ${result.message}`);
+            }
+        } catch (error) {
+            console.error("Error revisi BoQ:", error);
+            alert('Terjadi kesalahan saat mengunggah file.');
+        }
+    };
+    
+    fileInput.click();
+}
   // project modal events (Tiap nambah/hapus selalu panggil syncModalData dulu)
   const sphmode = document.getElementById('m-sphmode');
   if(sphmode) sphmode.onchange = ()=>{ syncModalData(); modal.data.sphMode = sphmode.value; render(); };
@@ -722,6 +761,7 @@ function wireModalEvents(){
 
 function val(id){ const el=document.getElementById(id); return el?el.value:''; }
 function numOrNull(v){ return (v===''||v==null) ? null : Number(v); }
+
 
 // Jalankan load data awal saat pertama kali script dimuat
 loadAll();

@@ -611,15 +611,14 @@ def revisi_boq():
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         
-        # 1. Ambil data item lama dari database
+        # Ambil data item lama dari database
         cursor.execute("SELECT * FROM request_items WHERE ticket_id = ?", (ticket_id,))
         old_items = {row['description'].strip().lower(): dict(row) for row in cursor.fetchall()}
         
-        # 2. Siapkan penampung untuk Diffing
-        new_items_processed = [] # Untuk dimasukkan ke JSON nanti
+        new_items_processed = [] 
         descriptions_in_new_excel = set()
         
-        # 3. Proses Excel Baru (Upsert: Update & Insert)
+        # Proses Upsert (Update jika ada, Insert jika baru)
         for index, row in df.iterrows():
             desc_raw = str(row.get("Deskripsi Item", "")).strip()
             if not desc_raw:
@@ -634,7 +633,6 @@ def revisi_boq():
             item_no = str(row.get("Item No", ""))
             
             if desc_key in old_items:
-                # ITEM SAMA -> UPDATE database
                 item_id = old_items[desc_key]['id']
                 cursor.execute('''
                     UPDATE request_items 
@@ -643,7 +641,6 @@ def revisi_boq():
                 ''', (qty, uom, vendor, item_no, item_id))
                 new_items_processed.append({"id": f"item_{item_id}", "product": desc_raw, "qty": qty, "vendor": vendor, "is_new": False})
             else:
-                # ITEM BARU -> INSERT database
                 cursor.execute('''
                     INSERT INTO request_items (ticket_id, description, quantity, uom, vendor, item_no) 
                     VALUES (?, ?, ?, ?, ?, ?)
@@ -651,53 +648,42 @@ def revisi_boq():
                 new_id = cursor.lastrowid
                 new_items_processed.append({"id": f"item_{new_id}", "product": desc_raw, "qty": qty, "vendor": vendor, "is_new": True})
                 
-        # 4. Hapus item lama yang TIDAK ADA di Excel baru (Delete)
+        # Hapus item yang tidak ada di Excel baru
         for old_desc_key, old_data in old_items.items():
             if old_desc_key not in descriptions_in_new_excel:
                 cursor.execute("DELETE FROM request_items WHERE id = ?", (old_data['id'],))
                 
-        # 5. SINKRONISASI KE DASHBOARD_STATE (SANGAT PENTING!)
-        # Kita harus memperbarui JSON agar tampilan presourcing control (Admin) ikut ter-update
+        # Sinkronisasi ke JSON dashboard_state
         cursor.execute("SELECT json_data FROM dashboard_state WHERE data_type = 'projects'")
         json_row = cursor.fetchone()
         if json_row and json_row['json_data']:
             projects = json.loads(json_row['json_data'])
             for p in projects:
                 if p['id'] == ticket_id:
-                    # Ambil SOW pertama dan BOQ pertama (asumsi standar)
                     if not p.get('sows'): p['sows'] = [{'boqs': [{'items': []}]}]
                     boq_items = p['sows'][0]['boqs'][0]['items']
                     
-                    # Buat pemetaan item lama di JSON untuk mempertahankan SPH dan PIC
                     json_old_items_map = {it['id']: it for it in boq_items}
-                    
-                    # Bentuk ulang list items berdasarkan hasil diffing
                     updated_json_items = []
+                    
                     for proc in new_items_processed:
                         if not proc['is_new'] and proc['id'] in json_old_items_map:
-                            # Pertahankan SPH, PIC, Notes, tapi update Qty dan Vendor
                             existing_json_item = json_old_items_map[proc['id']]
                             existing_json_item['qty'] = proc['qty']
                             existing_json_item['vendor'] = proc['vendor']
                             updated_json_items.append(existing_json_item)
                         else:
-                            # Masukkan item baru dengan SPH/PIC kosong
                             updated_json_items.append({
                                 "id": proc['id'], "product": proc['product'], "qty": proc['qty'], 
                                 "vendor": proc['vendor'], "picIds": [], "sphAwal": None, "sphFinal": None
                             })
                     
-                    # Timpa items di JSON dengan yang sudah di-update
                     p['sows'][0]['boqs'][0]['items'] = updated_json_items
-                    
-                    # Simpan kembali JSON ke database
-                    cursor.execute('''
-                        UPDATE dashboard_state SET json_data = ? WHERE data_type = 'projects'
-                    ''', (json.dumps(projects),))
+                    cursor.execute("UPDATE dashboard_state SET json_data = ? WHERE data_type = 'projects'", (json.dumps(projects),))
                     break
 
         conn.commit()
-        return jsonify({"success": True, "message": "BoQ berhasil direvisi! SPH dan PIC pada item yang sama tetap aman."}), 200
+        return jsonify({"success": True, "message": "BoQ berhasil direvisi! SPH dan PIC pada item yang sama tidak berubah."}), 200
 
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
