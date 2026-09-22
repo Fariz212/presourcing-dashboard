@@ -9,9 +9,22 @@ let modal = null;
 let modalScroll = 0;
 let filters = { priority:'all', status:'all' };
 let storageOk = true;
+let isSaving = false; // Guard untuk mencegah double-click / race condition saat save
 
 function uid(p){ return p + '_' + Math.random().toString(36).slice(2,9); }
 function todayStr(){ return new Date().toISOString().slice(0,10); }
+
+// ---------- Fungsi Keamanan (XSS Protection) ----------
+// Mencegah kode HTML/JS nakal dieksekusi jika SA/Admin menginputkan karakter khusus
+function escAttr(s){ 
+  if (s === null || s === undefined) return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
 
 // ---------- seed data (Fallback jika server mati) ----------
 function seedData(){
@@ -82,6 +95,10 @@ async function loadAll(){
 }
 
 async function saveAll(){
+  if (isSaving) return; // Guard agar tidak terjadi penumpukan request jika tombol di-klik berkali-kali
+  isSaving = true;
+  document.body.style.cursor = 'wait'; // Indikator loading visual
+
   try {
     const response = await fetch(API_URL, {
       method: 'POST',
@@ -94,6 +111,9 @@ async function saveAll(){
   } catch(e) {
     console.error("Gagal menyimpan data:", e);
     storageOk = false; 
+  } finally {
+    isSaving = false;
+    document.body.style.cursor = 'default';
   }
   render(); 
 }
@@ -256,7 +276,7 @@ function renderOverview(){
       <div class="panel-body">
         ${urgentActive.length===0 ? '<div class="empty">Tidak ada project urgent yang masih berjalan.</div>' :
           urgentActive.map(p=>`<div style="padding:6px 0; border-bottom:1px solid var(--border-soft); font-size:13px;">
-            <strong>${p.name}</strong> · ${p.requestorName} (${p.requestorDept}) · berjalan ${durationDays(p)} hari
+            <strong>${p.name}</strong> ·${p.requestorName} (${p.requestorDept}) · berjalan ${durationDays(p)} hari
           </div>`).join('')}
       </div>
     </div>
@@ -325,46 +345,57 @@ function renderProjects(){
 
 function renderProjectDetail(p){
   const uniq = uniquePicsInProject(p);
+  
+  // Render bagian baris item BoQ secara terpisah agar bersih
+  let itemsHtml = '';
+  (p.sows || []).forEach(sow => {
+    (sow.boqs || []).forEach(boq => {
+      (boq.items || []).forEach(it => {
+        const eff = p.sphMode === 'item' ? efficiencyPct(it.sphAwal, it.sphFinal) : null;
+        const notesHtml = it.notes ? `<div style="font-size:11px; color:var(--text-muted); margin-top:3px;">📝 ${escAttr(it.notes)}</div>` : '';
+        const picsHtml = (it.picIds || []).map(x => `<span class="pic-chip">${escAttr(x)}</span>`).join('');
+        
+        itemsHtml += `
+          <div style="display:grid; grid-template-columns: 2fr 0.4fr 0.5fr 1fr 1fr 1fr 0.8fr 1.5fr; gap:8px; padding:7px 0; font-size:12.5px; border-bottom:1px solid var(--border-soft); align-items:start;">
+            <div>
+              <div style="font-weight:500;">${escAttr(it.product) || '—'}</div>
+              ${notesHtml}
+            </div>
+            <div style="color:var(--text-muted);">${it.qty || '-'}</div>
+            <div style="color:var(--text-muted);">${escAttr(it.uom) || '-'}</div>
+            <div style="color:var(--text-muted);">${escAttr(it.vendor) || '-'}</div>
+            <div class="num mono">${p.sphMode==='item'?fmtIdr(it.sphAwal):'—'}</div>
+            <div class="num mono">${p.sphMode==='item'?fmtIdr(it.sphFinal):'—'}</div>
+            <div class="num mono">${p.sphMode==='item'?fmtPct(eff):'—'}</div>
+            <div>${picsHtml}</div>
+          </div>
+        `;
+      });
+    });
+  });
+
   return `
     <div class="detail-block">
       <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
         <div style="font-size:12px; color:var(--text-muted);">Lead Presource: <strong style="color:var(--text);">${p.leadId||'—'}</strong> · PIC terlibat: ${uniq.join(', ')||'—'}</div>
         <div style="display:flex; gap:6px;">
-          <!-- Tombol Download Excel per Project -->
           <button class="mini-btn" onclick="event.stopPropagation(); triggerRevisiBoq('${p.id}')">🔄 Revisi Excel BoQ</button>
           <button class="mini-btn" onclick="downloadProjectReport('${p.id}')">📥 Download Excel</button>
-          
           <button class="mini-btn" data-edit-project="${p.id}">Edit</button>
           <button class="mini-btn danger" data-delete-project="${p.id}">Hapus</button>
         </div>
       </div>
+      
       ${(p.sows||[]).map(sow=>`
-        <div class="sow-title">Scope of Work: ${sow.name}</div>
-       ${(sow.boqs||[]).map(boq=>`
-          <div class="boq-title">Bill of Quantity: ${boq.name}</div>
+        <div class="sow-title">Scope of Work: ${escAttr(sow.name)}</div>${(sow.boqs||[]).map(boq=>`
+          <div class="boq-title">Bill of Quantity: ${escAttr(boq.name)}</div>
           <div style="display:grid; grid-template-columns: 2fr 0.4fr 0.5fr 1fr 1fr 1fr 0.8fr 1.5fr; gap:8px; padding:5px 0; font-size:10.5px; color:var(--text-dim); border-bottom:1px solid var(--border);">
             <div>Item</div><div>Qty</div><div>UoM</div><div>Vendor</div><div class="num">SPH Awal</div><div class="num">SPH Final</div><div class="num">Efficiency</div><div>PIC</div>
           </div>
-          
-          // UBAH BAGIAN ISI (BARIS) TABEL BOQ
-          ${(boq.items||[]).map(it=>{
-            const eff = p.sphMode==='item' ? efficiencyPct(it.sphAwal,it.sphFinal) : null;
-            return `<div style="display:grid; grid-template-columns: 2fr 0.4fr 0.5fr 1fr 1fr 1fr 0.8fr 1.5fr; gap:8px; padding:7px 0; font-size:12.5px; border-bottom:1px solid var(--border-soft); align-items:start;">
-              <div>
-                <div style="font-weight:500;">${it.product || '—'}</div>
-                ${it.notes ? `<div style="font-size:11px; color:var(--text-muted); margin-top:3px;">📝 ${it.notes}</div>` : ''}
-              </div>
-              <div style="color:var(--text-muted);">${it.qty || '-'}</div>
-              <div style="color:var(--text-muted);">${it.uom || '-'}</div> <!-- TAMBAHAN KOLOM UoM -->
-              <div style="color:var(--text-muted);">${it.vendor || '-'}</div>
-              <div class="num mono">${p.sphMode==='item'?fmtIdr(it.sphAwal):'—'}</div>
-              <div class="num mono">${p.sphMode==='item'?fmtIdr(it.sphFinal):'—'}</div>
-              <div class="num mono">${p.sphMode==='item'?fmtPct(eff):'—'}</div>
-              <div>${(it.picIds||[]).map(x=>`<span class="pic-chip">${x}</span>`).join('')}</div>
-            </div>`;
-          }).join('')}
+          ${itemsHtml}
         `).join('')}
       `).join('')}
+      
       ${p.sphMode==='project' ? `<div class="note">SPH dicatat di level total project (tidak dipecah per item).</div>` : ''}
     </div>
   `;
@@ -392,7 +423,7 @@ function renderTeam(){
           </tr></thead>
           <tbody>
           ${rows.map(r=>`<tr>
-            <td>${r.name}</td>
+            <td>${escAttr(r.name)}</td>
             <td class="num mono">${r.leadCount}</td>
             <td class="num mono">${r.supportLoad.toFixed(2)}</td>
             <td class="num mono">${fmtPct(r.winRate)}</td>
@@ -406,7 +437,7 @@ function renderTeam(){
       <div class="panel-hd"><h2>Support Load per anggota</h2></div>
       <div class="panel-body">
         ${rows.map(r=>`<div class="lb-row">
-          <div class="lb-name">${r.name}</div>
+          <div class="lb-name">${escAttr(r.name)}</div>
           <div class="lb-bar-track"><div class="lb-bar-fill" style="width:${(r.supportLoad/maxLoad*100).toFixed(0)}%"></div></div>
           <div class="lb-val">${r.supportLoad.toFixed(2)}</div>
         </div>`).join('')}
@@ -431,28 +462,20 @@ function wireEvents(){
 }
 
 // ----------- download project ---------
-
-// ---------- FUNGSI DOWNLOAD REPORT EXCEL PROJECT ----------
 function downloadProjectReport(projectId) {
     window.location.href = `/api/download_report?project_id=${projectId}`;
 }
 
 // ---------- FUNGSI REVISI BOQ (ANTI-BLOCKED) ----------
 function triggerRevisiBoq(projectId) {
-    // 1. Buat input file
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
     fileInput.accept = '.xlsx, .xls';
-    fileInput.style.display = 'none'; // Sembunyikan
-    
-    // 2. Tempelkan ke body agar diizinkan oleh semua browser
+    fileInput.style.display = 'none'; 
     document.body.appendChild(fileInput);
     
-    // 3. Tangani saat file dipilih
     fileInput.onchange = async (e) => {
         const file = e.target.files[0];
-        
-        // Hapus input dari DOM setelah file dipilih agar bersih
         document.body.removeChild(fileInput); 
         
         if (!file) return;
@@ -465,6 +488,9 @@ function triggerRevisiBoq(projectId) {
         formData.append('file', file);
         formData.append('ticket_id', projectId);
 
+        // Ubah kursor menjadi loading agar user tahu proses sedang berjalan
+        document.body.style.cursor = 'wait';
+        
         try {
             const res = await fetch('/api/revisi_boq', {
                 method: 'POST',
@@ -474,17 +500,19 @@ function triggerRevisiBoq(projectId) {
             
             if (res.ok && result.success) {
                 alert(result.message);
-                loadAll(); // Tarik ulang data JSON terbaru
+                loadAll(); 
             } else {
                 alert(`Gagal merevisi BoQ: ${result.message}`);
             }
         } catch (error) {
             console.error("Error revisi BoQ:", error);
             alert('Terjadi kesalahan saat mengunggah file.');
+        } finally {
+            // Kembalikan kursor ke normal
+            document.body.style.cursor = 'default';
         }
     };
     
-    // 4. Picu klik
     fileInput.click();
 }
 
@@ -499,13 +527,13 @@ function blankProject(){
   };
 }
 function openProjectModal(id){
-  modalScroll = 0; // Reset scroll
+  modalScroll = 0; 
   const existing = id ? JSON.parse(JSON.stringify(projects.find(p=>p.id===id))) : blankProject();
   modal = { type:'project', data: existing, isNew: !id };
   render();
 }
 function openTeamModal(){ 
-  modalScroll = 0; // Reset scroll
+  modalScroll = 0; 
   modal = { type:'team', data:{ names: team.join(', ') } }; render(); 
 }
 
@@ -515,7 +543,7 @@ function renderModal(){
   if(modal.type==='project') root.innerHTML = projectModalHtml(modal.data, modal.isNew);
   if(modal.type==='team') root.innerHTML = teamModalHtml(modal.data);
   wireModalEvents();
-  // Kembalikan posisi scroll agar tidak mantul ke atas
+  
   const m = document.querySelector('.modal');
   if(m) m.scrollTop = modalScroll;
 }
@@ -548,12 +576,12 @@ function projectModalHtml(d, isNew){
             </select>
           </div>
           <div class="field"><label>Lead Presource</label>
-            <select id="m-lead">${team.map(t=>`<option ${d.leadId===t?'selected':''}>${t}</option>`).join('')}</select>
+            <select id="m-lead">${team.map(t=>`<option ${d.leadId===t?'selected':''}>${escAttr(t)}</option>`).join('')}</select>
           </div>
         </div>
         <div class="grid2">
-          <div class="field"><label>Tanggal request masuk</label><input type="date" id="m-created" value="${d.createdAt||''}"></div>
-          <div class="field"><label>Tanggal SPH final / ditutup</label><input type="date" id="m-closed" value="${d.closedAt||''}"></div>
+          <div class="field"><label>Tanggal request masuk</label><input type="date" id="m-created" value="${escAttr(d.createdAt)||''}"></div>
+          <div class="field"><label>Tanggal SPH final / ditutup</label><input type="date" id="m-closed" value="${escAttr(d.closedAt)||''}"></div>
         </div>
         <div class="field"><label>Mode pencatatan SPH</label>
           <select id="m-sphmode">
@@ -606,14 +634,13 @@ function itemBlockHtml(it, si, bi, ii){
       <div class="field"><label>SPH Awal item</label><input type="number" class="it-awal" data-path="${si}:${bi}:${ii}" value="${it.sphAwal??''}"></div>
       <div class="field"><label>SPH Final item</label><input type="number" class="it-final" data-path="${si}:${bi}:${ii}" value="${it.sphFinal??''}"></div>
       <div class="field"><label>PIC untuk item ini</label>
-        <div class="pic-select">${team.map(t=>`<div class="pic-opt ${it.picIds.includes(t)?'on':''}" data-pic="${si}:${bi}:${ii}:${t}">${t}</div>`).join('')}</div>
+        <div class="pic-select">${team.map(t=>`<div class="pic-opt ${it.picIds.includes(t)?'on':''}" data-pic="${si}:${bi}:${ii}:${escAttr(t)}">${escAttr(t)}</div>`).join('')}</div>
       </div>
     </div>
     <div class="field"><label>Notes (Opsional)</label><input class="it-notes" data-path="${si}:${bi}:${ii}" value="${escAttr(it.notes)}" placeholder="Catatan tambahan..."></div>
     <button class="mini-btn danger" data-del-item="${si}:${bi}:${ii}" type="button">Hapus item</button>
   </div>`;
 }
-function escAttr(s){ return (s||'').replace(/"/g,'&quot;'); }
 
 function teamModalHtml(d){
   return `<div class="overlay" id="ov">
@@ -639,7 +666,6 @@ function teamModalHtml(d){
 // ---------- FUNGSI SIMPAN SEMENTARA ----------
 function syncModalData() {
   if(!modal || modal.type !== 'project') return;
-  // Tangkap posisi scroll saat ini sebelum form di-refresh
   const m = document.querySelector('.modal');
   if(m) modalScroll = m.scrollTop;
   const d = modal.data;
@@ -696,7 +722,6 @@ function wireModalEvents(){
     return;
   }
 
-  // project modal events (Tiap nambah/hapus selalu panggil syncModalData dulu)
   const sphmode = document.getElementById('m-sphmode');
   if(sphmode) sphmode.onchange = ()=>{ syncModalData(); modal.data.sphMode = sphmode.value; render(); };
 
@@ -763,7 +788,7 @@ function wireModalEvents(){
   const saveBtn = document.getElementById('m-save');
   if(saveBtn){
     saveBtn.onclick = ()=>{
-      syncModalData(); // Cukup panggil fungsi ini saat save
+      syncModalData(); 
       const d = modal.data;
       const idx = projects.findIndex(p=>p.id===d.id);
       if(idx>=0) projects[idx]=d; else projects.push(d);
@@ -777,10 +802,8 @@ function wireModalEvents(){
   }
 }
 
-
 function val(id){ const el=document.getElementById(id); return el?el.value:''; }
 function numOrNull(v){ return (v===''||v==null) ? null : Number(v); }
-
 
 // Jalankan load data awal saat pertama kali script dimuat
 loadAll();
