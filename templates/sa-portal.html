@@ -575,7 +575,7 @@ async function handleLogout() {
 }
 
 // Fungsi untuk mem-build HTML Timeline
-function getTimelineHtml(status) {
+function getTimelineHtml(status, leadId) {
     // Definisi logika status
     const isNew = status === 'unassigned' || !status;
     const isOngoing = status === 'ongoing';
