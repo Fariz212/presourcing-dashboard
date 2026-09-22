@@ -405,19 +405,6 @@ def upload_boq():
         if 'conn' in locals():
             conn.close()
 
-# API untuk SA melihat daftar item BoQ yang sudah di-upload berdasarkan ticket_id
-@app.route('/api/request_items/<ticket_id>', methods=['GET'])
-def get_request_items(ticket_id):
-    conn = sqlite3.connect(DB_NAME)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM request_items WHERE ticket_id = ?", (ticket_id,))
-    rows = cursor.fetchall()
-    conn.close()
-    
-    items_list = [dict(row) for row in rows]
-    return jsonify({"success": True, "data": items_list}), 200
-
 # API untuk Master Assign
 # 1. API untuk Admin Mengambil Detail Item BoQ berdasarkan ticket_id
 @app.route('/api/request_items/<ticket_id>', methods=['GET'])
@@ -453,8 +440,13 @@ def assign_ticket():
         WHERE ticket_id = ?
     ''', (pic_username, ticket_id))
     
-    # Ambil detail request yang baru di-assign
-    cursor.execute("SELECT * FROM requests WHERE ticket_id = ?", (ticket_id,))
+    # REVISI: Ambil detail request dengan JOIN ke tabel users untuk mendapatkan full_name & department
+    cursor.execute('''
+        SELECT r.*, u.full_name, u.department 
+        FROM requests r 
+        LEFT JOIN users u ON r.requester_username = u.username 
+        WHERE r.ticket_id = ?
+    ''', (ticket_id,))
     req = cursor.fetchone()
     
     # Ambil item BoQ terkait
@@ -489,11 +481,15 @@ def assign_ticket():
         # Menggunakan datetime Python standar untuk tanggal hari ini
         current_date = datetime.now().strftime('%Y-%m-%d')
         
+        # REVISI: Gunakan full_name dan department dari hasil JOIN users
+        requestor_display_name = req['full_name'] if req['full_name'] else req['requester_username']
+        requestor_dept = req['department'] if req['department'] else "Presales Team"
+        
         new_project_entry = {
             "id": req['ticket_id'],
             "name": f"{req['title']} ({req['client_name'] or 'Klien Umum'})",
-            "requestorName": req['requester_username'],
-            "requestorDept": "Presales Team",
+            "requestorName": requestor_display_name,  # <-- Sekarang menjadi Nama Lengkap
+            "requestorDept": requestor_dept,          # <-- Sekarang menjadi Departemen asli
             "priority": "High", 
             "status": "ongoing",
             "leadId": pic_username,
@@ -513,8 +509,13 @@ def assign_ticket():
             }]
         }
         
-        # Masukkan ke list projects jika belum ada
-        if not any(p['id'] == req['ticket_id'] for p in projects_list):
+        # Cek apakah project dengan ID tersebut sudah ada di list, jika ada update, jika belum masukkan
+        existing_idx = next((i for i, p in enumerate(projects_list) if p['id'] == req['ticket_id']), -1)
+        if existing_idx >= 0:
+            # Update data pemohon pada project yang sudah ada
+            projects_list[existing_idx]['requestorName'] = requestor_display_name
+            projects_list[existing_idx]['requestorDept'] = requestor_dept
+        else:
             projects_list.insert(0, new_project_entry)
             
         cursor2.execute('''
@@ -526,7 +527,7 @@ def assign_ticket():
         conn2.close()
 
     return jsonify({"success": True, "message": "Tiket berhasil di-assign dan disinkronkan ke dashboard!"}), 200
-
+    
 # --- API ENDPOINTS (DASHBOARD LAMA) ---
 @app.route('/api/presourcing', methods=['GET'])
 def get_data():
