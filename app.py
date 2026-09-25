@@ -183,7 +183,8 @@ def init_db():
                 
         conn.commit()
 
-    def migrate_json_to_relational():
+# --- PASTIKAN FUNGSI INI RATA KIRI SEJAJAR DENGAN def init_db(): ---
+def migrate_json_to_relational():
     with contextlib.closing(sqlite3.connect(DB_NAME)) as conn:
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
@@ -226,15 +227,23 @@ def init_db():
                         ))
 
             for doc in p.get('comparison_docs', []):
+                # Catatan: JSON lama mungkin menggunakan format camelCase 'vendorName' & 'offeredPrice'
+                # Menggunakan dict.get() fallback agar tidak null saat migrasi JSON lama ke Relasional
+                vendor_name = doc.get('vendor_name') or doc.get('vendorName')
+                offered_price = doc.get('offered_price') or doc.get('offeredPrice')
+                file_path = doc.get('file_path') or doc.get('filePath')
+                
                 cursor.execute('''
                     INSERT INTO comparison_docs (project_id, vendor_name, offered_price, file_path)
                     VALUES (?, ?, ?, ?)
-                ''', (p.get('id'), doc.get('vendor_name'), doc.get('offered_price'), doc.get('file_path')))
+                ''', (p.get('id'), vendor_name, offered_price, file_path))
                 
         conn.commit()
         print("Migrasi data JSON lama ke tabel relasional berhasil!")
 
+# Panggil kedua fungsi inisialisasi dan migrasi agar otomatis berjalan saat server menyala
 init_db()
+migrate_json_to_relational()
 
 # --- HELPER: AMBIL DATA RELASIONAL MENJADI JSON ---
 def get_projects_relational(cursor):
