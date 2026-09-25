@@ -410,6 +410,85 @@ tr.proj-row:hover{background:var(--panel-2);}
           alert("Terjadi kesalahan jaringan saat menyimpan penugasan.");
       }
   }
+
+  // --- SISTEM NOTIFIKASI ---
+let isNotifOpen = false;
+
+function toggleNotif(event) {
+    event.stopPropagation();
+    const dropdown = document.getElementById('notif-dropdown');
+    isNotifOpen = !isNotifOpen;
+    dropdown.classList.toggle('active', isNotifOpen);
+    if (isNotifOpen) fetchNotifications();
+}
+
+// Tutup dropdown jika klik di luar area
+document.addEventListener('click', (e) => {
+    const wrapper = document.querySelector('.notif-wrapper');
+    const dropdown = document.getElementById('notif-dropdown');
+    if (wrapper && !wrapper.contains(e.target) && dropdown.classList.contains('active')) {
+        dropdown.classList.remove('active');
+        isNotifOpen = false;
+    }
+});
+
+async function fetchNotifications() {
+    // Ambil data user aktif (bisa activeUser atau currentUser tergantung nama variabel di file HTML-mu)
+    const userStr = localStorage.getItem('user');
+    if (!userStr) return;
+    const user = JSON.parse(userStr);
+    
+    // Jika user adalah admin, ambil notif untuk 'admin'. Jika SA, ambil berdasarkan username.
+    const targetId = user.role === 'admin' ? 'admin' : user.username;
+
+    try {
+        const res = await fetch(`/api/notifications?username=${targetId}`);
+        const result = await res.json();
+        if (result.success) renderNotifications(result.data);
+    } catch (err) {
+        console.error("Gagal menarik notifikasi", err);
+    }
+}
+
+function renderNotifications(data) {
+    const list = document.getElementById('notif-list');
+    const badge = document.getElementById('notif-count');
+    
+    const unreadCount = data.filter(n => !n.is_read).length;
+    
+    if (unreadCount > 0) {
+        badge.style.display = 'block';
+        badge.innerText = unreadCount > 99 ? '99+' : unreadCount;
+    } else {
+        badge.style.display = 'none';
+    }
+
+    if (data.length === 0) {
+        list.innerHTML = `<div style="padding: 24px 20px; text-align: center; color: var(--text-muted); font-size: 12px;">Belum ada notifikasi baru 🎉</div>`;
+        return;
+    }
+
+    list.innerHTML = data.map(n => `
+        <div class="notif-item ${n.is_read ? '' : 'unread'}" onclick="markNotifRead(${n.id})">
+            <div style="font-weight: 500; color: var(--text, #1e293b);">${n.message}</div>
+            <div class="notif-time">${n.created_at}</div>
+        </div>
+    `).join('');
+}
+
+async function markNotifRead(notifId) {
+    try {
+        await fetch(`/api/notifications/${notifId}/read`, { method: 'POST' });
+        fetchNotifications(); // Segarkan tampilan setelah di-klik
+    } catch (err) {
+        console.error("Gagal menandai notifikasi", err);
+    }
+}
+
+// Cek notifikasi saat halaman pertama dimuat, lalu ulangi setiap 30 detik
+setTimeout(fetchNotifications, 1000);
+setInterval(fetchNotifications, 30000);
+
 </script>
 <script>
     // 1. Tampilkan Data Profil saat halaman dimuat
