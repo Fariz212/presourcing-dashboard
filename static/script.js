@@ -36,6 +36,7 @@ function seedData(){
       priority:'High', status:'win', leadId:'Budi',
       sphMode:'item', projectSphAwal:null, projectSphFinal:null,
       createdAt:'2026-07-02', closedAt:'2026-07-22',
+      comparison_docs: [], // Properti baru untuk dokumen pembanding
       sows:[{
         id:uid('sow'), name:'SoW Security & Monitoring',
         boqs:[{
@@ -55,6 +56,7 @@ function seedData(){
       priority:'Urgent', status:'ongoing', leadId:'Andi',
       sphMode:'project', projectSphAwal:680000000, projectSphFinal:null,
       createdAt:'2026-08-15', closedAt:null,
+      comparison_docs: [], // Properti baru untuk dokumen pembanding
       sows:[{
         id:uid('sow'), name:'SoW Network Upgrade',
         boqs:[{
@@ -374,6 +376,28 @@ function renderProjectDetail(p){
     });
   });
 
+  // UI DOKUMEN PEMBANDING
+  const docsHtml = `
+    <div style="margin: 12px 0; padding: 12px; background: #FFFFFF; border: 1px dashed var(--border); border-radius: 6px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
+            <strong style="font-size: 12.5px; color: var(--text);">📄 Dokumen SPH Pembanding (Audit Trail)</strong>
+            <button class="mini-btn" onclick="openUploadPembandingModal('${p.id}')">+ Upload Pembanding</button>
+        </div>
+        ${p.comparison_docs && p.comparison_docs.length > 0 ? 
+            p.comparison_docs.map(doc => `
+                <div style="display:flex; justify-content:space-between; font-size: 12px; padding: 6px 0; border-bottom: 1px solid var(--border-soft);">
+                    <div>
+                        <span style="font-weight:600; color:var(--text);">${escAttr(doc.vendor_name)}</span> 
+                        <span style="color:var(--text-muted);"> — Penawaran: <span class="mono">${fmtIdr(doc.offered_price)}</span></span>
+                    </div>
+                    <a href="${doc.file_path}" target="_blank" style="color: var(--primary); text-decoration: none; font-weight:500;">Lihat File</a>
+                </div>
+            `).join('') 
+            : '<div style="font-size:11.5px; color:var(--text-muted);">Belum ada dokumen pembanding yang diunggah.</div>'
+        }
+    </div>
+  `;
+
   return `
     <div class="detail-block">
       <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
@@ -385,6 +409,9 @@ function renderProjectDetail(p){
           <button class="mini-btn danger" data-delete-project="${p.id}">Hapus</button>
         </div>
       </div>
+      
+      <!-- INJEKSI UI DOKUMEN PEMBANDING DI SINI -->
+      ${docsHtml}
       
       ${(p.sows||[]).map(sow=>`
         <div class="sow-title">Scope of Work: ${escAttr(sow.name)}</div>${(sow.boqs||[]).map(boq=>`
@@ -523,6 +550,7 @@ function blankProject(){
     priority:'Medium', status:'ongoing', leadId: team[0]||'',
     sphMode:'item', projectSphAwal:null, projectSphFinal:null,
     createdAt: todayStr(), closedAt:null,
+    comparison_docs: [],
     sows:[{ id:uid('sow'), name:'', boqs:[{ id:uid('boq'), name:'', items:[{ id:uid('item'), product:'', qty:1, vendor:'', notes:'', picIds:[], sphAwal:null, sphFinal:null }] }] }]
   };
 }
@@ -804,6 +832,94 @@ function wireModalEvents(){
 
 function val(id){ const el=document.getElementById(id); return el?el.value:''; }
 function numOrNull(v){ return (v===''||v==null) ? null : Number(v); }
+
+// ---------- FUNGSI MODAL UPLOAD SPH PEMBANDING ----------
+function openUploadPembandingModal(projectId) {
+    const modalHtml = `
+        <div class="overlay" id="upload-pembanding-modal" style="z-index: 100;">
+            <div class="modal" style="max-width: 420px;">
+                <div class="modal-hd">
+                    <h3>Unggah SPH Pembanding</h3>
+                    <button class="btn-ghost" style="padding: 4px 8px;" onclick="closeUploadPembandingModal()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="field">
+                        <label>Nama Vendor (Losing Bidder)</label>
+                        <input type="text" id="up-vendor-name" placeholder="Misal: PT Lintas Teknologi">
+                    </div>
+                    <div class="field">
+                        <label>Harga Penawaran SPH (Total)</label>
+                        <input type="number" id="up-vendor-price" placeholder="Misal: 550000000">
+                    </div>
+                    <div class="field">
+                        <label>Lampiran File (PDF/Excel/Image)</label>
+                        <input type="file" id="up-vendor-file" accept=".pdf, .xls, .xlsx, .jpg, .png" style="padding: 4px;">
+                        <div class="note">Sebagai bukti audit nilai efisiensi (Cost Avoidance).</div>
+                    </div>
+                </div>
+                <div class="modal-ft">
+                    <button class="btn-ghost" onclick="closeUploadPembandingModal()">Batal</button>
+                    <button class="btn-primary" onclick="submitUploadPembanding('${projectId}')">Unggah & Simpan</button>
+                </div>
+            </div>
+        </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+}
+
+function closeUploadPembandingModal() {
+    const m = document.getElementById('upload-pembanding-modal');
+    if (m) m.remove();
+}
+
+async function submitUploadPembanding(projectId) {
+    const name = document.getElementById('up-vendor-name').value;
+    const price = document.getElementById('up-vendor-price').value;
+    const fileInput = document.getElementById('up-vendor-file');
+    
+    if (!name || !price || !fileInput.files[0]) {
+        alert("Semua kolom (Nama Vendor, Harga, dan File) wajib diisi!");
+        return;
+    }
+
+    const file = fileInput.files[0];
+    const formData = new FormData();
+    formData.append('ticket_id', projectId);
+    formData.append('vendor_name', name);
+    formData.append('offered_price', price);
+    formData.append('file', file);
+
+    document.body.style.cursor = 'wait';
+    const btn = event.target;
+    const originalText = btn.innerText;
+    btn.innerText = "Mengunggah...";
+    btn.disabled = true;
+
+    try {
+        // Simulasi UI (API backend belum dibuat)
+        const res = await fetch('/api/upload_comparison', {
+            method: 'POST',
+            body: formData
+        });
+        const result = await res.json();
+        
+        if (res.ok && result.success) {
+            alert("Dokumen pembanding berhasil ditambahkan!");
+            closeUploadPembandingModal();
+            loadAll(); // Muat ulang data dashboard
+        } else {
+            alert(`Gagal: ${result.message}`);
+        }
+    } catch (err) {
+        console.error("Upload error:", err);
+        alert("Simulasi UI: API backend belum dibuat, tapi secara UI data ditangkap dengan baik.");
+        closeUploadPembandingModal();
+    } finally {
+        document.body.style.cursor = 'default';
+        btn.innerText = originalText;
+        btn.disabled = false;
+    }
+}
 
 // Jalankan load data awal saat pertama kali script dimuat
 loadAll();
