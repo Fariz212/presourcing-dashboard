@@ -7,21 +7,19 @@
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 :root{
-  --ink:#F8FAFC;          /* Background utama putih/abu sangat lembut */
-  --panel:#FFFFFF;        /* Kartu/Panel putih bersih */
-  --panel-2:#F1F5F9;      /* Background hover / input abu-abu sangat muda */
-  --border:#CBD5E1;       /* Border halus standar */
-  --border-soft:#E2E8F0;  /* Border pemisah tipis */
-  --text:#1E293B;         /* Teks utama abu-abu gelap (sangat tajam & nyaman dibaca) */
-  --text-muted:#64748B;   /* Teks sekunder abu-abu sedang */
-  --text-dim:#94A3B8;     /* Teks redup */
+  --ink:#F8FAFC;          
+  --panel:#FFFFFF;        
+  --panel-2:#F1F5F9;      
+  --border:#CBD5E1;       
+  --border-soft:#E2E8F0;  
+  --text:#1E293B;         
+  --text-muted:#64748B;   
+  --text-dim:#94A3B8;     
   
-  /* Aksen Biru Korporat Profesional */
   --primary:#2563EB;
   --primary-hover:#1D4ED8;
   --primary-soft:rgba(37,99,235,.08);
   
-  /* Status Warna yang Harmonis dengan Tema Terang */
   --amber:#D97706;
   --amber-soft:rgba(217,119,6,.1);
   --green:#059669;
@@ -39,6 +37,14 @@ body{
 }
 .mono{font-family:'JetBrains Mono',monospace; font-variant-numeric:tabular-nums;}
 .app{max-width:1180px; margin:0 auto; padding:28px 24px 60px;}
+
+/* --- NAVBAR STYLES --- */
+.navbar { display: flex; justify-content: space-between; align-items: center; padding: 16px 32px; background: var(--panel); border-bottom: 1px solid var(--border); box-shadow: 0 1px 3px rgba(0,0,0,0.02); position: sticky; top: 0; z-index: 40;}
+.navbar .brand h2 { margin: 0; font-size: 18px; color: #0F172A; letter-spacing: -0.02em; line-height: 1.2; }
+.navbar .brand span { font-size: 12px; color: var(--text-muted); font-weight: 500; }
+.navbar .user-info { display: flex; align-items: center; gap: 16px; font-size: 13px; }
+.btn-danger-outline { background: transparent; border: 1px solid var(--red); color: var(--red); padding: 7px 14px; border-radius: 6px; cursor: pointer; font-weight: 600; font-family: inherit; font-size: 12.5px; transition: all 0.15s ease; }
+.btn-danger-outline:hover { background: var(--red-soft); }
 
 /* header */
 .hdr{display:flex; align-items:flex-end; justify-content:space-between; border-bottom:1px solid var(--border); padding-bottom:16px; margin-bottom:20px; flex-wrap:wrap; gap:14px;}
@@ -144,44 +150,49 @@ tr.proj-row:hover{background:var(--panel-2);}
 .notif-item.unread { background: #eff6ff; }
 .notif-item.unread:hover { background: #dbeafe; }
 .notif-time { font-size: 11px; color: var(--text-muted, #64748b); margin-top: 4px; }
-
 </style>
 </head>
 <body>
 
-<!-- WADAH 1: KHUSUS INBOX (Tidak akan ditimpa oleh script.js) -->
+<nav class="navbar">
+  <div class="brand">
+    <h2>Presourcing</h2>
+    <span>Presource Portal</span>
+  </div>
+  <div class="user-info">
+    <span><b id="display-name">Loading...</b> &middot; <span id="display-dept">...</span></span>
+    
+    <!-- WADAH NOTIFIKASI TUNGGAL -->
+    <div class="notif-wrapper">
+      <button class="notif-btn" onclick="toggleNotif(event)">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+          <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+          </svg>
+          <span class="notif-badge" id="notif-count">0</span>
+      </button>
+      
+      <div class="notif-dropdown" id="notif-dropdown">
+          <div class="notif-header">Notifikasi</div>
+          <div class="notif-body" id="notif-list">
+            <div style="padding: 20px; text-align: center; color: var(--text-muted); font-size: 12px;">Memuat...</div>
+          </div>
+      </div>
+    </div>
+    
+    <button class="btn btn-danger-outline" onclick="handleLogout()">Keluar</button>
+  </div>
+</nav>
+
+<!-- WADAH 1: KHUSUS INBOX -->
 <div style="max-width:1180px; margin:0 auto; padding:28px 24px 0;">
   <div class="panel" style="border-left: 4px solid var(--primary); margin-bottom: 0;">
-    <div class="panel-hd">
+    <div class="panel-hd" style="display: flex; justify-content: space-between; align-items: center;">
       <div>
-        <!-- Letakkan ini di dalam header kanan -->
-        <div style="display: flex; align-items: center; gap: 16px;">
-        <div style="text-align: right; line-height: 1.2;">
-        <div id="user-greeting" style="font-size: 14px; font-weight: 600; color: var(--text);">Halo, User</div>
-        <div id="user-role-badge" style="font-size: 11px; color: var(--text-muted); text-transform: uppercase;">Role</div>
-        </div>
-        <button onclick="handleLogout()" style="padding: 8px 12px; background: transparent; border: 1px solid #ef4444; color: #ef4444; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 13px;">Logout</button>
-        </div>
         <h2 style="font-size: 16px;">📬 Inbox Request (Dari Presales)</h2>
         <div style="font-size: 12.5px; color: var(--text-muted); margin-top: 4px;">Tiket baru yang belum di-assign ke tim Presourcing.</div>
       </div>
-      <!-- WADAH NOTIFIKASI -->
-        <div class="notif-wrapper">
-        <button class="notif-btn" onclick="toggleNotif(event)">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
-            <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
-            </svg>
-            <span class="notif-badge" id="notif-count">0</span>
-        </button>
-        
-        <div class="notif-dropdown" id="notif-dropdown">
-            <div class="notif-header">Notifikasi</div>
-            <div class="notif-body" id="notif-list">
-            <div style="padding: 20px; text-align: center; color: var(--text-muted); font-size: 12px;">Memuat...</div>
-            </div>
-        </div>
-        </div>
+      
       <button class="btn-ghost" onclick="fetchInbox()">🔄 Refresh Inbox</button>
     </div>
     
@@ -205,14 +216,13 @@ tr.proj-row:hover{background:var(--panel-2);}
   </div>
 </div>
 
-<!-- WADAH 2: DASHBOARD LAMA (script.js akan menyuntikkan datanya ke sini) -->
-<!-- Padding top di-set 20px agar jaraknya dengan Inbox terlihat rapi -->
+<!-- WADAH 2: DASHBOARD UTAMA (Diinjeksi oleh script.js) -->
 <div class="app" id="app" style="padding-top: 20px;"></div>
 
-<!-- Memanggil JavaScript dari folder static Flask -->
+<!-- Memanggil JavaScript Utama -->
 <script src="{{ url_for('static', filename='script.js') }}"></script>
 
-<!-- Tag script BARU khusus untuk fitur Inbox -->
+<!-- Skrip Khusus Inbox & Notifikasi -->
 <script>
   async function fetchInbox() {
       try {
@@ -234,7 +244,7 @@ tr.proj-row:hover{background:var(--panel-2);}
       const newRequests = data.filter(req => req.status === 'unassigned');
 
       if (newRequests.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 24px;">📭 Tidak ada request baru. Inbox bersih!</td></tr>`;
+          tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 24px;">Tidak ada request baru. Inbox bersih! 🎉</td></tr>`;
           return;
       }
 
@@ -243,7 +253,6 @@ tr.proj-row:hover{background:var(--panel-2);}
       newRequests.forEach(req => {
           const tr = document.createElement('tr');
           
-          // Menggunakan full_name jika ada, fallback ke username jika kosong
           const requesterDisplay = req.full_name || req.requester_username;
           const deptDisplay = req.department || 'Presales Team';
 
@@ -273,15 +282,12 @@ tr.proj-row:hover{background:var(--panel-2);}
       fetchInbox();
   });
 
-  // 1. Fungsi saat tombol "Review & Assign" di-klik (Menggunakan kelas modal & overlay CSS bawaan)
   async function openReviewModal(ticketId) {
       const list = window.cachedRequests || [];
       const ticket = list.find(r => r.ticket_id === ticketId);
       
-      // Mengambil variabel team dari script.js utama, dengan fallback jika belum ada
       const teamList = (typeof team !== 'undefined' && Array.isArray(team)) ? team : ["Decki Okmal Pratama", "Ahmad Fauzi", "Siti Rahma", "Budi Santoso"];
 
-      // Menggunakan kelas .overlay dan .modal bawaan CSS admin agar posisinya di tengah & rapi
       const modalHtml = `
           <div class="overlay" id="review-modal">
               <div class="modal">
@@ -298,7 +304,7 @@ tr.proj-row:hover{background:var(--panel-2);}
                           <p style="margin: 0;"><b>Catatan SA:</b> ${ticket && ticket.notes ? ticket.notes : '-'}</p>
                       </div>
 
-                      <h4 style="margin: 16px 0 8px 0; font-size: 13px; font-weight: 600;">📦 Daftar Item BoQ dari SA:</h4>
+                      <h4 style="margin: 16px 0 8px 0; font-size: 13px; font-weight: 600;">Daftar Item BoQ dari SA:</h4>
                       <div id="modal-boq-items-container" style="border: 1px solid var(--border); border-radius: 6px; padding: 10px; font-size: 12.5px; background: #FFFFFF;">
                           Memuat rincian item BoQ...
                       </div>
@@ -323,7 +329,6 @@ tr.proj-row:hover{background:var(--panel-2);}
       if (existing) existing.remove();
       document.body.insertAdjacentHTML('beforeend', modalHtml);
 
-      // Ambil data item BoQ dari database
       try {
           const res = await fetch(`/api/request_items/${ticketId}`);
           const result = await res.json();
@@ -368,8 +373,6 @@ tr.proj-row:hover{background:var(--panel-2);}
       if (modal) modal.remove();
   }
 
-
-// 2. Fungsi untuk mengirim data Assign ke Backend (Diperbarui agar otomatis merefresh data dashboard)
   async function submitAssign(ticketId) {
       const picSelect = document.getElementById('assign-pic-select');
       const picUsername = picSelect ? picSelect.value : '';
@@ -391,16 +394,14 @@ tr.proj-row:hover{background:var(--panel-2);}
               alert(`Sukses! Tiket ${ticketId} berhasil ditugaskan ke ${picUsername}.`);
               closeReviewModal();
               
-              // 1. Refresh Inbox agar tiket yang sudah di-assign hilang dari daftar antrean
               fetchInbox(); 
               
-              // 2. Panggil fungsi bawaan script.js untuk merefresh tabel project (jika ada)
               if (typeof loadProjects === 'function') {
                   loadProjects();
               } else if (typeof loadAll === 'function') {
                   loadAll();
               } else {
-                  location.reload(); // Cadangan terakhir: reload halaman otomatis agar data tersinkronisasi sempurna
+                  location.reload(); 
               }
           } else {
               alert(`Gagal assign: ${result.message}`);
@@ -411,7 +412,7 @@ tr.proj-row:hover{background:var(--panel-2);}
       }
   }
 
-  // --- SISTEM NOTIFIKASI ---
+// --- SISTEM NOTIFIKASI ---
 let isNotifOpen = false;
 
 function toggleNotif(event) {
@@ -422,7 +423,6 @@ function toggleNotif(event) {
     if (isNotifOpen) fetchNotifications();
 }
 
-// Tutup dropdown jika klik di luar area
 document.addEventListener('click', (e) => {
     const wrapper = document.querySelector('.notif-wrapper');
     const dropdown = document.getElementById('notif-dropdown');
@@ -433,12 +433,10 @@ document.addEventListener('click', (e) => {
 });
 
 async function fetchNotifications() {
-    // Ambil data user aktif (bisa activeUser atau currentUser tergantung nama variabel di file HTML-mu)
     const userStr = localStorage.getItem('user');
     if (!userStr) return;
     const user = JSON.parse(userStr);
     
-    // Jika user adalah admin, ambil notif untuk 'admin'. Jika SA, ambil berdasarkan username.
     const targetId = user.role === 'admin' ? 'admin' : user.username;
 
     try {
@@ -479,41 +477,39 @@ function renderNotifications(data) {
 async function markNotifRead(notifId) {
     try {
         await fetch(`/api/notifications/${notifId}/read`, { method: 'POST' });
-        fetchNotifications(); // Segarkan tampilan setelah di-klik
+        fetchNotifications(); 
     } catch (err) {
         console.error("Gagal menandai notifikasi", err);
     }
 }
 
-// Cek notifikasi saat halaman pertama dimuat, lalu ulangi setiap 30 detik
 setTimeout(fetchNotifications, 1000);
 setInterval(fetchNotifications, 30000);
-
 </script>
+
+<!-- Skrip Profil & Logout -->
 <script>
-    // 1. Tampilkan Data Profil saat halaman dimuat
+    // 1. Tampilkan Data Profil di Navbar
     const activeUser = JSON.parse(localStorage.getItem('user'));
     if (activeUser) {
-        document.getElementById('user-greeting').innerText = "Halo, " + activeUser.full_name;
-        document.getElementById('user-role-badge').innerText = activeUser.role === 'admin' ? 'Administrator' : activeUser.department;
+        const nameEl = document.getElementById('display-name');
+        const deptEl = document.getElementById('display-dept');
+        if(nameEl) nameEl.innerText = activeUser.full_name;
+        if(deptEl) deptEl.innerText = activeUser.role === 'admin' ? 'Administrator' : activeUser.department;
     }
 
     // 2. Fungsi Logout
-// Fungsi Logout Anti-Loop
-async function handleLogout() {
-    try {
-        // 1. Perintahkan backend untuk menghapus session
-        await fetch('/api/logout', { method: 'POST' });
-    } catch (err) {
-        console.error("Gagal menghubungi server:", err);
-    } finally {
-        // 2. Hapus data lokal dan tendang ke halaman login
-        localStorage.removeItem('user');
-        window.location.href = '/login';
+    async function handleLogout() {
+        try {
+            await fetch('/api/logout', { method: 'POST' });
+        } catch (err) {
+            console.error("Gagal menghubungi server:", err);
+        } finally {
+            localStorage.removeItem('user');
+            window.location.href = '/login';
+        }
     }
-}
 </script>
-
 
 </body>
 </html>
