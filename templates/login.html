@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Login - Presourcing System</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+:root {
+  --ink: #F8FAFC;
+  --panel: #FFFFFF;
+  --border: #CBD5E1;
+  --text: #1E293B;
+  --text-muted: #64748B;
+  --primary: #2563EB;
+  --primary-hover: #1D4ED8;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--ink); color: var(--text);
+  font-family: 'Space Grotesk', sans-serif;
+  display: flex; align-items: center; justify-content: center;
+  min-height: 100vh;
+}
+
+.auth-card {
+  background: var(--panel);
+  width: 100%; max-width: 400px;
+  padding: 32px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  box-shadow: 0 10px 15px -3px rgba(0,0,0,.05), 0 4px 6px -2px rgba(0,0,0,.03);
+}
+
+.auth-header { text-align: center; margin-bottom: 24px; }
+.auth-header h1 { margin: 0 0 8px; font-size: 24px; font-weight: 700; color: #0F172A; }
+.auth-header p { margin: 0; font-size: 14px; color: var(--text-muted); }
+
+.field { margin-bottom: 16px; }
+.field label { display: block; font-size: 12.5px; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; }
+.field input { 
+  width: 100%; padding: 10px 12px; 
+  border: 1px solid var(--border); border-radius: 6px; 
+  font-family: inherit; font-size: 14px; color: var(--text);
+}
+.field input:focus { outline: 2px solid rgba(37,99,235,.2); border-color: var(--primary); }
+
+.btn { 
+  width: 100%; padding: 12px; 
+  background: var(--primary); color: #fff; 
+  border: none; border-radius: 6px; 
+  font-family: inherit; font-size: 14px; font-weight: 600; 
+  cursor: pointer; transition: background .15s ease; 
+  margin-top: 8px;
+}
+.btn:hover { background: var(--primary-hover); }
+
+.switch-mode { 
+  text-align: center; margin-top: 20px; font-size: 13px; color: var(--text-muted); 
+}
+.switch-mode a { 
+  color: var(--primary); font-weight: 600; text-decoration: none; cursor: pointer; 
+}
+.switch-mode a:hover { text-decoration: underline; }
+
+.error-msg, .success-msg { 
+  font-size: 13px; padding: 10px; border-radius: 6px; margin-bottom: 16px; text-align: center; display: none;
+}
+.error-msg { background: rgba(220,38,38,.1); color: #DC2626; border: 1px solid rgba(220,38,38,.2); }
+.success-msg { background: rgba(5,150,105,.1); color: #059669; border: 1px solid rgba(5,150,105,.2); }
+
+#register-view { display: none; }
+</style>
+</head>
+<body>
+
+<div class="auth-card">
+  <!-- LOGIN VIEW -->
+  <div id="login-view">
+    <div class="auth-header">
+      <h1>Selamat Datang</h1>
+      <p>Masuk ke Presourcing System</p>
+    </div>
+    
+    <div class="error-msg" id="login-error"></div>
+    
+    <form id="login-form">
+      <div class="field">
+        <label>Username</label>
+        <input type="text" id="l-username" required placeholder="Contoh: admin / marcel">
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <input type="password" id="l-password" required placeholder="••••••••">
+      </div>
+      <button type="submit" class="btn">Masuk</button>
+    </form>
+    
+    <div class="switch-mode">
+      SA belum punya akun? <a onclick="toggleView('register')">Daftar di sini</a>
+    </div>
+  </div>
+
+  <!-- REGISTER VIEW -->
+  <div id="register-view">
+    <div class="auth-header">
+      <h1>Buat Akun Baru</h1>
+      <p>Profil ini akan melekat pada setiap Request</p>
+    </div>
+    
+    <div class="error-msg" id="reg-error"></div>
+    <div class="success-msg" id="reg-success"></div>
+    
+    <form id="register-form">
+      <div class="field">
+        <label>Nama Lengkap</label>
+        <input type="text" id="r-fullname" required placeholder="Contoh: Marcelino">
+      </div>
+      <div class="field">
+        <label>Departemen / Divisi</label>
+        <input type="text" id="r-dept" required placeholder="Contoh: SA G&P">
+      </div>
+      <div class="field">
+        <label>Username</label>
+        <input type="text" id="r-username" required placeholder="Buat username untuk login">
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <input type="password" id="r-password" required placeholder="Buat password">
+      </div>
+      <button type="submit" class="btn">Daftar & Buat Akun</button>
+    </form>
+    
+    <div class="switch-mode">
+      Sudah punya akun? <a onclick="toggleView('login')">Kembali ke Login</a>
+    </div>
+  </div>
+</div>
+
+<script>
+// 1. Sinkronisasi Sesi Backend dan Frontend
+// Jika halaman login.html sampai ditampilkan oleh server, artinya session di backend sudah pasti kosong.
+// Hapus sisa ingatan di browser agar bersih dan tidak terjadi infinite loop!
+localStorage.removeItem('user');
+
+// 2. Fungsi untuk bolak-balik form Login dan Register
+function toggleView(view) {
+  document.getElementById('login-view').style.display = view === 'login' ? 'block' : 'none';
+  document.getElementById('register-view').style.display = view === 'register' ? 'block' : 'none';
+  
+  document.getElementById('login-error').style.display = 'none';
+  document.getElementById('reg-error').style.display = 'none';
+  document.getElementById('reg-success').style.display = 'none';
+}
+
+// 3. Proses Login
+document.getElementById('login-form').onsubmit = async (e) => {
+  e.preventDefault();
+  const btn = e.target.querySelector('button');
+  btn.innerText = 'Memeriksa...';
+  
+  try {
+    const res = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: document.getElementById('l-username').value,
+        password: document.getElementById('l-password').value
+      })
+    });
+    const data = await res.json();
+    
+    if (data.success) {
+      // Simpan ID Card (Data Profil) ke memori browser
+      localStorage.setItem('user', JSON.stringify(data.user));
+      // Lempar otomatis: Admin ke Dashboard (/), SA ke Portal Request (/portal)
+      window.location.href = data.user.role === 'admin' ? '/' : '/portal';
+    } else {
+      const errEl = document.getElementById('login-error');
+      errEl.innerText = data.message;
+      errEl.style.display = 'block';
+    }
+  } catch (err) {
+    console.error(err);
+  } finally {
+    btn.innerText = 'Masuk';
+  }
+};
+
+// 4. Proses Registrasi
+document.getElementById('register-form').onsubmit = async (e) => {
+  e.preventDefault();
+  const btn = e.target.querySelector('button');
+  btn.innerText = 'Mendaftarkan...';
+  
+  try {
+    const res = await fetch('/api/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        full_name: document.getElementById('r-fullname').value,
+        department: document.getElementById('r-dept').value,
+        username: document.getElementById('r-username').value,
+        password: document.getElementById('r-password').value
+      })
+    });
+    const data = await res.json();
+    
+    if (data.success) {
+      const sucEl = document.getElementById('reg-success');
+      sucEl.innerText = data.message + ' Silakan masuk dengan akun baru Anda.';
+      sucEl.style.display = 'block';
+      document.getElementById('reg-error').style.display = 'none';
+      e.target.reset(); // Bersihkan isian form
+    } else {
+      const errEl = document.getElementById('reg-error');
+      errEl.innerText = data.message;
+      errEl.style.display = 'block';
+      document.getElementById('reg-success').style.display = 'none';
+    }
+  } catch (err) {
+    console.error(err);
+  } finally {
+    btn.innerText = 'Daftar & Buat Akun';
+  }
+};
+</script>
+</body>
+</html>

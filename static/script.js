@@ -1,5 +1,5 @@
 // ---------- storage keys & setup ----------
-const API_URL = 'http://3.107.94.65:5000/api/presourcing';
+const API_URL = '/api/presourcing';
 
 let projects = [];
 let team = [];
@@ -9,9 +9,22 @@ let modal = null;
 let modalScroll = 0;
 let filters = { priority:'all', status:'all' };
 let storageOk = true;
+let isSaving = false; // Guard untuk mencegah double-click / race condition saat save
 
 function uid(p){ return p + '_' + Math.random().toString(36).slice(2,9); }
 function todayStr(){ return new Date().toISOString().slice(0,10); }
+
+// ---------- Fungsi Keamanan (XSS Protection) ----------
+// Mencegah kode HTML/JS nakal dieksekusi jika SA/Admin menginputkan karakter khusus
+function escAttr(s){ 
+  if (s === null || s === undefined) return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
 
 // ---------- seed data (Fallback jika server mati) ----------
 function seedData(){
@@ -23,6 +36,7 @@ function seedData(){
       priority:'High', status:'win', leadId:'Budi',
       sphMode:'item', projectSphAwal:null, projectSphFinal:null,
       createdAt:'2026-07-02', closedAt:'2026-07-22',
+      comparison_docs: [], // Properti baru untuk dokumen pembanding
       sows:[{
         id:uid('sow'), name:'SoW Security & Monitoring',
         boqs:[{
@@ -42,6 +56,7 @@ function seedData(){
       priority:'Urgent', status:'ongoing', leadId:'Andi',
       sphMode:'project', projectSphAwal:680000000, projectSphFinal:null,
       createdAt:'2026-08-15', closedAt:null,
+      comparison_docs: [], // Properti baru untuk dokumen pembanding
       sows:[{
         id:uid('sow'), name:'SoW Network Upgrade',
         boqs:[{
@@ -59,7 +74,8 @@ function seedData(){
 // ---------- persistence ----------
 async function loadAll(){
   try {
-    const response = await fetch(API_URL);
+    const timestamp = new Date().getTime();
+    const response = await fetch(`${API_URL}?t=${timestamp}`);
     if (!response.ok) throw new Error("Gagal terhubung ke Backend");
     
     const data = await response.json();
@@ -81,6 +97,10 @@ async function loadAll(){
 }
 
 async function saveAll(){
+  if (isSaving) return; // Guard agar tidak terjadi penumpukan request jika tombol di-klik berkali-kali
+  isSaving = true;
+  document.body.style.cursor = 'wait'; // Indikator loading visual
+
   try {
     const response = await fetch(API_URL, {
       method: 'POST',
@@ -93,6 +113,9 @@ async function saveAll(){
   } catch(e) {
     console.error("Gagal menyimpan data:", e);
     storageOk = false; 
+  } finally {
+    isSaving = false;
+    document.body.style.cursor = 'default';
   }
   render(); 
 }
@@ -255,7 +278,7 @@ function renderOverview(){
       <div class="panel-body">
         ${urgentActive.length===0 ? '<div class="empty">Tidak ada project urgent yang masih berjalan.</div>' :
           urgentActive.map(p=>`<div style="padding:6px 0; border-bottom:1px solid var(--border-soft); font-size:13px;">
-            <strong>${p.name}</strong> · ${p.requestorName} (${p.requestorDept}) · berjalan ${durationDays(p)} hari
+            <strong>${p.name}</strong> ·${p.requestorName} (${p.requestorDept}) · berjalan ${durationDays(p)} hari
           </div>`).join('')}
       </div>
     </div>
@@ -324,39 +347,82 @@ function renderProjects(){
 
 function renderProjectDetail(p){
   const uniq = uniquePicsInProject(p);
+  
+  // Render bagian baris item BoQ secara terpisah agar bersih
+  let itemsHtml = '';
+  (p.sows || []).forEach(sow => {
+    (sow.boqs || []).forEach(boq => {
+      (boq.items || []).forEach(it => {
+        const eff = p.sphMode === 'item' ? efficiencyPct(it.sphAwal, it.sphFinal) : null;
+        const notesHtml = it.notes ? `<div style="font-size:11px; color:var(--text-muted); margin-top:3px;">📝 ${escAttr(it.notes)}</div>` : '';
+        const picsHtml = (it.picIds || []).map(x => `<span class="pic-chip">${escAttr(x)}</span>`).join('');
+        
+        itemsHtml += `
+          <div style="display:grid; grid-template-columns: 2fr 0.4fr 0.5fr 1fr 1fr 1fr 0.8fr 1.5fr; gap:8px; padding:7px 0; font-size:12.5px; border-bottom:1px solid var(--border-soft); align-items:start;">
+            <div>
+              <div style="font-weight:500;">${escAttr(it.product) || '—'}</div>
+              ${notesHtml}
+            </div>
+            <div style="color:var(--text-muted);">${it.qty || '-'}</div>
+            <div style="color:var(--text-muted);">${escAttr(it.uom) || '-'}</div>
+            <div style="color:var(--text-muted);">${escAttr(it.vendor) || '-'}</div>
+            <div class="num mono">${p.sphMode==='item'?fmtIdr(it.sphAwal):'—'}</div>
+            <div class="num mono">${p.sphMode==='item'?fmtIdr(it.sphFinal):'—'}</div>
+            <div class="num mono">${p.sphMode==='item'?fmtPct(eff):'—'}</div>
+            <div>${picsHtml}</div>
+          </div>
+        `;
+      });
+    });
+  });
+
+  // UI DOKUMEN PEMBANDING
+  const docsHtml = `
+    <div style="margin: 12px 0; padding: 12px; background: #FFFFFF; border: 1px dashed var(--border); border-radius: 6px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
+            <strong style="font-size: 12.5px; color: var(--text);">📄 Dokumen SPH Pembanding (Audit Trail)</strong>
+            <button class="mini-btn" onclick="openUploadPembandingModal('${p.id}')">+ Upload Pembanding</button>
+        </div>
+        ${p.comparison_docs && p.comparison_docs.length > 0 ? 
+            p.comparison_docs.map(doc => `
+                <div style="display:flex; justify-content:space-between; font-size: 12px; padding: 6px 0; border-bottom: 1px solid var(--border-soft);">
+                    <div>
+                        <span style="font-weight:600; color:var(--text);">${escAttr(doc.vendor_name)}</span> 
+                        <span style="color:var(--text-muted);"> — Penawaran: <span class="mono">${fmtIdr(doc.offered_price)}</span></span>
+                    </div>
+                    <a href="${doc.file_path}" target="_blank" style="color: var(--primary); text-decoration: none; font-weight:500;">Lihat File</a>
+                </div>
+            `).join('') 
+            : '<div style="font-size:11.5px; color:var(--text-muted);">Belum ada dokumen pembanding yang diunggah.</div>'
+        }
+    </div>
+  `;
+
   return `
     <div class="detail-block">
       <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
         <div style="font-size:12px; color:var(--text-muted);">Lead Presource: <strong style="color:var(--text);">${p.leadId||'—'}</strong> · PIC terlibat: ${uniq.join(', ')||'—'}</div>
         <div style="display:flex; gap:6px;">
+          <button class="mini-btn" onclick="event.stopPropagation(); triggerRevisiBoq('${p.id}')">🔄 Revisi Excel BoQ</button>
+          <button class="mini-btn" onclick="downloadProjectReport('${p.id}')">📥 Download Excel</button>
           <button class="mini-btn" data-edit-project="${p.id}">Edit</button>
           <button class="mini-btn danger" data-delete-project="${p.id}">Hapus</button>
         </div>
       </div>
+      
+      <!-- INJEKSI UI DOKUMEN PEMBANDING DI SINI -->
+      ${docsHtml}
+      
       ${(p.sows||[]).map(sow=>`
-        <div class="sow-title">SoW: ${sow.name}</div>
-        ${(sow.boqs||[]).map(boq=>`
-          <div class="boq-title">BoQ: ${boq.name}</div>
-          <div style="display:grid; grid-template-columns: 2fr 0.4fr 1fr 1fr 1fr 0.8fr 1.5fr; gap:8px; padding:5px 0; font-size:10.5px; color:var(--text-dim); border-bottom:1px solid var(--border);">
-            <div>Produk</div><div>Qty</div><div>Vendor</div><div class="num">SPH Awal</div><div class="num">SPH Final</div><div class="num">Efficiency</div><div>PIC</div>
+        <div class="sow-title">Scope of Work: ${escAttr(sow.name)}</div>${(sow.boqs||[]).map(boq=>`
+          <div class="boq-title">Bill of Quantity: ${escAttr(boq.name)}</div>
+          <div style="display:grid; grid-template-columns: 2fr 0.4fr 0.5fr 1fr 1fr 1fr 0.8fr 1.5fr; gap:8px; padding:5px 0; font-size:10.5px; color:var(--text-dim); border-bottom:1px solid var(--border);">
+            <div>Item</div><div>Qty</div><div>UoM</div><div>Vendor</div><div class="num">SPH Awal</div><div class="num">SPH Final</div><div class="num">Efficiency</div><div>PIC</div>
           </div>
-          ${(boq.items||[]).map(it=>{
-            const eff = p.sphMode==='item' ? efficiencyPct(it.sphAwal,it.sphFinal) : null;
-            return `<div style="display:grid; grid-template-columns: 2fr 0.4fr 1fr 1fr 1fr 0.8fr 1.5fr; gap:8px; padding:7px 0; font-size:12.5px; border-bottom:1px solid var(--border-soft); align-items:start;">
-              <div>
-                <div style="font-weight:500;">${it.product || '—'}</div>
-                ${it.notes ? `<div style="font-size:11px; color:var(--text-muted); margin-top:3px;">📝 ${it.notes}</div>` : ''}
-              </div>
-              <div style="color:var(--text-muted);">${it.qty || '-'}</div>
-              <div style="color:var(--text-muted);">${it.vendor || '-'}</div>
-              <div class="num mono">${p.sphMode==='item'?fmtIdr(it.sphAwal):'—'}</div>
-              <div class="num mono">${p.sphMode==='item'?fmtIdr(it.sphFinal):'—'}</div>
-              <div class="num mono">${p.sphMode==='item'?fmtPct(eff):'—'}</div>
-              <div>${(it.picIds||[]).map(x=>`<span class="pic-chip">${x}</span>`).join('')}</div>
-            </div>`;
-          }).join('')}
+          ${itemsHtml}
         `).join('')}
       `).join('')}
+      
       ${p.sphMode==='project' ? `<div class="note">SPH dicatat di level total project (tidak dipecah per item).</div>` : ''}
     </div>
   `;
@@ -384,7 +450,7 @@ function renderTeam(){
           </tr></thead>
           <tbody>
           ${rows.map(r=>`<tr>
-            <td>${r.name}</td>
+            <td>${escAttr(r.name)}</td>
             <td class="num mono">${r.leadCount}</td>
             <td class="num mono">${r.supportLoad.toFixed(2)}</td>
             <td class="num mono">${fmtPct(r.winRate)}</td>
@@ -398,7 +464,7 @@ function renderTeam(){
       <div class="panel-hd"><h2>Support Load per anggota</h2></div>
       <div class="panel-body">
         ${rows.map(r=>`<div class="lb-row">
-          <div class="lb-name">${r.name}</div>
+          <div class="lb-name">${escAttr(r.name)}</div>
           <div class="lb-bar-track"><div class="lb-bar-fill" style="width:${(r.supportLoad/maxLoad*100).toFixed(0)}%"></div></div>
           <div class="lb-val">${r.supportLoad.toFixed(2)}</div>
         </div>`).join('')}
@@ -422,6 +488,61 @@ function wireEvents(){
   const btnTeam = document.getElementById('btn-manage-team'); if(btnTeam) btnTeam.onclick = ()=> openTeamModal();
 }
 
+// ----------- download project ---------
+function downloadProjectReport(projectId) {
+    window.location.href = `/api/download_report?project_id=${projectId}`;
+}
+
+// ---------- FUNGSI REVISI BOQ (ANTI-BLOCKED) ----------
+function triggerRevisiBoq(projectId) {
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.xlsx, .xls';
+    fileInput.style.display = 'none'; 
+    document.body.appendChild(fileInput);
+    
+    fileInput.onchange = async (e) => {
+        const file = e.target.files[0];
+        document.body.removeChild(fileInput); 
+        
+        if (!file) return;
+
+        if (!confirm(`Unggah revisi BoQ untuk project ini?\n\nItem yang sama akan diperbarui qty/vendor-nya. Item baru ditambahkan, dan item yang hilang dihapus.`)) {
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('ticket_id', projectId);
+
+        // Ubah kursor menjadi loading agar user tahu proses sedang berjalan
+        document.body.style.cursor = 'wait';
+        
+        try {
+            const res = await fetch('/api/revisi_boq', {
+                method: 'POST',
+                body: formData
+            });
+            const result = await res.json();
+            
+            if (res.ok && result.success) {
+                alert(result.message);
+                loadAll(); 
+            } else {
+                alert(`Gagal merevisi BoQ: ${result.message}`);
+            }
+        } catch (error) {
+            console.error("Error revisi BoQ:", error);
+            alert('Terjadi kesalahan saat mengunggah file.');
+        } finally {
+            // Kembalikan kursor ke normal
+            document.body.style.cursor = 'default';
+        }
+    };
+    
+    fileInput.click();
+}
+
 // ---------- modal functions ----------
 function blankProject(){
   return {
@@ -429,17 +550,18 @@ function blankProject(){
     priority:'Medium', status:'ongoing', leadId: team[0]||'',
     sphMode:'item', projectSphAwal:null, projectSphFinal:null,
     createdAt: todayStr(), closedAt:null,
+    comparison_docs: [],
     sows:[{ id:uid('sow'), name:'', boqs:[{ id:uid('boq'), name:'', items:[{ id:uid('item'), product:'', qty:1, vendor:'', notes:'', picIds:[], sphAwal:null, sphFinal:null }] }] }]
   };
 }
 function openProjectModal(id){
-  modalScroll = 0; // Reset scroll
+  modalScroll = 0; 
   const existing = id ? JSON.parse(JSON.stringify(projects.find(p=>p.id===id))) : blankProject();
   modal = { type:'project', data: existing, isNew: !id };
   render();
 }
 function openTeamModal(){ 
-  modalScroll = 0; // Reset scroll
+  modalScroll = 0; 
   modal = { type:'team', data:{ names: team.join(', ') } }; render(); 
 }
 
@@ -449,7 +571,7 @@ function renderModal(){
   if(modal.type==='project') root.innerHTML = projectModalHtml(modal.data, modal.isNew);
   if(modal.type==='team') root.innerHTML = teamModalHtml(modal.data);
   wireModalEvents();
-  // Kembalikan posisi scroll agar tidak mantul ke atas
+  
   const m = document.querySelector('.modal');
   if(m) m.scrollTop = modalScroll;
 }
@@ -482,12 +604,12 @@ function projectModalHtml(d, isNew){
             </select>
           </div>
           <div class="field"><label>Lead Presource</label>
-            <select id="m-lead">${team.map(t=>`<option ${d.leadId===t?'selected':''}>${t}</option>`).join('')}</select>
+            <select id="m-lead">${team.map(t=>`<option ${d.leadId===t?'selected':''}>${escAttr(t)}</option>`).join('')}</select>
           </div>
         </div>
         <div class="grid2">
-          <div class="field"><label>Tanggal request masuk</label><input type="date" id="m-created" value="${d.createdAt||''}"></div>
-          <div class="field"><label>Tanggal SPH final / ditutup</label><input type="date" id="m-closed" value="${d.closedAt||''}"></div>
+          <div class="field"><label>Tanggal request masuk</label><input type="date" id="m-created" value="${escAttr(d.createdAt)||''}"></div>
+          <div class="field"><label>Tanggal SPH final / ditutup</label><input type="date" id="m-closed" value="${escAttr(d.closedAt)||''}"></div>
         </div>
         <div class="field"><label>Mode pencatatan SPH</label>
           <select id="m-sphmode">
@@ -514,7 +636,7 @@ function projectModalHtml(d, isNew){
 }
 function sowBlockHtml(sow, si){
   return `<div class="sow-block" data-sow-idx="${si}">
-    <div class="field"><label>Nama SoW</label><input class="sow-name" data-si="${si}" value="${escAttr(sow.name)}" placeholder="SoW Security & Monitoring"></div>
+    <div class="field"><label>Scope of Work</label><input class="sow-name" data-si="${si}" value="${escAttr(sow.name)}" placeholder="SoW Security & Monitoring"></div>
     ${sow.boqs.map((boq,bi)=>boqBlockHtml(boq,si,bi)).join('')}
     <button class="mini-btn" data-add-boq="${si}" type="button">+ Tambah BoQ</button>
     <button class="mini-btn danger" data-del-sow="${si}" type="button" style="float:right;">Hapus SoW</button>
@@ -522,7 +644,7 @@ function sowBlockHtml(sow, si){
 }
 function boqBlockHtml(boq, si, bi){
   return `<div class="boq-block" data-boq-idx="${bi}">
-    <div class="field"><label>Nama BoQ</label><input class="boq-name" data-si="${si}" data-bi="${bi}" value="${escAttr(boq.name)}" placeholder="BoQ Utama"></div>
+    <div class="field"><label>Bill of Quantity</label><input class="boq-name" data-si="${si}" data-bi="${bi}" value="${escAttr(boq.name)}" placeholder="BoQ Utama"></div>
     ${boq.items.map((it,ii)=>itemBlockHtml(it,si,bi,ii)).join('')}
     <button class="mini-btn" data-add-item="${si}:${bi}" type="button">+ Tambah item/produk</button>
     <button class="mini-btn danger" data-del-boq="${si}:${bi}" type="button" style="float:right;">Hapus BoQ</button>
@@ -530,23 +652,23 @@ function boqBlockHtml(boq, si, bi){
 }
 function itemBlockHtml(it, si, bi, ii){
   return `<div class="item-block" data-item-idx="${ii}">
-    <div style="display:grid; grid-template-columns: 2fr 0.5fr 1.5fr; gap:12px; margin-bottom:12px;">
+    <div style="display:grid; grid-template-columns: 2fr 0.4fr 0.6fr 1.5fr; gap:12px; margin-bottom:12px;">
       <div class="field" style="margin:0;"><label>Produk</label><input class="it-product" data-path="${si}:${bi}:${ii}" value="${escAttr(it.product)}" placeholder="CCTV"></div>
       <div class="field" style="margin:0;"><label>Qty</label><input type="number" class="it-qty" data-path="${si}:${bi}:${ii}" value="${it.qty??1}"></div>
+      <div class="field" style="margin:0;"><label>UoM</label><input class="it-uom" data-path="${si}:${bi}:${ii}" value="${escAttr(it.uom)}" placeholder="Unit"></div>
       <div class="field" style="margin:0;"><label>Vendor</label><input class="it-vendor" data-path="${si}:${bi}:${ii}" value="${escAttr(it.vendor)}" placeholder="Nama Vendor"></div>
     </div>
     <div class="grid3">
       <div class="field"><label>SPH Awal item</label><input type="number" class="it-awal" data-path="${si}:${bi}:${ii}" value="${it.sphAwal??''}"></div>
       <div class="field"><label>SPH Final item</label><input type="number" class="it-final" data-path="${si}:${bi}:${ii}" value="${it.sphFinal??''}"></div>
       <div class="field"><label>PIC untuk item ini</label>
-        <div class="pic-select">${team.map(t=>`<div class="pic-opt ${it.picIds.includes(t)?'on':''}" data-pic="${si}:${bi}:${ii}:${t}">${t}</div>`).join('')}</div>
+        <div class="pic-select">${team.map(t=>`<div class="pic-opt ${it.picIds.includes(t)?'on':''}" data-pic="${si}:${bi}:${ii}:${escAttr(t)}">${escAttr(t)}</div>`).join('')}</div>
       </div>
     </div>
     <div class="field"><label>Notes (Opsional)</label><input class="it-notes" data-path="${si}:${bi}:${ii}" value="${escAttr(it.notes)}" placeholder="Catatan tambahan..."></div>
     <button class="mini-btn danger" data-del-item="${si}:${bi}:${ii}" type="button">Hapus item</button>
   </div>`;
 }
-function escAttr(s){ return (s||'').replace(/"/g,'&quot;'); }
 
 function teamModalHtml(d){
   return `<div class="overlay" id="ov">
@@ -572,7 +694,6 @@ function teamModalHtml(d){
 // ---------- FUNGSI SIMPAN SEMENTARA ----------
 function syncModalData() {
   if(!modal || modal.type !== 'project') return;
-  // Tangkap posisi scroll saat ini sebelum form di-refresh
   const m = document.querySelector('.modal');
   if(m) modalScroll = m.scrollTop;
   const d = modal.data;
@@ -588,6 +709,7 @@ function syncModalData() {
   document.querySelectorAll('.sow-name').forEach(el=> d.sows[+el.dataset.si].name = el.value);
   document.querySelectorAll('.boq-name').forEach(el=> d.sows[+el.dataset.si].boqs[+el.dataset.bi].name = el.value);
   document.querySelectorAll('.it-qty').forEach(el=>{ const [si,bi,ii]=el.dataset.path.split(':').map(Number); d.sows[si].boqs[bi].items[ii].qty = numOrNull(el.value); });
+  document.querySelectorAll('.it-uom').forEach(el=>{ const [si,bi,ii]=el.dataset.path.split(':').map(Number); d.sows[si].boqs[bi].items[ii].uom = el.value; });
   document.querySelectorAll('.it-vendor').forEach(el=>{ const [si,bi,ii]=el.dataset.path.split(':').map(Number); d.sows[si].boqs[bi].items[ii].vendor = el.value; });
   document.querySelectorAll('.it-notes').forEach(el=>{ const [si,bi,ii]=el.dataset.path.split(':').map(Number); d.sows[si].boqs[bi].items[ii].notes = el.value; });
   document.querySelectorAll('.it-product').forEach(el=>{ const [si,bi,ii]=el.dataset.path.split(':').map(Number); d.sows[si].boqs[bi].items[ii].product = el.value; });
@@ -628,7 +750,6 @@ function wireModalEvents(){
     return;
   }
 
-  // project modal events (Tiap nambah/hapus selalu panggil syncModalData dulu)
   const sphmode = document.getElementById('m-sphmode');
   if(sphmode) sphmode.onchange = ()=>{ syncModalData(); modal.data.sphMode = sphmode.value; render(); };
 
@@ -695,7 +816,7 @@ function wireModalEvents(){
   const saveBtn = document.getElementById('m-save');
   if(saveBtn){
     saveBtn.onclick = ()=>{
-      syncModalData(); // Cukup panggil fungsi ini saat save
+      syncModalData(); 
       const d = modal.data;
       const idx = projects.findIndex(p=>p.id===d.id);
       if(idx>=0) projects[idx]=d; else projects.push(d);
@@ -711,6 +832,94 @@ function wireModalEvents(){
 
 function val(id){ const el=document.getElementById(id); return el?el.value:''; }
 function numOrNull(v){ return (v===''||v==null) ? null : Number(v); }
+
+// ---------- FUNGSI MODAL UPLOAD SPH PEMBANDING ----------
+function openUploadPembandingModal(projectId) {
+    const modalHtml = `
+        <div class="overlay" id="upload-pembanding-modal" style="z-index: 100;">
+            <div class="modal" style="max-width: 420px;">
+                <div class="modal-hd">
+                    <h3>Unggah SPH Pembanding</h3>
+                    <button class="btn-ghost" style="padding: 4px 8px;" onclick="closeUploadPembandingModal()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="field">
+                        <label>Nama Vendor (Losing Bidder)</label>
+                        <input type="text" id="up-vendor-name" placeholder="Misal: PT Lintas Teknologi">
+                    </div>
+                    <div class="field">
+                        <label>Harga Penawaran SPH (Total)</label>
+                        <input type="number" id="up-vendor-price" placeholder="Misal: 550000000">
+                    </div>
+                    <div class="field">
+                        <label>Lampiran File (PDF/Excel/Image)</label>
+                        <input type="file" id="up-vendor-file" accept=".pdf, .xls, .xlsx, .jpg, .png" style="padding: 4px;">
+                        <div class="note">Sebagai bukti audit nilai efisiensi (Cost Avoidance).</div>
+                    </div>
+                </div>
+                <div class="modal-ft">
+                    <button class="btn-ghost" onclick="closeUploadPembandingModal()">Batal</button>
+                    <button class="btn-primary" onclick="submitUploadPembanding('${projectId}')">Unggah & Simpan</button>
+                </div>
+            </div>
+        </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+}
+
+function closeUploadPembandingModal() {
+    const m = document.getElementById('upload-pembanding-modal');
+    if (m) m.remove();
+}
+
+async function submitUploadPembanding(projectId) {
+    const name = document.getElementById('up-vendor-name').value;
+    const price = document.getElementById('up-vendor-price').value;
+    const fileInput = document.getElementById('up-vendor-file');
+    
+    if (!name || !price || !fileInput.files[0]) {
+        alert("Semua kolom (Nama Vendor, Harga, dan File) wajib diisi!");
+        return;
+    }
+
+    const file = fileInput.files[0];
+    const formData = new FormData();
+    formData.append('ticket_id', projectId);
+    formData.append('vendor_name', name);
+    formData.append('offered_price', price);
+    formData.append('file', file);
+
+    document.body.style.cursor = 'wait';
+    const btn = event.target;
+    const originalText = btn.innerText;
+    btn.innerText = "Mengunggah...";
+    btn.disabled = true;
+
+    try {
+        // Simulasi UI (API backend belum dibuat)
+        const res = await fetch('/api/upload_comparison', {
+            method: 'POST',
+            body: formData
+        });
+        const result = await res.json();
+        
+        if (res.ok && result.success) {
+            alert("Dokumen pembanding berhasil ditambahkan!");
+            closeUploadPembandingModal();
+            loadAll(); // Muat ulang data dashboard
+        } else {
+            alert(`Gagal: ${result.message}`);
+        }
+    } catch (err) {
+        console.error("Upload error:", err);
+        alert("Simulasi UI: API backend belum dibuat, tapi secara UI data ditangkap dengan baik.");
+        closeUploadPembandingModal();
+    } finally {
+        document.body.style.cursor = 'default';
+        btn.innerText = originalText;
+        btn.disabled = false;
+    }
+}
 
 // Jalankan load data awal saat pertama kali script dimuat
 loadAll();

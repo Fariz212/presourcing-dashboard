@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SA Portal - Presourcing</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+:root {
+  --ink: #F8FAFC; --panel: #FFFFFF; --border: #E2E8F0; 
+  --text-main: #0F172A; --text-muted: #64748B; 
+  --primary: #2563EB; --primary-hover: #1D4ED8;
+  --danger: #EF4444; --danger-hover: #DC2626;
+  --green: #059669;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--ink); color: var(--text-main);
+  font-family: 'Space Grotesk', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* --- NAVBAR --- */
+.navbar {
+  background: var(--panel); border-bottom: 1px solid var(--border);
+  padding: 16px 40px; display: flex; justify-content: space-between; align-items: center;
+  position: sticky; top: 0; z-index: 10;
+}
+.navbar .brand { display: flex; align-items: center; gap: 12px; }
+.navbar .brand h2 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.5px; }
+.navbar .brand span { font-size: 13px; background: #EEF2FF; color: var(--primary); padding: 4px 8px; border-radius: 6px; font-weight: 600; }
+.user-info { display: flex; align-items: center; gap: 20px; font-size: 14px; font-weight: 500; color: var(--text-muted); }
+.user-info b { color: var(--text-main); }
+
+/* --- BUTTONS --- */
+.btn {
+  padding: 10px 16px; border-radius: 8px; font-weight: 600; font-size: 14px;
+  cursor: pointer; transition: all 0.2s ease; border: none; font-family: inherit;
+  display: inline-flex; align-items: center; gap: 8px;
+}
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover { background: var(--primary-hover); box-shadow: 0 4px 12px rgba(37,99,235,0.2); }
+.btn-outline { border: 1px solid var(--border); background: var(--panel); color: var(--text-main); }
+.btn-outline:hover { background: #F1F5F9; }
+.btn-danger-outline { border: 1px solid #FECACA; background: transparent; color: var(--danger); }
+.btn-danger-outline:hover { background: #FEF2F2; }
+.btn-success-outline { border: 1px solid #A7F3D0; background: #ECFDF5; color: #047857; font-size: 12.5px; padding: 6px 12px; }
+.btn-success-outline:hover { background: #D1FAE5; }
+
+/* --- MAIN CONTAINER --- */
+.container { max-width: 1100px; margin: 40px auto; padding: 0 24px; }
+.page-header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 24px; }
+.page-header h1 { margin: 0 0 8px 0; font-size: 28px; letter-spacing: -0.5px; }
+.page-header p { margin: 0; color: var(--text-muted); font-size: 15px; }
+
+/* --- TABLE CARD --- */
+.card {
+  background: var(--panel); border-radius: 12px; border: 1px solid var(--border);
+  box-shadow: 0 4px 6px -4px rgba(0,0,0,.05); overflow: hidden;
+}
+.table-wrapper { width: 100%; overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; text-align: left; }
+th { background: #F8FAFC; padding: 16px 24px; font-size: 13px; font-weight: 600; color: var(--text-muted); border-bottom: 1px solid var(--border); text-transform: uppercase; letter-spacing: 0.5px;}
+td { padding: 16px 24px; font-size: 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: #F8FAFC; }
+
+/* --- TRACKING TIMELINE CSS --- */
+.tracking-wrapper {
+    margin: 20px 0 30px 0;
+    padding: 15px;
+    background: #f8fafc;
+    border-radius: 8px;
+    border: 1px solid var(--border-soft);
+}
+.stepper {
+    display: flex;
+    justify-content: space-between;
+    position: relative;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+.stepper::before {
+    content: '';
+    position: absolute;
+    top: 14px;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: #e2e8f0;
+    z-index: 1;
+}
+.step {
+    position: relative;
+    z-index: 2;
+    text-align: center;
+    flex: 1;
+}
+.step-circle {
+    width: 30px;
+    height: 30px;
+    background: #fff;
+    border: 3px solid #e2e8f0;
+    border-radius: 50%;
+    margin: 0 auto 8px auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: bold;
+    color: #94a3b8;
+    transition: all 0.3s;
+}
+.step-label {
+    font-size: 12px;
+    color: #64748b;
+    font-weight: 500;
+}
+/* Status Active / Completed */
+.step.completed .step-circle {
+    border-color: var(--primary);
+    background: var(--primary);
+    color: white;
+}
+.step.completed .step-label {
+    color: var(--text);
+}
+.step.active .step-circle {
+    border-color: var(--primary);
+    color: var(--primary);
+}
+.step.active .step-label {
+    color: var(--primary);
+    font-weight: bold;
+}
+.step.rejected .step-circle {
+    border-color: var(--red);
+    background: var(--red);
+    color: white;
+}
+
+/* --- BADGES --- */
+.badge { padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; display: inline-block; }
+.badge.new { background: #E0E7FF; color: #3730A3; }
+.badge.ongoing { background: #FEF3C7; color: #92400E; }
+.badge.done { background: #DCFCE7; color: #166534; }
+
+/* --- EMPTY STATE --- */
+.empty-state { text-align: center; padding: 60px 20px; }
+.empty-state .icon { font-size: 48px; margin-bottom: 16px; opacity: 0.5; }
+.empty-state h3 { margin: 0 0 8px 0; font-size: 18px; color: var(--text-main); }
+.empty-state p { margin: 0; color: var(--text-muted); font-size: 14px; max-width: 400px; margin: 0 auto; }
+
+/* --- MODAL (POPUP FORM) --- */
+.modal-overlay {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(15, 23, 42, 0.4); backdrop-filter: blur(4px);
+  display: none; align-items: center; justify-content: center; z-index: 100;
+  opacity: 0; transition: opacity 0.2s ease;
+}
+.modal-overlay.active { display: flex; opacity: 1; }
+.modal-card {
+  background: var(--panel); width: 100%; max-width: 580px;
+  border-radius: 16px; box-shadow: 0 20px 25px -5px rgba(0,0,0,.1);
+  transform: translateY(20px); transition: transform 0.3s ease;
+  max-height: 90vh; overflow-y: auto;
+}
+.modal-overlay.active .modal-card { transform: translateY(0); }
+.modal-header { padding: 20px 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; background: var(--panel); z-index: 5; }
+.modal-header h3 { margin: 0; font-size: 18px; }
+.modal-close { background: none; border: none; font-size: 24px; cursor: pointer; color: var(--text-muted); line-height: 1; }
+.modal-body { padding: 24px; }
+.modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 12px; background: #F8FAFC; border-radius: 0 0 16px 16px; position: sticky; bottom: 0; z-index: 5; }
+
+/* --- FORM FIELDS --- */
+.field { margin-bottom: 16px; }
+.field label { display: block; font-size: 13px; font-weight: 600; color: var(--text-main); margin-bottom: 6px; }
+.field input, .field textarea { 
+  width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; 
+  font-family: inherit; font-size: 14px; box-sizing: border-box; transition: border-color 0.2s;
+}
+.field input:focus, .field textarea:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
+.required-star { color: var(--danger); margin-left: 3px; }
+
+/* --- UPLOAD BOX DALAM MODAL --- */
+.upload-box { background: #F8FAFC; border: 1px dashed var(--border); border-radius: 8px; padding: 14px; margin-top: 6px; }
+
+/* --- NOTIFICATION BELL --- */
+.notif-wrapper { position: relative; display: inline-block; margin-right: 16px; }
+.notif-btn { background: transparent; border: none; cursor: pointer; color: var(--text-muted); position: relative; padding: 6px; border-radius: 50%; transition: background 0.2s; display: flex; align-items: center; justify-content: center; }
+.notif-btn:hover { background: var(--panel-2, #F1F5F9); color: var(--text); }
+.notif-badge { position: absolute; top: 0; right: 0; background: var(--red, #DC2626); color: white; font-size: 10px; font-weight: bold; padding: 2px 5px; border-radius: 10px; border: 2px solid var(--panel, #fff); line-height: 1; display: none; }
+.notif-dropdown { position: absolute; top: 120%; right: -10px; width: 320px; background: var(--panel, #fff); border: 1px solid var(--border, #e2e8f0); border-radius: 8px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); display: none; z-index: 100; overflow: hidden; text-align: left; }
+.notif-dropdown.active { display: block; }
+.notif-header { padding: 12px 16px; font-weight: 600; border-bottom: 1px solid var(--border, #e2e8f0); background: #FAFAFA; font-size: 13px; color: var(--text); }
+.notif-body { max-height: 320px; overflow-y: auto; }
+.notif-item { padding: 12px 16px; border-bottom: 1px solid var(--border-soft, #f1f5f9); font-size: 12.5px; cursor: pointer; transition: background 0.15s; }
+.notif-item:hover { background: #F8FAFC; }
+.notif-item.unread { background: #eff6ff; }
+.notif-item.unread:hover { background: #dbeafe; }
+.notif-time { font-size: 11px; color: var(--text-muted, #64748b); margin-top: 4px; }
+
+</style>
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="brand">
+    <h2>Presourcing</h2>
+    <span>SA Portal</span>
+  </div>
+  <div class="user-info">
+    <span><b id="display-name">Tester UI</b> &middot; <span id="display-dept">Bebas Akses</span></span>
+    <!-- WADAH NOTIFIKASI -->
+    <div class="notif-wrapper">
+    <button class="notif-btn" onclick="toggleNotif(event)">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+        <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+        </svg>
+        <span class="notif-badge" id="notif-count">0</span>
+    </button>
+    
+    <div class="notif-dropdown" id="notif-dropdown">
+        <div class="notif-header">Notifikasi</div>
+        <div class="notif-body" id="notif-list">
+        <div style="padding: 20px; text-align: center; color: var(--text-muted); font-size: 12px;">Memuat...</div>
+        </div>
+    </div>
+    </div>
+    <button class="btn btn-danger-outline" onclick="handleLogout()">Keluar</button>
+  </div>
+</nav>
+
+<div class="container">
+  <div class="page-header">
+    <div>
+      <h1>Daftar Request Saya</h1>
+      <p>Pantau status pengajuan RFI / Presourcing Anda di sini.</p>
+    </div>
+    <button class="btn btn-primary" onclick="openModal()">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+      Buat Request Baru
+    </button>
+  </div>
+
+  <div class="card">
+    <div class="table-wrapper">
+      <table id="requests-table">
+        <thead>
+          <tr>
+            <th>Ticket ID</th>
+            <th>Nama Project / Klien</th>
+            <th>Target SLA</th>
+            <th>Status</th>
+            <th>Aksi</th>
+          </tr>
+        </thead>
+        <tbody id="table-body">
+          <tr id="empty-row">
+            <td colspan="5">
+              <div class="empty-state">
+                <div class="icon">📭</div>
+                <h3>Belum ada request aktif</h3>
+                <p>Anda belum mengajukan kebutuhan presourcing. Klik tombol "Buat Request Baru" di atas untuk memulai.</p>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL FORM BUAT TIKET & WAJIB UPLOAD EXCEL -->
+<div class="modal-overlay" id="request-modal">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h3>Buat Request Presourcing Baru</h3>
+      <button class="modal-close" onclick="closeModal()">&times;</button>
+    </div>
+    <form id="request-form">
+      <div class="modal-body">
+        <div class="field">
+          <label>Nama Project / Kebutuhan <span class="required-star">*</span></label>
+          <input type="text" id="req-title" required placeholder="Contoh: Pengadaan Server Kemenkes 2026">
+        </div>
+        <div class="field">
+          <label>Nama Pelanggan / End-User <span class="required-star">*</span></label>
+          <input type="text" id="req-client" required placeholder="Contoh: PT Angkasa Multimedia">
+        </div>
+        <div class="field">
+          <label>Informasi Kompetitor</label>
+          <input type="text" id="req-competitor" placeholder="Contoh: Telkom, Lintasarta, atau 'Belum ada info'">
+        </div>
+        <div class="field">
+          <label>Target Selesai (SLA) <span class="required-star">*</span></label>
+          <input type="date" id="req-date" required>
+        </div>
+        <div class="field">
+          <label>Catatan Tambahan (Opsional)</label>
+          <textarea id="req-notes" rows="2" placeholder="Tulis detail singkat jika diperlukan..."></textarea>
+        </div>
+
+        <!-- Bagian Upload File BoQ Excel (WAJIB) + Tombol Download Template -->
+        <div class="field">
+          <label style="display: flex; justify-content: space-between; align-items: center;">
+            <span>File BoQ Excel <span class="required-star">*</span></span>
+            <button type="button" class="btn btn-success-outline" onclick="downloadTemplate()">
+              📥 Download Template Excel
+            </button>
+          </label>
+          <div class="upload-box">
+            <p style="font-size: 12px; color: var(--text-muted); margin: 0 0 8px 0;">
+              Wajib mengunggah file BoQ sesuai format standar (.xlsx / .xls).
+            </p>
+            <input type="file" id="boqFileInput" accept=".xlsx, .xls" required style="font-size: 13px; width: 100%;">
+          </div>
+        </div>
+
+        <div id="uploadStatus" style="font-size: 13px; font-weight: 500; margin-top: 8px;"></div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" onclick="closeModal()">Batal</button>
+        <button type="submit" class="btn btn-primary" id="btn-submit-req">Kirim Request & Upload</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+// 1. Pengecekan User & Tampilkan Profil
+const savedUser = localStorage.getItem('user');
+let currentUser = null;
+
+if (savedUser) {
+    currentUser = JSON.parse(savedUser);
+    document.getElementById('display-name').innerText = currentUser.full_name;
+    document.getElementById('display-dept').innerText = currentUser.department;
+    fetchRequests();
+} else {
+    // Jika localStorage kosong, bersihkan juga session di backend lewat fetch diam-diam, baru lempar ke login
+    fetch('/api/logout', { method: 'POST' }).finally(() => {
+        window.location.href = '/login';
+    });
+}
+
+function logout() {
+    localStorage.removeItem('user');
+    window.location.href = '/login';
+}
+
+// 2. Logika Modal
+const modal = document.getElementById('request-modal');
+function openModal() { modal.classList.add('active'); }
+function closeModal() { 
+    modal.classList.remove('active'); 
+    document.getElementById('request-form').reset(); 
+    document.getElementById('uploadStatus').innerHTML = '';
+}
+modal.addEventListener('click', (e) => { if(e.target === modal) closeModal(); });
+
+// 3. Fungsionalitas Tombol Download Template
+function downloadTemplate() {
+    // Menggunakan Flask url_for untuk mengambil path file statis secara dinamis
+    const downloadUrl = "{{ url_for('static', filename='Template_BoQ_Presourcing_Pro.xlsx') }}";
+    
+    // Memicu proses unduh otomatis di browser SA
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = 'Template_BoQ_Presourcing_Pro.xlsx';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+// 4. AMBIL DATA REQUEST DARI SERVER
+async function fetchRequests() {
+    if (!currentUser) return;
+    try {
+        const res = await fetch(`/api/requests?username=${currentUser.username}&role=${currentUser.role}`);
+        const result = await res.json();
+        
+        if (result.success) {
+            renderTable(result.data);
+        }
+    } catch (error) {
+        console.error("Gagal mengambil data:", error);
+    }
+}
+
+// 5. TAMPILKAN DATA KE TABEL HTML & LIHAT ITEM
+function renderTable(data) {
+    const tbody = document.getElementById('table-body');
+    
+    // Pastikan data ada dan berupa array
+    if (!data || !Array.isArray(data) || data.length === 0) {
+        tbody.innerHTML = `
+            <tr id="empty-row">
+                <td colspan="5">
+                    <div class="empty-state">
+                        <div class="icon">📭</div>
+                        <h3>Belum ada request aktif</h3>
+                        <p>Anda belum mengajukan kebutuhan presourcing. Klik tombol "Buat Request Baru" di atas untuk memulai.</p>
+                    </div>
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    tbody.innerHTML = ''; 
+    data.forEach(req => {
+        let badgeClass = 'new';
+        let statusText = 'Menunggu PIC';
+        
+        if (req.status === 'ongoing') { badgeClass = 'ongoing'; statusText = 'Diproses'; }
+        else if (req.status === 'done' || req.status === 'win') { badgeClass = 'done'; statusText = 'Selesai / Win'; }
+        else if (req.status === 'lose') { badgeClass = 'rejected'; statusText = 'Kalah'; }
+
+        // Sanitasi teks agar aman dari error kutipan di dalam string HTML onclick
+        const safeTitle = req.title ? req.title.replace(/'/g, "\\'").replace(/"/g, '&quot;') : '';
+        const safeTicketId = req.ticket_id || '';
+        const safeStatus = req.status || 'unassigned';
+        const safeLeadId = req.leadId || '';
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td><b>${safeTicketId}</b></td>
+            <td>
+                ${req.title || 'Tanpa Nama Project'}
+                <div style="font-size: 12px; color: var(--text-muted);">Klien: ${req.client_name || '-'} | Kompetitor: ${req.competitor_info || '-'}</div>
+            </td>
+            <td>${req.sla_date || '-'}</td>
+            <td><span class="badge ${badgeClass}">${statusText}</span></td>
+            <td>
+                <button class="btn btn-outline" style="padding: 6px 12px; font-size: 12px;" 
+                    onclick="viewTicketItems('${safeTicketId}', '${safeTitle}', '${safeStatus}', '${safeLeadId}')">
+                    📋 Lihat Daftar Item
+                </button>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+// 6. FUNGSI LIHAT DAFTAR ITEM BOQ (UNTUK SA)
+async function viewTicketItems(ticketId, projectTitle, status, leadId) {
+    const modalHtml = `
+        <div class="modal-overlay active" id="items-modal">
+            <div class="modal-card" style="max-width: 800px;">
+                <div class="modal-header">
+                    <h3>Detail Item BoQ: ${ticketId}</h3>
+                    <button class="modal-close" onclick="closeItemsModal()">&times;</button>
+                </div>
+                <div class="modal-body">
+                  ${getTimelineHtml(status, leadId)}
+                    <p style="margin-top:0; color:var(--text-muted);"><b>Project:</b> ${projectTitle}</p>
+                    <div id="items-content-area" style="max-height: 400px; overflow-y: auto;">
+                        <p>Memuat data item...</p>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline" onclick="closeItemsModal()">Tutup</button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    let existingModal = document.getElementById('items-modal');
+    if (existingModal) existingModal.remove();
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+    try {
+        const res = await fetch(`/api/request_items/${ticketId}`);
+        const result = await res.json();
+        
+        const contentArea = document.getElementById('items-content-area');
+        
+        if (result.success && result.data.length > 0) {
+            let tableHtml = `
+                <table style="width: 100%; font-size: 13px; border-collapse: collapse;">
+                    <thead>
+                        <tr style="background: #F8FAFC; border-bottom: 2px solid var(--border);">
+                            <th style="padding: 8px;">No</th>
+                            <th style="padding: 8px;">Scope of Work</th>
+                            <th style="padding: 8px;">Bill of Quantity</th>
+                            <th style="padding: 8px;">Deskripsi Item</th>
+                            <th style="padding: 8px; text-align: right;">Qty</th>
+                            <th style="padding: 8px;">UoM</th>
+                            <th style="padding: 8px;">Brand</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            
+            result.data.forEach((it, idx) => {
+                tableHtml += `
+                    <tr style="border-bottom: 1px solid var(--border-soft);">
+                        <td style="padding: 8px;">${it.item_no || (idx + 1)}</td>
+                        <td style="padding: 8px;">${it.sow_name}</td>
+                        <td style="padding: 8px;">${it.boq_section}</td>
+                        <td style="padding: 8px; font-weight: 500;">${it.description}</td>
+                        <td style="padding: 8px; text-align: right;" class="mono">${it.quantity}</td>
+                        <td style="padding: 8px;">${it.uom || '-'}</td>
+                        <td style="padding: 8px;">${it.preferred_brand || '-'}</td>
+                    </tr>
+                `;
+            });
+            
+            tableHtml += `</tbody></table>`;
+            contentArea.innerHTML = tableHtml;
+        } else {
+            contentArea.innerHTML = `<p style="text-align: center; color: var(--text-muted); padding: 20px;">Belum ada item BoQ yang tersimpan untuk tiket ini.</p>`;
+        }
+    } catch (error) {
+        console.error("Gagal memuat item:", error);
+        document.getElementById('items-content-area').innerHTML = `<p style="color: var(--danger);">Gagal memuat data dari server.</p>`;
+    }
+    
+}
+
+function closeItemsModal() {
+    const m = document.getElementById('items-modal');
+    if (m) m.remove();
+}
+
+// 7. SUBMIT FORM: VALIDASI WAJIB UPLOAD FILE EXCEL
+document.getElementById('request-form').onsubmit = async (e) => {
+    e.preventDefault();
+    
+    const fileInput = document.getElementById('boqFileInput');
+    if (fileInput.files.length === 0) {
+        alert("File BoQ Excel wajib diunggah sebelum mengirim request!");
+        return;
+    }
+
+    const btn = document.getElementById('btn-submit-req');
+    const statusDiv = document.getElementById('uploadStatus');
+    const originalText = btn.innerText;
+    
+    btn.innerText = 'Memproses...';
+    btn.disabled = true;
+
+    const payload = {
+        title: document.getElementById('req-title').value,
+        client_name: document.getElementById('req-client').value,
+        competitor_info: document.getElementById('req-competitor').value,
+        sla_date: document.getElementById('req-date').value,
+        notes: document.getElementById('req-notes').value,
+        requester_username: currentUser.username
+    };
+
+    try {
+        const res = await fetch('/api/requests', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const result = await res.json();
+        
+        if (!result.success) {
+            alert('Gagal membuat request.');
+            btn.innerText = originalText;
+            btn.disabled = false;
+            return;
+        }
+
+        const newTicketId = result.ticket_id;
+        statusDiv.innerHTML = "<span style='color: var(--primary);'>⏳ Mengunggah file BoQ Excel...</span>";
+        
+        const formData = new FormData();
+        formData.append('file', fileInput.files[0]);
+        formData.append('ticket_id', newTicketId);
+
+        const uploadRes = await fetch('/api/upload_boq', {
+            method: 'POST',
+            body: formData
+        });
+        const uploadResult = await uploadRes.json();
+
+        if (uploadRes.ok && uploadResult.success) {
+            alert(`Berhasil! Nomor Tiket: ${newTicketId} & BoQ berhasil diunggah.`);
+            closeModal();
+            fetchRequests(); 
+        } else {
+            alert(`Gagal memproses file Excel: ${uploadResult.message}`);
+            statusDiv.innerHTML = `<span style='color: var(--danger);'>❌ Gagal: ${uploadResult.message}</span>`;
+            btn.innerText = originalText;
+            btn.disabled = false;
+        }
+
+    } catch (error) {
+        console.error("Error:", error);
+        alert('Terjadi kesalahan jaringan saat mengirim data.');
+        btn.innerText = originalText;
+        btn.disabled = false;
+    }
+};
+
+async function handleLogout() {
+    try {
+        // 1. Perintahkan backend untuk menghapus session
+        await fetch('/api/logout', { method: 'POST' });
+    } catch (err) {
+        console.error("Gagal menghubungi server:", err);
+    } finally {
+        // 2. Hapus data lokal dan tendang ke halaman login
+        localStorage.removeItem('user');
+        window.location.href = '/login';
+    }
+}
+
+// Fungsi untuk mem-build HTML Timeline
+function getTimelineHtml(status, leadId) {
+    // Definisi logika status
+    const isNew = status === 'unassigned' || !status;
+    const isOngoing = status === 'ongoing';
+    const isWin = status === 'win';
+    const isLose = status === 'lose';
+    // Logika tampilan nama PIC
+    const picDisplay = leadId && leadId !== 'null' && leadId !== '' 
+        ? `<div style="margin-top: 5px; font-size: 11px; font-weight: 600; color: var(--primary); background: #e0f2fe; padding: 2px 8px; border-radius: 12px; display: inline-block;">🧑‍💻 PIC: ${leadId}</div>` 
+        : `<div style="margin-top: 5px; font-size: 11px; color: #94a3b8; font-style: italic;">Menunggu Assign</div>`;
+
+    return `
+    <div class="tracking-wrapper">
+        <h4 style="margin-top:0; margin-bottom:15px; font-size:13px; color:var(--text);">Status Pemrosesan BoQ</h4>
+        <ul class="stepper">
+            <!-- Step 1: Tiket Masuk -->
+            <div class="step completed">
+                <div class="step-circle">✓</div>
+                <div class="step-label">BoQ Diunggah</div>
+            </div>
+            
+            <!-- Step 2: Sedang Diproses -->
+            <div class="step ${isOngoing || isWin || isLose ? 'completed' : 'active'}">
+                <div class="step-circle">${isOngoing || isWin || isLose ? '✓' : '2'}</div>
+                <div class="step-label">Diproses Tim</div>
+                ${(isOngoing || isWin || isLose) ? picDisplay : ''}
+            </div>
+            
+            <!-- Step 3: Selesai (SPH Final) -->
+            <div class="step ${isWin ? 'completed' : isLose ? 'rejected' : (isOngoing ? 'active' : '')}">
+                <div class="step-circle">${isWin ? '✓' : isLose ? '✕' : '3'}</div>
+                <div class="step-label">${isLose ? 'Kalah / Batal' : 'SPH Final / Win'}</div>
+            </div>
+        </ul>
+    </div>
+    `;
+}
+
+// --- SISTEM NOTIFIKASI ---
+let isNotifOpen = false;
+
+function toggleNotif(event) {
+    event.stopPropagation();
+    const dropdown = document.getElementById('notif-dropdown');
+    isNotifOpen = !isNotifOpen;
+    dropdown.classList.toggle('active', isNotifOpen);
+    if (isNotifOpen) fetchNotifications();
+}
+
+// Tutup dropdown jika klik di luar area
+document.addEventListener('click', (e) => {
+    const wrapper = document.querySelector('.notif-wrapper');
+    const dropdown = document.getElementById('notif-dropdown');
+    if (wrapper && !wrapper.contains(e.target) && dropdown.classList.contains('active')) {
+        dropdown.classList.remove('active');
+        isNotifOpen = false;
+    }
+});
+
+async function fetchNotifications() {
+    // Ambil data user aktif (bisa activeUser atau currentUser tergantung nama variabel di file HTML-mu)
+    const userStr = localStorage.getItem('user');
+    if (!userStr) return;
+    const user = JSON.parse(userStr);
+    
+    // Jika user adalah admin, ambil notif untuk 'admin'. Jika SA, ambil berdasarkan username.
+    const targetId = user.role === 'admin' ? 'admin' : user.username;
+
+    try {
+        const res = await fetch(`/api/notifications?username=${targetId}`);
+        const result = await res.json();
+        if (result.success) renderNotifications(result.data);
+    } catch (err) {
+        console.error("Gagal menarik notifikasi", err);
+    }
+}
+
+function renderNotifications(data) {
+    const list = document.getElementById('notif-list');
+    const badge = document.getElementById('notif-count');
+    
+    const unreadCount = data.filter(n => !n.is_read).length;
+    
+    if (unreadCount > 0) {
+        badge.style.display = 'block';
+        badge.innerText = unreadCount > 99 ? '99+' : unreadCount;
+    } else {
+        badge.style.display = 'none';
+    }
+
+    if (data.length === 0) {
+        list.innerHTML = `<div style="padding: 24px 20px; text-align: center; color: var(--text-muted); font-size: 12px;">Belum ada notifikasi baru 🎉</div>`;
+        return;
+    }
+
+    list.innerHTML = data.map(n => `
+        <div class="notif-item ${n.is_read ? '' : 'unread'}" onclick="markNotifRead(${n.id})">
+            <div style="font-weight: 500; color: var(--text, #1e293b);">${n.message}</div>
+            <div class="notif-time">${n.created_at}</div>
+        </div>
+    `).join('');
+}
+
+async function markNotifRead(notifId) {
+    try {
+        await fetch(`/api/notifications/${notifId}/read`, { method: 'POST' });
+        fetchNotifications(); // Segarkan tampilan setelah di-klik
+    } catch (err) {
+        console.error("Gagal menandai notifikasi", err);
+    }
+}
+
+// Cek notifikasi saat halaman pertama dimuat, lalu ulangi setiap 30 detik
+setTimeout(fetchNotifications, 1000);
+setInterval(fetchNotifications, 30000);
+
+</script>
+
+</body>
+</html>
