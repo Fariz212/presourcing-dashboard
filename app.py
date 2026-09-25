@@ -183,6 +183,57 @@ def init_db():
                 
         conn.commit()
 
+    def migrate_json_to_relational():
+    with contextlib.closing(sqlite3.connect(DB_NAME)) as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        # Cek apakah tabel projects sudah ada isinya
+        cursor.execute("SELECT COUNT(*) FROM projects")
+        if cursor.fetchone()[0] > 0:
+            return # Sudah ada data, abaikan migrasi agar tidak duplikat
+            
+        # Ambil data JSON lama dari dashboard_state
+        cursor.execute("SELECT json_data FROM dashboard_state WHERE data_type = 'projects'")
+        row = cursor.fetchone()
+        if not row or not row['json_data']:
+            return
+            
+        projects_list = json.loads(row['json_data'])
+        
+        # Masukkan data JSON tersebut ke tabel relasional baru secara otomatis
+        for p in projects_list:
+            cursor.execute('''
+                INSERT OR IGNORE INTO projects (id, name, requestor_name, requestor_dept, priority, status, lead_id, sph_mode, project_sph_awal, project_sph_final, created_at, closed_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                p.get('id'), p.get('name'), p.get('requestorName'), p.get('requestorDept'), 
+                p.get('priority'), p.get('status'), p.get('leadId'), p.get('sphMode'), 
+                p.get('projectSphAwal'), p.get('projectSphFinal'), p.get('createdAt'), p.get('closedAt')
+            ))
+
+            for sow in p.get('sows', []):
+                cursor.execute("INSERT OR IGNORE INTO sows (id, project_id, name) VALUES (?, ?, ?)", (sow.get('id'), p.get('id'), sow.get('name')))
+                for boq in sow.get('boqs', []):
+                    cursor.execute("INSERT OR IGNORE INTO boqs (id, sow_id, name) VALUES (?, ?, ?)", (boq.get('id'), sow.get('id'), boq.get('name')))
+                    for it in boq.get('items', []):
+                        cursor.execute('''
+                            INSERT OR IGNORE INTO items (id, boq_id, product, qty, uom, vendor, sph_awal, sph_final, notes, pic_ids)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ''', (
+                            it.get('id'), boq.get('id'), it.get('product'), it.get('qty'), it.get('uom'), 
+                            it.get('vendor'), it.get('sphAwal'), it.get('sphFinal'), it.get('notes'), json.dumps(it.get('picIds', []))
+                        ))
+
+            for doc in p.get('comparison_docs', []):
+                cursor.execute('''
+                    INSERT INTO comparison_docs (project_id, vendor_name, offered_price, file_path)
+                    VALUES (?, ?, ?, ?)
+                ''', (p.get('id'), doc.get('vendor_name'), doc.get('offered_price'), doc.get('file_path')))
+                
+        conn.commit()
+        print("Migrasi data JSON lama ke tabel relasional berhasil!")
+
 init_db()
 
 # --- HELPER: AMBIL DATA RELASIONAL MENJADI JSON ---
