@@ -159,6 +159,16 @@ def init_db():
                 FOREIGN KEY (ticket_id) REFERENCES requests(ticket_id)
             )
         ''')
+
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS notifications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            target_user TEXT NOT NULL,
+            message TEXT NOT NULL,
+            is_read INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
         
         # Inject default users
         for user_data in [
@@ -217,6 +227,46 @@ def logout():
     session.clear() 
     return jsonify({"success": True, "message": "Berhasil logout"})
 
+# --- API ENDPOINTS (NOTIFIKASI) ---
+
+# 1. Ambil daftar notifikasi berdasarkan target user (admin atau username SA)
+@app.route('/api/notifications', methods=['GET'])
+def get_notifications():
+    target_user = request.args.get('username')
+    if not target_user:
+        return jsonify({"success": False, "message": "Target user diperlukan"}), 400
+
+    try:
+        with contextlib.closing(sqlite3.connect(DB_NAME)) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            
+            # Ambil 20 notifikasi terbaru untuk user tersebut (atau untuk admin)
+            cursor.execute('''
+                SELECT * FROM notifications 
+                WHERE target_user = ? OR target_user = 'broadcast'
+                ORDER BY created_at DESC LIMIT 20
+            ''', (target_user,))
+            
+            notifs = [dict(row) for row in cursor.fetchall()]
+            return jsonify({"success": True, "data": notifs}), 200
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+# 2. Tandai notifikasi sudah dibaca
+@app.route('/api/notifications/<int:notif_id>/read', methods=['POST'])
+def mark_notification_read(notif_id):
+    try:
+        with contextlib.closing(sqlite3.connect(DB_NAME)) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                UPDATE notifications SET is_read = 1 WHERE id = ?
+            ''', (notif_id,))
+            conn.commit()
+            return jsonify({"success": True, "message": "Notifikasi ditandai dibaca"}), 200
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
 # --- API ENDPOINTS (REQUEST & TICKETING) ---
 @app.route('/api/requests', methods=['POST'])
 def create_request():
@@ -238,6 +288,11 @@ def create_request():
                 payload.get('competitor_info'), payload.get('sla_date'), 
                 payload.get('notes'), payload.get('requester_username')
             ))
+            # --- TRIGGER NOTIFIKASI KE ADMIN ---
+            cursor.execute('''
+                INSERT INTO notifications (target_user, message) 
+                VALUES ('admin', ?)
+            ''', (f"Request Baru: {ticket_id} dari @{payload.get('requester_username')}",))
             conn.commit()
             return jsonify({"success": True, "message": "Request berhasil dibuat", "ticket_id": ticket_id}), 201
     except Exception as e:
@@ -409,7 +464,12 @@ def assign_ticket():
                     INSERT INTO dashboard_state (data_type, json_data) VALUES ('projects', ?)
                     ON CONFLICT(data_type) DO UPDATE SET json_data=excluded.json_data
                 ''', (json.dumps(projects_list),))
-            
+                # --- TRIGGER NOTIFIKASI KE SA ---
+                cursor.execute('''
+                    INSERT INTO notifications (target_user, message) 
+                    VALUES (?, ?)
+                ''', (req['requester_username'], f"Tiket {ticket_id} sudah di-assign ke PIC: {pic_username}"))
+                
             conn.commit()
             return jsonify({"success": True, "message": "Tiket berhasil di-assign!"}), 200
     except Exception as e:
