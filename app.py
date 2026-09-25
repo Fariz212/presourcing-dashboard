@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template, session, redirect, url_for, send_file
+from flask import Flask, request, jsonify, render_template, session, redirect, url_for, send_file, send_from_directory
 from flask_cors import CORS
 import pandas as pd
 import sqlite3
@@ -10,6 +10,7 @@ from datetime import datetime
 import contextlib # Tambahan untuk auto-close koneksi database
 
 app = Flask(__name__)
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 CORS(app) 
 
 app.secret_key = 'presourcing_secret_key_123'
@@ -271,8 +272,7 @@ def mark_notification_read(notif_id):
 @app.route('/api/requests', methods=['POST'])
 def create_request():
     payload = request.json
-    timestamp_str = datetime.now().strftime("%Y%m%d%H%M%S")
-    ticket_id = f"REQ-{timestamp_str}" 
+    ticket_id = f"REQ-{datetime.now().strftime('%y%m')}-{uuid.uuid4().hex[:4].upper()}"
     
     try:
         with contextlib.closing(sqlite3.connect(DB_NAME)) as conn:
@@ -607,6 +607,92 @@ def revisi_boq():
             return jsonify({"success": True, "message": "BoQ berhasil direvisi!"}), 200
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
+
+# --- API ENDPOINTS (DOKUMEN PEMBANDING / AUDIT TRAIL) ---
+@app.route('/api/upload_comparison', methods=['POST'])
+def upload_comparison():
+    ticket_id = request.form.get('ticket_id')
+    vendor_name = request.form.get('vendor_name')
+    offered_price = request.form.get('offered_price')
+    
+    # Validasi input
+    if 'file' not in request.files or not ticket_id or not vendor_name or not offered_price:
+        return jsonify({"success": False, "message": "Data tidak lengkap"}), 400
+        
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"success": False, "message": "File tidak valid"}), 400
+        
+    try:
+        # 1. Simpan di luar folder static agar tidak bisa diakses publik
+        save_dir = os.path.join('secure_data', 'comparisons')
+        os.makedirs(save_dir, exist_ok=True)
+        
+        # 2. Update URL path untuk frontend
+        ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else 'bin'
+        safe_filename = f"{ticket_id}_{uuid.uuid4().hex[:8]}.{ext}"
+        file_path = os.path.join(save_dir, safe_filename)
+        file.save(file_path)
+        
+        web_file_path = f"/api/downloads/comparisons/{safe_filename}"
+        
+        # 3. Simpan file ke sistem
+        file.save(file_path)
+        
+        # Path yang akan disimpan di database untuk diakses via web
+        web_file_path = f"/static/uploads/comparisons/{safe_filename}"
+        
+        # 4. Update JSON dashboard_state di database
+        with contextlib.closing(sqlite3.connect(DB_NAME)) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            
+            cursor.execute("SELECT json_data FROM dashboard_state WHERE data_type = 'projects'")
+            row = cursor.fetchone()
+            
+            if row and row['json_data']:
+                projects = json.loads(row['json_data'])
+                updated = False
+                
+                # Cari project berdasarkan ticket_id dan injeksi data pembanding
+                for p in projects:
+                    if p['id'] == ticket_id:
+                        # Pastikan array comparison_docs ada
+                        if 'comparison_docs' not in p:
+                            p['comparison_docs'] = []
+                        
+                        p['comparison_docs'].append({
+                            "vendor_name": vendor_name.strip(),
+                            "offered_price": float(offered_price),
+                            "file_path": web_file_path
+                        })
+                        updated = True
+                        break
+                        
+                if updated:
+                    cursor.execute('''
+                        UPDATE dashboard_state 
+                        SET json_data = ? 
+                        WHERE data_type = 'projects'
+                    ''', (json.dumps(projects),))
+                    conn.commit()
+                    return jsonify({"success": True, "message": "Dokumen pembanding berhasil diunggah"}), 200
+                else:
+                    return jsonify({"success": False, "message": "Project tidak ditemukan di dashboard"}), 404
+            else:
+                return jsonify({"success": False, "message": "Data project kosong"}), 404
+                
+    except Exception as e:
+        return jsonify({"success": False, "message": f"Terjadi kesalahan server: {str(e)}"}), 500
+
+# --- ENDPOINT DOWNLOAD SPH PEMBANDING (SECURE) ---
+@app.route('/api/downloads/comparisons/<filename>')
+def download_comparison(filename):
+    if 'username' not in session:
+        return jsonify({"success": False, "message": "Akses ditolak! Silakan login."}), 403
+        
+    secure_dir = os.path.join(app.root_path, 'secure_data', 'comparisons')
+    return send_from_directory(secure_dir, filename)
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5001))
