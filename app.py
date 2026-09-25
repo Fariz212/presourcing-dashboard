@@ -183,7 +183,6 @@ def init_db():
                 
         conn.commit()
 
-# --- PASTIKAN FUNGSI INI RATA KIRI SEJAJAR DENGAN def init_db(): ---
 def migrate_json_to_relational():
     with contextlib.closing(sqlite3.connect(DB_NAME)) as conn:
         conn.row_factory = sqlite3.Row
@@ -227,8 +226,6 @@ def migrate_json_to_relational():
                         ))
 
             for doc in p.get('comparison_docs', []):
-                # Catatan: JSON lama mungkin menggunakan format camelCase 'vendorName' & 'offeredPrice'
-                # Menggunakan dict.get() fallback agar tidak null saat migrasi JSON lama ke Relasional
                 vendor_name = doc.get('vendor_name') or doc.get('vendorName')
                 offered_price = doc.get('offered_price') or doc.get('offeredPrice')
                 file_path = doc.get('file_path') or doc.get('filePath')
@@ -341,7 +338,6 @@ def mark_notification_read(notif_id):
 @app.route('/api/requests', methods=['POST'])
 def create_request():
     payload = request.json
-    # ID Tiket disederhanakan: REQ-YYMM-XXXX
     ticket_id = f"REQ-{datetime.now().strftime('%y%m')}-{uuid.uuid4().hex[:4].upper()}"
     try:
         with contextlib.closing(sqlite3.connect(DB_NAME)) as conn:
@@ -469,6 +465,8 @@ def api_presourcing():
 
                 for p in projects:
                     cursor.execute("DELETE FROM projects WHERE id = ?", (p['id'],)) # Cascade membersihkan SOW, BOQ, dll
+                    cursor.execute("DELETE FROM request_items WHERE ticket_id = ?", (p['id'],))
+                    cursor.execute("DELETE FROM requests WHERE ticket_id = ?", (p['id'],))
                     cursor.execute('''INSERT INTO projects (id, name, requestor_name, requestor_dept, priority, status, lead_id, sph_mode, project_sph_awal, project_sph_final, created_at, closed_at)
                                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
                                    (p['id'], p.get('name'), p.get('requestorName'), p.get('requestorDept'), p.get('priority'), p.get('status'), p.get('leadId'), p.get('sphMode'), p.get('projectSphAwal'), p.get('projectSphFinal'), p.get('createdAt'), p.get('closedAt')))
@@ -489,6 +487,32 @@ def api_presourcing():
             return jsonify({"success": True}), 200
         except Exception as e:
             return jsonify({"error": str(e)}), 500
+
+@app.route('/api/projects/<project_id>', methods=['DELETE'])
+def delete_project(project_id):
+    if 'username' not in session:
+        return jsonify({"success": False, "message": "Akses ditolak! Silakan login."}), 403
+        
+    try:
+        with contextlib.closing(sqlite3.connect(DB_NAME)) as conn:
+            conn.execute("PRAGMA foreign_keys = ON") 
+            cursor = conn.cursor()
+            
+            # Hapus project (cascade ke SOW, BOQ, items, comparison_docs)
+            cursor.execute("DELETE FROM projects WHERE id = ?", (project_id,))
+            
+            # Bersihkan juga tiket request terkait (opsional tapi disarankan agar rapi)
+            cursor.execute("DELETE FROM request_items WHERE ticket_id = ?", (project_id,))
+            cursor.execute("DELETE FROM requests WHERE ticket_id = ?", (project_id,))
+            
+            if cursor.rowcount > 0:
+                conn.commit()
+                return jsonify({"success": True, "message": "Project berhasil dihapus dari database!"}), 200
+            else:
+                return jsonify({"success": False, "message": "Project tidak ditemukan atau sudah terhapus."}), 404
+                
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
 
 @app.route('/api/download_report', methods=['GET'])
 def download_report():
