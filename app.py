@@ -228,7 +228,7 @@ def upload_boq():
     file = request.files['file']
     try:
         df = pd.read_excel(file)
-        
+
         # SUNTIKAN 1: Sanitasi Timestamp
         for col in df.select_dtypes(include=['datetime64']).columns:
             df[col] = df[col].dt.strftime('%Y-%m-%d')
@@ -432,8 +432,9 @@ def revisi_boq():
     if 'file' not in request.files or not ticket_id: return jsonify({"success": False, "message": "Data tidak valid"}), 400
     try:
         df = pd.read_excel(request.files['file'])
-        # SUNTIKAN 1: Sanitasi Timestamp
-        for col in df.select_dtypes(include=['datetime64', 'datetimelike']).columns:
+        
+        # SUNTIKAN 1: Sanitasi Timestamp yang aman
+        for col in df.select_dtypes(include=['datetime64']).columns:
             df[col] = df[col].dt.strftime('%Y-%m-%d')
         df = df.fillna("")
 
