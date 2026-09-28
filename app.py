@@ -228,8 +228,9 @@ def upload_boq():
     file = request.files['file']
     try:
         df = pd.read_excel(file)
+        
         # SUNTIKAN 1: Sanitasi Timestamp
-        for col in df.select_dtypes(include=['datetime64', 'datetimelike']).columns:
+        for col in df.select_dtypes(include=['datetime64']).columns:
             df[col] = df[col].dt.strftime('%Y-%m-%d')
         df = df.fillna("")
 
