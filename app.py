@@ -1,20 +1,22 @@
-from flask import Flask, request, jsonify, render_template, session, redirect, url_for, send_file, send_from_directory
-from flask_cors import CORS
-import pandas as pd
-import sqlite3
-import json
 import os
 import io
 import uuid
-from datetime import datetime
+import json
+import sqlite3
 import contextlib
+from datetime import datetime
+import pandas as pd
+from flask import Flask, request, jsonify, render_template, session, redirect, url_for, send_file, send_from_directory
+from flask_cors import CORS
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
-# Proteksi memori server: Batasi maksimal upload file 16MB
+
+# BEST PRACTICE 1: Proteksi memori & konfigurasi secret key dinamis (Environment Variable)
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
+app.secret_key = os.environ.get('SECRET_KEY', 'presourcing_secret_key_123')
 CORS(app) 
 
-app.secret_key = 'presourcing_secret_key_123'
 DB_NAME = 'presourcing_db.sqlite'
 
 # --- ROUTING HALAMAN HTML ---
@@ -41,134 +43,17 @@ def init_db():
     with contextlib.closing(sqlite3.connect(DB_NAME)) as conn:
         cursor = conn.cursor()
         
-        # Tabel legacy (tetap digunakan untuk fallback tim)
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS dashboard_state (
-                id INTEGER PRIMARY KEY,
-                data_type TEXT UNIQUE,
-                json_data TEXT
-            )
-        ''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS dashboard_state (id INTEGER PRIMARY KEY, data_type TEXT UNIQUE, json_data TEXT)''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, password TEXT NOT NULL, full_name TEXT NOT NULL, department TEXT, role TEXT NOT NULL)''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS requests (id INTEGER PRIMARY KEY AUTOINCREMENT, ticket_id TEXT UNIQUE NOT NULL, title TEXT NOT NULL, client_name TEXT, competitor_info TEXT, sla_date TEXT NOT NULL, notes TEXT, status TEXT DEFAULT 'unassigned', requester_username TEXT NOT NULL, pic_username TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS request_items (id INTEGER PRIMARY KEY AUTOINCREMENT, ticket_id TEXT NOT NULL, sow_name TEXT DEFAULT 'General Scope', boq_section TEXT DEFAULT 'General Items', item_no TEXT, description TEXT NOT NULL, preferred_brand TEXT, quantity INTEGER, uom TEXT, delivery_time TEXT, vendor TEXT, FOREIGN KEY (ticket_id) REFERENCES requests(ticket_id) ON DELETE CASCADE)''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS notifications (id INTEGER PRIMARY KEY AUTOINCREMENT, target_user TEXT NOT NULL, message TEXT NOT NULL, is_read INTEGER DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, name TEXT, requestor_name TEXT, requestor_dept TEXT, priority TEXT, status TEXT, lead_id TEXT, sph_mode TEXT, project_sph_awal REAL, project_sph_final REAL, created_at TEXT, closed_at TEXT)''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS sows (id TEXT PRIMARY KEY, project_id TEXT, name TEXT, FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE)''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS boqs (id TEXT PRIMARY KEY, sow_id TEXT, name TEXT, FOREIGN KEY(sow_id) REFERENCES sows(id) ON DELETE CASCADE)''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS items (id TEXT PRIMARY KEY, boq_id TEXT, product TEXT, qty REAL, uom TEXT, vendor TEXT, sph_awal REAL, sph_final REAL, notes TEXT, pic_ids TEXT, FOREIGN KEY(boq_id) REFERENCES boqs(id) ON DELETE CASCADE)''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS comparison_docs (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id TEXT, vendor_name TEXT, offered_price REAL, file_path TEXT, FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE)''')
         
-        # Tabel sistem dan user
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT UNIQUE NOT NULL,
-                password TEXT NOT NULL,
-                full_name TEXT NOT NULL,
-                department TEXT,
-                role TEXT NOT NULL
-            )
-        ''')
-        
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS requests (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                ticket_id TEXT UNIQUE NOT NULL,
-                title TEXT NOT NULL,
-                client_name TEXT,
-                competitor_info TEXT,
-                sla_date TEXT NOT NULL,
-                notes TEXT,
-                status TEXT DEFAULT 'unassigned', 
-                requester_username TEXT NOT NULL,
-                pic_username TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS request_items (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                ticket_id TEXT NOT NULL,
-                sow_name TEXT DEFAULT 'General Scope',
-                boq_section TEXT DEFAULT 'General Items',
-                item_no TEXT,
-                description TEXT NOT NULL,
-                preferred_brand TEXT,
-                quantity INTEGER,
-                uom TEXT,
-                delivery_time TEXT,
-                vendor TEXT,
-                FOREIGN KEY (ticket_id) REFERENCES requests(ticket_id) ON DELETE CASCADE
-            )
-        ''')
-
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS notifications (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                target_user TEXT NOT NULL,
-                message TEXT NOT NULL,
-                is_read INTEGER DEFAULT 0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-
-        # --- STRUKTUR TABEL RELASIONAL PRESOURCING V2 ---
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS projects (
-                id TEXT PRIMARY KEY,
-                name TEXT,
-                requestor_name TEXT,
-                requestor_dept TEXT,
-                priority TEXT,
-                status TEXT,
-                lead_id TEXT,
-                sph_mode TEXT,
-                project_sph_awal REAL,
-                project_sph_final REAL,
-                created_at TEXT,
-                closed_at TEXT
-            )
-        ''')
-        
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS sows (
-                id TEXT PRIMARY KEY,
-                project_id TEXT,
-                name TEXT,
-                FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
-            )
-        ''')
-        
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS boqs (
-                id TEXT PRIMARY KEY,
-                sow_id TEXT,
-                name TEXT,
-                FOREIGN KEY(sow_id) REFERENCES sows(id) ON DELETE CASCADE
-            )
-        ''')
-        
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS items (
-                id TEXT PRIMARY KEY,
-                boq_id TEXT,
-                product TEXT,
-                qty REAL,
-                uom TEXT,
-                vendor TEXT,
-                sph_awal REAL,
-                sph_final REAL,
-                notes TEXT,
-                pic_ids TEXT, 
-                FOREIGN KEY(boq_id) REFERENCES boqs(id) ON DELETE CASCADE
-            )
-        ''')
-
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS comparison_docs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                project_id TEXT,
-                vendor_name TEXT,
-                offered_price REAL,
-                file_path TEXT,
-                FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
-            )
-        ''')
-        
-        # Inject default users
         for user_data in [
             ('admin', 'admin123', 'Admin Presourcing', 'Presourcing Control', 'admin'),
             ('master', 'master123', 'Master Admin', 'System Control', 'admin'),
@@ -176,11 +61,7 @@ def init_db():
         ]:
             cursor.execute("SELECT COUNT(*) FROM users WHERE username = ?", (user_data[0],))
             if cursor.fetchone()[0] == 0:
-                cursor.execute('''
-                    INSERT INTO users (username, password, full_name, department, role) 
-                    VALUES (?, ?, ?, ?, ?)
-                ''', user_data)
-                
+                cursor.execute("INSERT INTO users (username, password, full_name, department, role) VALUES (?, ?, ?, ?, ?)", user_data)
         conn.commit()
 
 def migrate_json_to_relational():
@@ -189,51 +70,24 @@ def migrate_json_to_relational():
         cursor = conn.cursor()
         
         cursor.execute("SELECT COUNT(*) FROM projects")
-        if cursor.fetchone()[0] > 0:
-            return 
+        if cursor.fetchone()[0] > 0: return 
             
         cursor.execute("SELECT json_data FROM dashboard_state WHERE data_type = 'projects'")
         row = cursor.fetchone()
-        if not row or not row['json_data']:
-            return
+        if not row or not row['json_data']: return
             
         projects_list = json.loads(row['json_data'])
-        
         for p in projects_list:
-            cursor.execute('''
-                INSERT OR IGNORE INTO projects (id, name, requestor_name, requestor_dept, priority, status, lead_id, sph_mode, project_sph_awal, project_sph_final, created_at, closed_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                p.get('id'), p.get('name'), p.get('requestorName'), p.get('requestorDept'), 
-                p.get('priority'), p.get('status'), p.get('leadId'), p.get('sphMode'), 
-                p.get('projectSphAwal'), p.get('projectSphFinal'), p.get('createdAt'), p.get('closedAt')
-            ))
-
+            cursor.execute('''INSERT OR IGNORE INTO projects (id, name, requestor_name, requestor_dept, priority, status, lead_id, sph_mode, project_sph_awal, project_sph_final, created_at, closed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', (p.get('id'), p.get('name'), p.get('requestorName'), p.get('requestorDept'), p.get('priority'), p.get('status'), p.get('leadId'), p.get('sphMode'), p.get('projectSphAwal'), p.get('projectSphFinal'), p.get('createdAt'), p.get('closedAt')))
             for sow in p.get('sows', []):
                 cursor.execute("INSERT OR IGNORE INTO sows (id, project_id, name) VALUES (?, ?, ?)", (sow.get('id'), p.get('id'), sow.get('name')))
                 for boq in sow.get('boqs', []):
                     cursor.execute("INSERT OR IGNORE INTO boqs (id, sow_id, name) VALUES (?, ?, ?)", (boq.get('id'), sow.get('id'), boq.get('name')))
                     for it in boq.get('items', []):
-                        cursor.execute('''
-                            INSERT OR IGNORE INTO items (id, boq_id, product, qty, uom, vendor, sph_awal, sph_final, notes, pic_ids)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        ''', (
-                            it.get('id'), boq.get('id'), it.get('product'), it.get('qty'), it.get('uom'), 
-                            it.get('vendor'), it.get('sphAwal'), it.get('sphFinal'), it.get('notes'), json.dumps(it.get('picIds', []))
-                        ))
-
+                        cursor.execute("INSERT OR IGNORE INTO items (id, boq_id, product, qty, uom, vendor, sph_awal, sph_final, notes, pic_ids) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (it.get('id'), boq.get('id'), it.get('product'), it.get('qty'), it.get('uom'), it.get('vendor'), it.get('sphAwal'), it.get('sphFinal'), it.get('notes'), json.dumps(it.get('picIds', []))))
             for doc in p.get('comparison_docs', []):
-                vendor_name = doc.get('vendor_name') or doc.get('vendorName')
-                offered_price = doc.get('offered_price') or doc.get('offeredPrice')
-                file_path = doc.get('file_path') or doc.get('filePath')
-                
-                cursor.execute('''
-                    INSERT INTO comparison_docs (project_id, vendor_name, offered_price, file_path)
-                    VALUES (?, ?, ?, ?)
-                ''', (p.get('id'), vendor_name, offered_price, file_path))
-                
+                cursor.execute("INSERT INTO comparison_docs (project_id, vendor_name, offered_price, file_path) VALUES (?, ?, ?, ?)", (p.get('id'), doc.get('vendor_name') or doc.get('vendorName'), doc.get('offered_price') or doc.get('offeredPrice'), doc.get('file_path') or doc.get('filePath')))
         conn.commit()
-        print("Migrasi data JSON lama ke tabel relasional berhasil!")
 
 init_db()
 migrate_json_to_relational()
@@ -243,29 +97,21 @@ def get_projects_relational(cursor):
     cursor.execute("SELECT * FROM projects")
     projects_data = []
     
-    # Ambil semua data sekaligus untuk meminimalisir query ke DB (Optimasi N+1 query issue)
     cursor.execute("SELECT * FROM comparison_docs")
-    all_docs = cursor.fetchall()
     docs_map = {}
-    for d in all_docs:
-        docs_map.setdefault(d['project_id'], []).append(dict(d))
+    for d in cursor.fetchall(): docs_map.setdefault(d['project_id'], []).append(dict(d))
         
     cursor.execute("SELECT * FROM sows")
-    all_sows = cursor.fetchall()
     sows_map = {}
-    for s in all_sows:
-        sows_map.setdefault(s['project_id'], []).append(dict(s))
+    for s in cursor.fetchall(): sows_map.setdefault(s['project_id'], []).append(dict(s))
         
     cursor.execute("SELECT * FROM boqs")
-    all_boqs = cursor.fetchall()
     boqs_map = {}
-    for b in all_boqs:
-        boqs_map.setdefault(b['sow_id'], []).append(dict(b))
+    for b in cursor.fetchall(): boqs_map.setdefault(b['sow_id'], []).append(dict(b))
         
     cursor.execute("SELECT * FROM items")
-    all_items = cursor.fetchall()
     items_map = {}
-    for i in all_items:
+    for i in cursor.fetchall():
         it = dict(i)
         it['picIds'] = json.loads(it['pic_ids']) if it['pic_ids'] else []
         it['sphAwal'] = it.pop('sph_awal')
@@ -279,19 +125,13 @@ def get_projects_relational(cursor):
         sows = sows_map.get(p['id'], [])
         for s in sows:
             boqs = boqs_map.get(s['id'], [])
-            for b in boqs:
-                b['items'] = items_map.get(b['id'], [])
+            for b in boqs: b['items'] = items_map.get(b['id'], [])
             s['boqs'] = boqs
         p['sows'] = sows
         
-        p['requestorName'] = p.pop('requestor_name')
-        p['requestorDept'] = p.pop('requestor_dept')
-        p['leadId'] = p.pop('lead_id')
-        p['sphMode'] = p.pop('sph_mode')
-        p['projectSphAwal'] = p.pop('project_sph_awal')
-        p['projectSphFinal'] = p.pop('project_sph_final')
-        p['createdAt'] = p.pop('created_at')
-        p['closedAt'] = p.pop('closed_at')
+        p['requestorName'], p['requestorDept'], p['leadId'], p['sphMode'] = p.pop('requestor_name'), p.pop('requestor_dept'), p.pop('lead_id'), p.pop('sph_mode')
+        p['projectSphAwal'], p['projectSphFinal'] = p.pop('project_sph_awal'), p.pop('project_sph_final')
+        p['createdAt'], p['closedAt'] = p.pop('created_at'), p.pop('closed_at')
         projects_data.append(p)
     return projects_data
 
@@ -301,9 +141,7 @@ def register():
     payload = request.json
     try:
         with contextlib.closing(sqlite3.connect(DB_NAME)) as conn:
-            cursor = conn.cursor()
-            cursor.execute('INSERT INTO users (username, password, full_name, department, role) VALUES (?, ?, ?, ?, ?)', 
-                           (payload.get('username'), payload.get('password'), payload.get('full_name'), payload.get('department', ''), payload.get('role', 'sa')))
+            conn.cursor().execute('INSERT INTO users (username, password, full_name, department, role) VALUES (?, ?, ?, ?, ?)', (payload.get('username'), payload.get('password'), payload.get('full_name'), payload.get('department', ''), payload.get('role', 'sa')))
             conn.commit()
             return jsonify({"success": True, "message": "Registrasi berhasil!"}), 201
     except sqlite3.IntegrityError:
@@ -314,8 +152,7 @@ def login():
     payload = request.json
     with contextlib.closing(sqlite3.connect(DB_NAME)) as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT username, full_name, department, role FROM users WHERE username = ? AND password = ?", 
-                       (payload.get('username'), payload.get('password')))
+        cursor.execute("SELECT username, full_name, department, role FROM users WHERE username = ? AND password = ?", (payload.get('username'), payload.get('password')))
         user = cursor.fetchone()
         if user:
             session.update({'username': user[0], 'full_name': user[1], 'department': user[2], 'role': user[3]})
@@ -352,10 +189,7 @@ def create_request():
     try:
         with contextlib.closing(sqlite3.connect(DB_NAME)) as conn:
             cursor = conn.cursor()
-            cursor.execute('''
-                INSERT INTO requests (ticket_id, title, client_name, competitor_info, sla_date, notes, requester_username, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, 'unassigned')
-            ''', (ticket_id, payload.get('title'), payload.get('client_name'), payload.get('competitor_info'), payload.get('sla_date'), payload.get('notes'), payload.get('requester_username')))
+            cursor.execute("INSERT INTO requests (ticket_id, title, client_name, competitor_info, sla_date, notes, requester_username, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'unassigned')", (ticket_id, payload.get('title'), payload.get('client_name'), payload.get('competitor_info'), payload.get('sla_date'), payload.get('notes'), payload.get('requester_username')))
             cursor.execute("INSERT INTO notifications (target_user, message) VALUES ('admin', ?)", (f"Request Baru: {ticket_id} dari @{payload.get('requester_username')}",))
             conn.commit()
             return jsonify({"success": True, "message": "Request berhasil dibuat", "ticket_id": ticket_id}), 201
@@ -382,17 +216,31 @@ def upload_boq():
     if not ticket_id or 'file' not in request.files: return jsonify({"success": False, "message": "Data tidak lengkap"}), 400
     file = request.files['file']
     try:
-        df = pd.read_excel(file).fillna("")
+        # BEST PRACTICE 2: Sanitasi Excel Pandas. Konversi format waktu menjadi string agar SQLite tidak crash
+        df = pd.read_excel(file)
+        for col in df.select_dtypes(include=['datetime64', 'datetimelike']).columns:
+            df[col] = df[col].dt.strftime('%Y-%m-%d')
+        df = df.fillna("")
+        
         with contextlib.closing(sqlite3.connect(DB_NAME)) as conn:
             cursor = conn.cursor()
             for _, row in df.iterrows():
+                # BEST PRACTICE 3: Defensive type casting (Pastikan tipe data string utuh ke DB)
                 cursor.execute('''
                     INSERT INTO request_items (ticket_id, sow_name, boq_section, item_no, description, preferred_brand, quantity, uom, delivery_time, vendor) 
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (ticket_id, str(row.get("Scope of Work (Opsional)", "")).strip() or "General Scope", 
-                      str(row.get("Bill of Quantity (Opsional)", "")).strip() or "General Items", str(row.get("Item No", "")), 
-                      row.get("Deskripsi Item", ""), row.get("Preferred Brand", ""), row.get("Qty", 0), 
-                      row.get("UoM", ""), row.get("Delivery Time (RFS)", ""), str(row.get("Vendor (Opsional)", "")).strip() or None))
+                ''', (
+                    ticket_id, 
+                    str(row.get("Scope of Work (Opsional)", "")).strip() or "General Scope", 
+                    str(row.get("Bill of Quantity (Opsional)", "")).strip() or "General Items", 
+                    str(row.get("Item No", "")), 
+                    str(row.get("Deskripsi Item", "")), 
+                    str(row.get("Preferred Brand", "")), 
+                    row.get("Qty", 0), 
+                    str(row.get("UoM", "")), 
+                    str(row.get("Delivery Time (RFS)", "")), 
+                    str(row.get("Vendor (Opsional)", "")).strip() or None
+                ))
             conn.commit()
             return jsonify({"success": True, "message": "File BoQ berhasil diunggah!"}), 200
     except Exception as e:
@@ -427,11 +275,8 @@ def assign_ticket():
                     title = f"{req['title']} ({req['client_name'] or 'Klien Umum'})"
                     created = req['created_at'][:10] if req['created_at'] else datetime.now().strftime('%Y-%m-%d')
                     
-                    cursor.execute('''INSERT INTO projects (id, name, requestor_name, requestor_dept, priority, status, lead_id, sph_mode, created_at)
-                                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''', 
-                                   (ticket_id, title, req_name, req_dept, 'High', 'ongoing', pic_username, 'item', created))
+                    cursor.execute("INSERT INTO projects (id, name, requestor_name, requestor_dept, priority, status, lead_id, sph_mode, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", (ticket_id, title, req_name, req_dept, 'High', 'ongoing', pic_username, 'item', created))
                     
-                    # DINAMIS BACA SOW DAN BOQ DARI REQUEST_ITEMS
                     cursor.execute("SELECT * FROM request_items WHERE ticket_id = ?", (ticket_id,))
                     req_items = cursor.fetchall()
                     
@@ -439,7 +284,6 @@ def assign_ticket():
                     for it in req_items:
                         s_name = it['sow_name'] if it['sow_name'] else "General Scope of Work"
                         b_name = it['boq_section'] if it['boq_section'] else "General Items"
-                        
                         if s_name not in grouped_data: grouped_data[s_name] = {}
                         if b_name not in grouped_data[s_name]: grouped_data[s_name][b_name] = []
                         grouped_data[s_name][b_name].append(it)
@@ -447,14 +291,11 @@ def assign_ticket():
                     for s_name, boqs in grouped_data.items():
                         sow_id = f"sow_{uuid.uuid4().hex[:8]}"
                         cursor.execute("INSERT INTO sows (id, project_id, name) VALUES (?, ?, ?)", (sow_id, ticket_id, s_name))
-                        
                         for b_name, items_list in boqs.items():
                             boq_id = f"boq_{uuid.uuid4().hex[:8]}"
                             cursor.execute("INSERT INTO boqs (id, sow_id, name) VALUES (?, ?, ?)", (boq_id, sow_id, b_name))
-                            
                             for it in items_list:
-                                cursor.execute("INSERT INTO items (id, boq_id, product, qty, uom, vendor, pic_ids) VALUES (?, ?, ?, ?, ?, ?, ?)", 
-                                               (f"item_{uuid.uuid4().hex[:8]}", boq_id, it['description'], it['quantity'], it['uom'], it['vendor'] or "", json.dumps([pic_username])))
+                                cursor.execute("INSERT INTO items (id, boq_id, product, qty, uom, vendor, pic_ids) VALUES (?, ?, ?, ?, ?, ?, ?)", (f"item_{uuid.uuid4().hex[:8]}", boq_id, it['description'], it['quantity'], it['uom'], it['vendor'] or "", json.dumps([pic_username])))
 
                 cursor.execute("INSERT INTO notifications (target_user, message) VALUES (?, ?)", (req['requester_username'], f"Tiket {ticket_id} sudah di-assign ke PIC: {pic_username}"))
             conn.commit()
@@ -483,11 +324,10 @@ def api_presourcing():
         projects, team = data.get('projects', []), data.get('team', [])
         try:
             with contextlib.closing(sqlite3.connect(DB_NAME)) as conn:
-                conn.execute("PRAGMA foreign_keys = ON") # Wajib untuk CASCADE DELETE
+                conn.execute("PRAGMA foreign_keys = ON") 
                 cursor = conn.cursor()
                 cursor.execute("REPLACE INTO dashboard_state (data_type, json_data) VALUES ('team', ?)", (json.dumps(team),))
                 
-                # Deteksi sinkronisasi delete dari frontend
                 cursor.execute("SELECT id FROM projects")
                 existing_db_ids = {row[0] for row in cursor.fetchall()}
                 incoming_ids = {p['id'] for p in projects}
@@ -497,22 +337,17 @@ def api_presourcing():
 
                 for p in projects:
                     cursor.execute("DELETE FROM projects WHERE id = ?", (p['id'],)) 
-                    cursor.execute('''INSERT INTO projects (id, name, requestor_name, requestor_dept, priority, status, lead_id, sph_mode, project_sph_awal, project_sph_final, created_at, closed_at)
-                                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                                   (p['id'], p.get('name'), p.get('requestorName'), p.get('requestorDept'), p.get('priority'), p.get('status'), p.get('leadId'), p.get('sphMode'), p.get('projectSphAwal'), p.get('projectSphFinal'), p.get('createdAt'), p.get('closedAt')))
+                    cursor.execute("INSERT INTO projects (id, name, requestor_name, requestor_dept, priority, status, lead_id, sph_mode, project_sph_awal, project_sph_final, created_at, closed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (p['id'], p.get('name'), p.get('requestorName'), p.get('requestorDept'), p.get('priority'), p.get('status'), p.get('leadId'), p.get('sphMode'), p.get('projectSphAwal'), p.get('projectSphFinal'), p.get('createdAt'), p.get('closedAt')))
 
                     for sow in p.get('sows', []):
                         cursor.execute("INSERT INTO sows (id, project_id, name) VALUES (?, ?, ?)", (sow['id'], p['id'], sow.get('name')))
                         for boq in sow.get('boqs', []):
                             cursor.execute("INSERT INTO boqs (id, sow_id, name) VALUES (?, ?, ?)", (boq['id'], sow['id'], boq.get('name')))
                             for it in boq.get('items', []):
-                                cursor.execute('''INSERT INTO items (id, boq_id, product, qty, uom, vendor, sph_awal, sph_final, notes, pic_ids)
-                                                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                                               (it['id'], boq['id'], it.get('product'), it.get('qty'), it.get('uom'), it.get('vendor'), it.get('sphAwal'), it.get('sphFinal'), it.get('notes'), json.dumps(it.get('picIds', []))))
+                                cursor.execute("INSERT INTO items (id, boq_id, product, qty, uom, vendor, sph_awal, sph_final, notes, pic_ids) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (it['id'], boq['id'], it.get('product'), it.get('qty'), it.get('uom'), it.get('vendor'), it.get('sphAwal'), it.get('sphFinal'), it.get('notes'), json.dumps(it.get('picIds', []))))
 
                     for doc in p.get('comparison_docs', []):
-                        cursor.execute("INSERT INTO comparison_docs (project_id, vendor_name, offered_price, file_path) VALUES (?, ?, ?, ?)", 
-                                       (p['id'], doc.get('vendor_name'), doc.get('offered_price'), doc.get('file_path')))
+                        cursor.execute("INSERT INTO comparison_docs (project_id, vendor_name, offered_price, file_path) VALUES (?, ?, ?, ?)", (p['id'], doc.get('vendor_name'), doc.get('offered_price'), doc.get('file_path')))
                 conn.commit()
             return jsonify({"success": True}), 200
         except Exception as e:
@@ -570,12 +405,15 @@ def revisi_boq():
     ticket_id = request.form.get('ticket_id')
     if 'file' not in request.files or not ticket_id: return jsonify({"success": False, "message": "Data tidak valid"}), 400
     try:
-        df = pd.read_excel(request.files['file']).fillna("")
+        df = pd.read_excel(request.files['file'])
+        for col in df.select_dtypes(include=['datetime64', 'datetimelike']).columns:
+            df[col] = df[col].dt.strftime('%Y-%m-%d')
+        df = df.fillna("")
+        
         with contextlib.closing(sqlite3.connect(DB_NAME)) as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             
-            # 1. Update tabel presales request_items (Sama seperti sebelumnya)
             cursor.execute("SELECT * FROM request_items WHERE ticket_id = ?", (ticket_id,))
             old_req_items = {str(r['description']).strip().lower(): dict(r) for r in cursor.fetchall()}
             new_descs = set()
@@ -584,24 +422,23 @@ def revisi_boq():
                 if not desc_raw: continue
                 desc_key = desc_raw.lower()
                 new_descs.add(desc_key)
-                qty, uom, vendor = row.get("Qty", 0), row.get("UoM", ""), row.get("Vendor (Opsional)", "")
+                
+                qty = row.get("Qty", 0)
+                uom = str(row.get("UoM", ""))
+                vendor = str(row.get("Vendor (Opsional)", ""))
                 s_name = str(row.get("Scope of Work (Opsional)", "")).strip() or "General Scope of Work"
                 b_name = str(row.get("Bill of Quantity (Opsional)", "")).strip() or "General Items"
+                
                 if desc_key in old_req_items:
-                    cursor.execute("UPDATE request_items SET sow_name=?, boq_section=?, quantity=?, uom=?, vendor=? WHERE id=?", 
-                                   (s_name, b_name, qty, uom, vendor, old_req_items[desc_key]['id']))
+                    cursor.execute("UPDATE request_items SET sow_name=?, boq_section=?, quantity=?, uom=?, vendor=? WHERE id=?", (s_name, b_name, qty, uom, vendor, old_req_items[desc_key]['id']))
                 else:
-                    cursor.execute("INSERT INTO request_items (ticket_id, sow_name, boq_section, description, quantity, uom, vendor) VALUES (?, ?, ?, ?, ?, ?, ?)", 
-                                   (ticket_id, s_name, b_name, desc_raw, qty, uom, vendor))
+                    cursor.execute("INSERT INTO request_items (ticket_id, sow_name, boq_section, description, quantity, uom, vendor) VALUES (?, ?, ?, ?, ?, ?, ?)", (ticket_id, s_name, b_name, desc_raw, qty, uom, vendor))
             for old_key, old_data in old_req_items.items():
                 if old_key not in new_descs: cursor.execute("DELETE FROM request_items WHERE id = ?", (old_data['id'],))
             
-            # 2. Update tabel presourcing secara DINAMIS (SOW dan BOQ)
             cursor.execute("SELECT i.* FROM items i JOIN boqs b ON i.boq_id = b.id JOIN sows s ON b.sow_id = s.id WHERE s.project_id = ?", (ticket_id,))
             old_items = {str(r['product']).strip().lower(): dict(r) for r in cursor.fetchall()}
-            
-            sow_map = {} 
-            boq_map = {} 
+            sow_map, boq_map = {}, {} 
             
             cursor.execute("SELECT id, name FROM sows WHERE project_id = ?", (ticket_id,))
             for s_row in cursor.fetchall():
@@ -614,8 +451,9 @@ def revisi_boq():
                 desc_raw = str(row.get("Deskripsi Item", "")).strip()
                 if not desc_raw: continue
                 desc_key = desc_raw.lower()
-                
-                qty, uom, vendor = row.get("Qty", 0), str(row.get("UoM", "")), str(row.get("Vendor (Opsional)", ""))
+                qty = row.get("Qty", 0)
+                uom = str(row.get("UoM", ""))
+                vendor = str(row.get("Vendor (Opsional)", ""))
                 s_name = str(row.get("Scope of Work (Opsional)", "")).strip() or "General Scope of Work"
                 b_name = str(row.get("Bill of Quantity (Opsional)", "")).strip() or "General Items"
                 
@@ -634,15 +472,13 @@ def revisi_boq():
                 if desc_key in old_items:
                     cursor.execute("UPDATE items SET boq_id=?, qty=?, uom=?, vendor=? WHERE id=?", (target_boq_id, qty, uom, vendor, old_items[desc_key]['id']))
                 else:
-                    cursor.execute("INSERT INTO items (id, boq_id, product, qty, uom, vendor, pic_ids) VALUES (?, ?, ?, ?, ?, ?, ?)", 
-                                   (f"item_{uuid.uuid4().hex[:8]}", target_boq_id, desc_raw, qty, uom, vendor, "[]"))
+                    cursor.execute("INSERT INTO items (id, boq_id, product, qty, uom, vendor, pic_ids) VALUES (?, ?, ?, ?, ?, ?, ?)", (f"item_{uuid.uuid4().hex[:8]}", target_boq_id, desc_raw, qty, uom, vendor, "[]"))
                                    
             for old_key, old_data in old_items.items():
                 if old_key not in new_descs: cursor.execute("DELETE FROM items WHERE id = ?", (old_data['id'],))
                 
             cursor.execute("DELETE FROM boqs WHERE id NOT IN (SELECT DISTINCT boq_id FROM items)")
             cursor.execute("DELETE FROM sows WHERE id NOT IN (SELECT DISTINCT sow_id FROM boqs)")
-            
             conn.commit()
             return jsonify({"success": True, "message": "BoQ berhasil direvisi!"}), 200
     except Exception as e:
@@ -656,18 +492,19 @@ def upload_comparison():
     file = request.files['file']
     if file.filename == '': return jsonify({"success": False, "message": "File tidak valid"}), 400
     try:
-        # 1. Simpan di folder secure
+        # BEST PRACTICE 4: Sanitasi nama file secara ketat mencegah Directory Traversal Attack
         save_dir = os.path.join('secure_data', 'comparisons')
         os.makedirs(save_dir, exist_ok=True)
-        safe_filename = f"{ticket_id}_{uuid.uuid4().hex[:8]}.{(file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else 'bin')}"
+        
+        safe_filename_base = secure_filename(file.filename)
+        ext = safe_filename_base.rsplit('.', 1)[1].lower() if '.' in safe_filename_base else 'bin'
+        safe_filename = f"{ticket_id}_{uuid.uuid4().hex[:8]}.{ext}"
         file.save(os.path.join(save_dir, safe_filename))
         
-        # 2. Catat URL path ke database relasional
         web_file_path = f"/api/downloads/comparisons/{safe_filename}"
         with contextlib.closing(sqlite3.connect(DB_NAME)) as conn:
             conn.execute("PRAGMA foreign_keys = ON")
-            conn.cursor().execute("INSERT INTO comparison_docs (project_id, vendor_name, offered_price, file_path) VALUES (?, ?, ?, ?)", 
-                                  (ticket_id, vendor_name.strip(), float(offered_price), web_file_path))
+            conn.cursor().execute("INSERT INTO comparison_docs (project_id, vendor_name, offered_price, file_path) VALUES (?, ?, ?, ?)", (ticket_id, str(vendor_name).strip(), float(offered_price), web_file_path))
             conn.commit()
             return jsonify({"success": True, "message": "Dokumen pembanding berhasil diunggah"}), 200
     except Exception as e:
@@ -676,7 +513,7 @@ def upload_comparison():
 @app.route('/api/downloads/comparisons/<filename>')
 def download_comparison(filename):
     if 'username' not in session: return jsonify({"success": False, "message": "Akses ditolak! Silakan login."}), 403
-    return send_from_directory(os.path.join(app.root_path, 'secure_data', 'comparisons'), filename)
+    return send_from_directory(os.path.join(app.root_path, 'secure_data', 'comparisons'), secure_filename(filename))
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5001))
