@@ -348,35 +348,7 @@ function renderProjects(){
 function renderProjectDetail(p){
   const uniq = uniquePicsInProject(p);
   
-  // Render bagian baris item BoQ secara terpisah agar bersih
-  let itemsHtml = '';
-  (p.sows || []).forEach(sow => {
-    (sow.boqs || []).forEach(boq => {
-      (boq.items || []).forEach(it => {
-        const eff = p.sphMode === 'item' ? efficiencyPct(it.sphAwal, it.sphFinal) : null;
-        const notesHtml = it.notes ? `<div style="font-size:11px; color:var(--text-muted); margin-top:3px;">📝 ${escAttr(it.notes)}</div>` : '';
-        const picsHtml = (it.picIds || []).map(x => `<span class="pic-chip">${escAttr(x)}</span>`).join('');
-        
-        itemsHtml += `
-          <div style="display:grid; grid-template-columns: 2fr 0.4fr 0.5fr 1fr 1fr 1fr 0.8fr 1.5fr; gap:8px; padding:7px 0; font-size:12.5px; border-bottom:1px solid var(--border-soft); align-items:start;">
-            <div>
-              <div style="font-weight:500;">${escAttr(it.product) || '—'}</div>
-              ${notesHtml}
-            </div>
-            <div style="color:var(--text-muted);">${it.qty || '-'}</div>
-            <div style="color:var(--text-muted);">${escAttr(it.uom) || '-'}</div>
-            <div style="color:var(--text-muted);">${escAttr(it.vendor) || '-'}</div>
-            <div class="num mono">${p.sphMode==='item'?fmtIdr(it.sphAwal):'—'}</div>
-            <div class="num mono">${p.sphMode==='item'?fmtIdr(it.sphFinal):'—'}</div>
-            <div class="num mono">${p.sphMode==='item'?fmtPct(eff):'—'}</div>
-            <div>${picsHtml}</div>
-          </div>
-        `;
-      });
-    });
-  });
-
-  // UI DOKUMEN PEMBANDING
+  // 1. Bangun UI Dokumen Pembanding
   const docsHtml = `
     <div style="margin: 12px 0; padding: 12px; background: #FFFFFF; border: 1px dashed var(--border); border-radius: 6px;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
@@ -398,6 +370,48 @@ function renderProjectDetail(p){
     </div>
   `;
 
+  // 2. Bangun HTML SoW, BoQ, dan Item secara linear (mencegah nested backticks yang bikin error VS Code)
+  let sowsHtml = '';
+  (p.sows || []).forEach(sow => {
+    sowsHtml += `<div class="sow-title">Scope of Work: ${escAttr(sow.name)}</div>`;
+    
+    (sow.boqs || []).forEach(boq => {
+      sowsHtml += `
+        <div class="boq-title">Bill of Quantity: ${escAttr(boq.name)}</div>
+        <div style="display:grid; grid-template-columns: 2fr 0.4fr 0.5fr 1fr 1fr 1fr 0.8fr 1.5fr; gap:8px; padding:5px 0; font-size:10.5px; color:var(--text-dim); border-bottom:1px solid var(--border);">
+          <div>Item</div><div>Qty</div><div>UoM</div><div>Vendor</div><div class="num">SPH Awal</div><div class="num">SPH Final</div><div class="num">Efficiency</div><div>PIC</div>
+        </div>
+      `;
+      
+      // Reset itemsHtml KHUSUS untuk BoQ ini saja (Menjamin tidak akan ketumpuk)
+      let itemsHtml = '';
+      (boq.items || []).forEach(it => {
+        const eff = p.sphMode === 'item' ? efficiencyPct(it.sphAwal, it.sphFinal) : null;
+        const notesHtml = it.notes ? `<div style="font-size:11px; color:var(--text-muted); margin-top:3px;">📝 ${escAttr(it.notes)}</div>` : '';
+        const picsHtml = (it.picIds || []).map(x => `<span class="pic-chip">${escAttr(x)}</span>`).join('');
+        
+        itemsHtml += `
+          <div style="display:grid; grid-template-columns: 2fr 0.4fr 0.5fr 1fr 1fr 1fr 0.8fr 1.5fr; gap:8px; padding:7px 0; font-size:12.5px; border-bottom:1px solid var(--border-soft); align-items:start;">
+            <div>
+              <div style="font-weight:500;">${escAttr(it.product) || '—'}</div>
+              ${notesHtml}
+            </div>
+            <div style="color:var(--text-muted);">${it.qty || '-'}</div>
+            <div style="color:var(--text-muted);">${escAttr(it.uom) || '-'}</div>
+            <div style="color:var(--text-muted);">${escAttr(it.vendor) || '-'}</div>
+            <div class="num mono">${p.sphMode==='item'?fmtIdr(it.sphAwal):'—'}</div>
+            <div class="num mono">${p.sphMode==='item'?fmtIdr(it.sphFinal):'—'}</div>
+            <div class="num mono">${p.sphMode==='item'?fmtPct(eff):'—'}</div>
+            <div>${picsHtml}</div>
+          </div>
+        `;
+      });
+      // Masukkan item-item tadi tepat di bawah Header BoQ-nya
+      sowsHtml += itemsHtml; 
+    });
+  });
+
+  // 3. Gabungkan semua lapisan tadi ke dalam blok utama
   return `
     <div class="detail-block">
       <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
@@ -410,18 +424,11 @@ function renderProjectDetail(p){
         </div>
       </div>
       
-      <!-- INJEKSI UI DOKUMEN PEMBANDING DI SINI -->
+      <!-- INJEKSI DOKUMEN PEMBANDING -->
       ${docsHtml}
       
-      ${(p.sows||[]).map(sow=>`
-        <div class="sow-title">Scope of Work: ${escAttr(sow.name)}</div>${(sow.boqs||[]).map(boq=>`
-          <div class="boq-title">Bill of Quantity: ${escAttr(boq.name)}</div>
-          <div style="display:grid; grid-template-columns: 2fr 0.4fr 0.5fr 1fr 1fr 1fr 0.8fr 1.5fr; gap:8px; padding:5px 0; font-size:10.5px; color:var(--text-dim); border-bottom:1px solid var(--border);">
-            <div>Item</div><div>Qty</div><div>UoM</div><div>Vendor</div><div class="num">SPH Awal</div><div class="num">SPH Final</div><div class="num">Efficiency</div><div>PIC</div>
-          </div>
-          ${itemsHtml}
-        `).join('')}
-      `).join('')}
+      <!-- INJEKSI TABEL SOW, BOQ, DAN ITEM -->
+      ${sowsHtml}
       
       ${p.sphMode==='project' ? `<div class="note">SPH dicatat di level total project (tidak dipecah per item).</div>` : ''}
     </div>
