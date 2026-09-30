@@ -236,16 +236,42 @@ function render(){
   if(activeTab === 'projects'){
 
     headerHtml = `
-      <div class="simple-page-header">
-        <div>
-          <div class="simple-page-title">
-            Project &amp; BoQ Management
+      <div class="page-hero">
+
+        <div class="page-hero-main">
+          <div class="page-hero-title">
+            Project & Bill of Quantity Management
           </div>
 
-          <div class="simple-page-sub">
+          <div class="page-hero-sub">
             Detail project, BoQ, SPH, dan progress
           </div>
         </div>
+
+        <div class="page-hero-side">
+
+          <div class="objective-box">
+            <div class="objective-icon">◎</div>
+
+            <div>
+              <div class="objective-label">
+                Objective
+              </div>
+
+              <div class="objective-text">
+                Ensure project readiness &amp; competitive sourcing
+                through effective presourcing
+              </div>
+            </div>
+          </div>
+
+          <div class="data-date">
+            <span>Data per:</span>
+            <strong>${dateText}</strong>
+          </div>
+
+        </div>
+
       </div>
     `;
   }
@@ -254,16 +280,42 @@ function render(){
   if(activeTab === 'team'){
 
     headerHtml = `
-      <div class="simple-page-header">
-        <div>
-          <div class="simple-page-title">
-            Team &amp; Workload
+      <div class="page-hero">
+
+        <div class="page-hero-main">
+          <div class="page-hero-title">
+            Team & Workload
           </div>
 
-          <div class="simple-page-sub">
+          <div class="page-hero-sub">
             Distribusi project dan beban kerja tim
           </div>
         </div>
+
+        <div class="page-hero-side">
+
+          <div class="objective-box">
+            <div class="objective-icon">◎</div>
+
+            <div>
+              <div class="objective-label">
+                Objective
+              </div>
+
+              <div class="objective-text">
+                Ensure project readiness &amp; competitive sourcing
+                through effective presourcing
+              </div>
+            </div>
+          </div>
+
+          <div class="data-date">
+            <span>Data per:</span>
+            <strong>${dateText}</strong>
+          </div>
+
+        </div>
+
       </div>
     `;
   }
