@@ -193,9 +193,22 @@ def get_requests():
         with contextlib.closing(sqlite3.connect(DB_NAME)) as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
-            query = "SELECT r.*, u.full_name, u.department FROM requests r LEFT JOIN users u ON r.requester_username = u.username "
-            query += "ORDER BY r.created_at DESC" if role == 'admin' else "WHERE r.requester_username = ?"
-            cursor.execute(query, () if role == 'admin' else (username,))
+            # UBAH QUERY: Join dengan tabel projects untuk mengambil data pipeline dan progress
+            query = """
+                SELECT r.*, u.full_name, u.department, 
+                       p.pipeline_stage, p.progress_pct, p.target_rfs 
+                FROM requests r 
+                LEFT JOIN users u ON r.requester_username = u.username 
+                LEFT JOIN projects p ON r.ticket_id = p.id
+            """
+            if role != 'admin':
+                query += " WHERE r.requester_username = ?"
+                query += " ORDER BY r.created_at DESC"
+                cursor.execute(query, (username,))
+            else:
+                query += " ORDER BY r.created_at DESC"
+                cursor.execute(query)
+                
             return jsonify({"success": True, "data": [dict(r) for r in cursor.fetchall()]})
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500

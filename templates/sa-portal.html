@@ -397,7 +397,6 @@ async function fetchRequests() {
 function renderTable(data) {
     const tbody = document.getElementById('table-body');
     
-    // Pastikan data ada dan berupa array
     if (!data || !Array.isArray(data) || data.length === 0) {
         tbody.innerHTML = `
             <tr id="empty-row">
@@ -422,11 +421,14 @@ function renderTable(data) {
         else if (req.status === 'done' || req.status === 'win') { badgeClass = 'done'; statusText = 'Selesai / Win'; }
         else if (req.status === 'lose') { badgeClass = 'rejected'; statusText = 'Kalah'; }
 
-        // Sanitasi teks agar aman dari error kutipan di dalam string HTML onclick
         const safeTitle = req.title ? req.title.replace(/'/g, "\\'").replace(/"/g, '&quot;') : '';
         const safeTicketId = req.ticket_id || '';
         const safeStatus = req.status || 'unassigned';
-        const safeLeadId = req.leadId || '';
+        const safeLeadId = req.pic_username || ''; // Memperbaiki pemanggilan pic username
+        
+        // Data Pipeline Baru
+        const safePipeline = req.pipeline_stage ? req.pipeline_stage.replace(/'/g, "\\'") : 'Menunggu Assign';
+        const progressPct = req.progress_pct || 0;
 
         const tr = document.createElement('tr');
         tr.innerHTML = `
@@ -439,8 +441,8 @@ function renderTable(data) {
             <td><span class="badge ${badgeClass}">${statusText}</span></td>
             <td>
                 <button class="btn btn-outline" style="padding: 6px 12px; font-size: 12px;" 
-                    onclick="viewTicketItems('${safeTicketId}', '${safeTitle}', '${safeStatus}', '${safeLeadId}')">
-                    📋 Lihat Daftar Item
+                    onclick="viewTicketItems('${safeTicketId}', '${safeTitle}', '${safeStatus}', '${safeLeadId}', '${safePipeline}', ${progressPct})">
+                    📋 Cek Status & Item
                 </button>
             </td>
         `;
@@ -448,20 +450,20 @@ function renderTable(data) {
     });
 }
 
-// 6. FUNGSI LIHAT DAFTAR ITEM BOQ (UNTUK SA)
-async function viewTicketItems(ticketId, projectTitle, status, leadId) {
+// 6. FUNGSI LIHAT DAFTAR ITEM BOQ & PIPELINE (UNTUK SA)
+async function viewTicketItems(ticketId, projectTitle, status, leadId, pipelineStage, progressPct) {
     const modalHtml = `
         <div class="modal-overlay active" id="items-modal">
             <div class="modal-card" style="max-width: 800px;">
                 <div class="modal-header">
-                    <h3>Detail Item BoQ: ${ticketId}</h3>
+                    <h3>Detail Request: ${ticketId}</h3>
                     <button class="modal-close" onclick="closeItemsModal()">&times;</button>
                 </div>
                 <div class="modal-body">
-                  ${getTimelineHtml(status, leadId)}
+                  ${getTimelineHtml(status, leadId, pipelineStage, progressPct)}
                     <p style="margin-top:0; color:var(--text-muted);"><b>Project:</b> ${projectTitle}</p>
                     <div id="items-content-area" style="max-height: 400px; overflow-y: auto;">
-                        <p>Memuat data item...</p>
+                        <p>Memuat data item BoQ...</p>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -521,7 +523,6 @@ async function viewTicketItems(ticketId, projectTitle, status, leadId) {
         console.error("Gagal memuat item:", error);
         document.getElementById('items-content-area').innerHTML = `<p style="color: var(--danger);">Gagal memuat data dari server.</p>`;
     }
-    
 }
 
 function closeItemsModal() {
@@ -604,52 +605,48 @@ document.getElementById('request-form').onsubmit = async (e) => {
 
 async function handleLogout() {
     try {
-        // 1. Perintahkan backend untuk menghapus session
         await fetch('/api/logout', { method: 'POST' });
     } catch (err) {
         console.error("Gagal menghubungi server:", err);
     } finally {
-        // 2. Hapus data lokal dan tendang ke halaman login
         localStorage.removeItem('user');
         window.location.href = '/login';
     }
 }
 
-// Fungsi untuk mem-build HTML Timeline
-function getTimelineHtml(status, leadId) {
-    // Definisi logika status
-    const isNew = status === 'unassigned' || !status;
-    const isOngoing = status === 'ongoing';
+// Fungsi Timeline yang Baru (Executive Pipeline Style)
+function getTimelineHtml(status, leadId, pipelineStage, progressPct) {
     const isWin = status === 'win';
     const isLose = status === 'lose';
-    // Logika tampilan nama PIC
+    const isClosed = isWin || isLose;
+    
+    // Tampilan Nama PIC
     const picDisplay = leadId && leadId !== 'null' && leadId !== '' 
-        ? `<div style="margin-top: 5px; font-size: 11px; font-weight: 600; color: var(--primary); background: #e0f2fe; padding: 2px 8px; border-radius: 12px; display: inline-block;">🧑‍💻 PIC: ${leadId}</div>` 
-        : `<div style="margin-top: 5px; font-size: 11px; color: #94a3b8; font-style: italic;">Menunggu Assign</div>`;
+        ? `<div style="margin-top: 5px; font-size: 11px; font-weight: 600; color: var(--primary); background: #e0f2fe; padding: 4px 10px; border-radius: 12px; display: inline-block;">🧑‍💻 Ditangani oleh: ${leadId}</div>` 
+        : `<div style="margin-top: 5px; font-size: 11px; color: #94a3b8; font-style: italic;">Sedang mencarikan PIC...</div>`;
+
+    // Tampilan Bar Progress
+    let progressColor = '#2563EB'; // Primary Blue
+    if(isWin) progressColor = '#10B981'; // Green
+    if(isLose) progressColor = '#EF4444'; // Red
+
+    const progressHtml = `
+      <div style="margin-top: 15px; margin-bottom: 25px;">
+        <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 13px;">
+          <strong>Tahap: ${pipelineStage}</strong>
+          <strong>${isClosed ? (isWin ? 'Win/Selesai' : 'Kalah/Batal') : progressPct + '%'}</strong>
+        </div>
+        <div style="background: #e2e8f0; border-radius: 6px; height: 10px; width: 100%; overflow: hidden;">
+          <div style="height: 100%; background: ${progressColor}; width: ${isClosed ? 100 : progressPct}%; border-radius: 6px; transition: width 0.5s ease;"></div>
+        </div>
+        ${picDisplay}
+      </div>
+    `;
 
     return `
-    <div class="tracking-wrapper">
-        <h4 style="margin-top:0; margin-bottom:15px; font-size:13px; color:var(--text);">Status Pemrosesan BoQ</h4>
-        <ul class="stepper">
-            <!-- Step 1: Tiket Masuk -->
-            <div class="step completed">
-                <div class="step-circle">✓</div>
-                <div class="step-label">BoQ Diunggah</div>
-            </div>
-            
-            <!-- Step 2: Sedang Diproses -->
-            <div class="step ${isOngoing || isWin || isLose ? 'completed' : 'active'}">
-                <div class="step-circle">${isOngoing || isWin || isLose ? '✓' : '2'}</div>
-                <div class="step-label">Diproses Tim</div>
-                ${(isOngoing || isWin || isLose) ? picDisplay : ''}
-            </div>
-            
-            <!-- Step 3: Selesai (SPH Final) -->
-            <div class="step ${isWin ? 'completed' : isLose ? 'rejected' : (isOngoing ? 'active' : '')}">
-                <div class="step-circle">${isWin ? '✓' : isLose ? '✕' : '3'}</div>
-                <div class="step-label">${isLose ? 'Kalah / Batal' : 'SPH Final / Win'}</div>
-            </div>
-        </ul>
+    <div style="padding: 15px; background: #f8fafc; border-radius: 8px; border: 1px solid var(--border); margin-bottom: 20px;">
+        <h4 style="margin-top:0; margin-bottom:5px; font-size:14px; color:var(--text-main);">Live Tracking Presourcing</h4>
+        ${progressHtml}
     </div>
     `;
 }
