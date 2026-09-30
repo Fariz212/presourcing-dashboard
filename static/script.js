@@ -208,222 +208,784 @@ function tabBtn(id,label){
 // --------------------------------------------------------
 function renderOverview(){
   const totalProj = projects.length;
+  const activeProj = projects.filter(p => p.status === 'ongoing').length;
+
   let totalVal = 0;
-  const sCount = { 'On Track':0, 'At Risk':0, 'Overdue':0, 'Completed':0, 'Planned':0 };
-  const pCount = { 1:0, 2:0, 3:0, 4:0, 5:0, 6:0 };
-  
+  let effSum = 0;
+  let effCount = 0;
+
+  const sCount = {
+    'On Track': 0,
+    'At Risk': 0,
+    'Overdue': 0,
+    'Completed': 0,
+    'Planned': 0
+  };
+
+  const pCount = {
+    1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0
+  };
+
   projects.forEach(p => {
-      totalVal += (projectSph(p).awal || 0);
-      sCount[getDynamicStatus(p)]++;
-      if(p.status === 'ongoing') {
-          const stage = parseInt((p.pipelineStage || '1').charAt(0));
-          if(!isNaN(stage) && stage >= 1 && stage <= 6) pCount[stage]++;
+    const sph = projectSph(p);
+    totalVal += (sph.awal || 0);
+
+    const eff = efficiencyPct(sph.awal, sph.final);
+    if (eff != null) {
+      effSum += eff;
+      effCount++;
+    }
+
+    const stat = getDynamicStatus(p);
+    sCount[stat]++;
+
+    if (p.status === 'ongoing') {
+      const stage = parseInt((p.pipelineStage || '1').charAt(0));
+      if (!isNaN(stage) && stage >= 1 && stage <= 6) {
+        pCount[stage]++;
       }
+    }
   });
 
-  const getPct = (val) => totalProj ? Math.round((val/totalProj)*100) : 0;
-  
+  const avgEff = effCount ? effSum / effCount : null;
+  const criticalCount = sCount['Overdue'];
+  const watchCount = sCount['At Risk'];
+
+  const pct = (n) => totalProj ? Math.round((n / totalProj) * 100) : 0;
+
+  // Load Chart.js once
   if (!window.Chart && !document.getElementById('chartjs-script')) {
-      const script = document.createElement('script');
-      script.id = 'chartjs-script';
-      script.src = "https://cdn.jsdelivr.net/npm/chart.js";
-      script.onload = () => setTimeout(renderDashboardCharts, 100);
-      document.head.appendChild(script);
+    const script = document.createElement('script');
+    script.id = 'chartjs-script';
+    script.src = 'https://cdn.jsdelivr.net/npm/chart.js';
+    script.onload = () => setTimeout(renderDashboardCharts, 100);
+    document.head.appendChild(script);
   } else {
-      setTimeout(renderDashboardCharts, 100);
+    setTimeout(renderDashboardCharts, 100);
   }
 
-  // CSS Kelas Enterprise: Kartu KPI bergradasi halus, Pipeline Chevron presisi, Panel Header Biru Elegan
-  const dashStyles = `
-    <style>
-        .kpi-row-new { display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); gap: 14px; margin-bottom: 20px; }
-        .kpi-card { background: #fff; padding: 14px 16px; border-radius: 8px; border: 1px solid #cbd5e1; display:flex; align-items:center; gap: 12px; position: relative; box-shadow: 0 2px 4px rgba(0,0,0,0.03); overflow: hidden;}
-        .kpi-card::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 3px; }
-        .kpi-card:nth-child(1)::after { background: #0ea5e9; }
-        .kpi-card:nth-child(2)::after { background: #3b82f6; }
-        .kpi-card:nth-child(3)::after { background: #22c55e; }
-        .kpi-card:nth-child(4)::after { background: #f59e0b; }
-        .kpi-card:nth-child(5)::after { background: #ef4444; }
-        .kpi-card:nth-child(6)::after { background: #475569; }
+  const sortedProjects = [...projects].sort((a, b) => {
+    const da = a.targetRfs ? new Date(a.targetRfs).getTime() : Infinity;
+    const db = b.targetRfs ? new Date(b.targetRfs).getTime() : Infinity;
+    return da - db;
+  });
 
-        .kpi-icon { width: 38px; height: 38px; border-radius: 8px; display:flex; align-items:center; justify-content:center; font-size: 18px; background: #f8fafc; border: 1px solid #e2e8f0; }
-        
-        /* Grid Layout Persis Referensi Mockup */
-        .dash-grid-2 { display: grid; grid-template-columns: 1.3fr 1.7fr; gap: 16px; margin-bottom: 16px; align-items: stretch; }
-        .dash-grid-50-50 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; align-items: stretch; }
-        
-        .dash-panel { background: #fff; border-radius: 8px; border: 1px solid #cbd5e1; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.03); display: flex; flex-direction: column; height: 100%; min-height: 310px; }
-        .dash-panel-hd { background: #1E63C8; color: white; padding: 12px 16px; font-weight: 600; font-size: 13px; display: flex; align-items: center; gap: 8px; flex-shrink: 0; letter-spacing: 0.2px; }
-        .dash-panel-hd.danger-hd { background: #DC3545; }
-        
-        .dash-panel-body { padding: 16px; flex: 1; display: flex; flex-direction: column; justify-content: center; }
-        
-        .chart-box { position: relative; width: 100%; height: 210px; flex: 1; display: flex; align-items: center; justify-content: center; }
-
-        .scrollable-table-container {
-            max-height: 255px; 
-            overflow-y: auto; 
-            overflow-x: auto;
-            flex: 1;
-        }
-        .dash-table thead th {
-            position: sticky;
-            top: 0;
-            background: #F8FAFC;
-            z-index: 2;
-            white-space: nowrap;
-            color: #475569;
-            font-size: 10px;
-        }
-
-        .badge { padding: 3px 8px; border-radius: 4px; font-size: 10.5px; font-weight: 600; }
-        .badge-on-track { background: #22C55E; color: white; }
-        .badge-at-risk { background: #F59E0B; color: white; }
-        .badge-overdue { background: #EF4444; color: white; }
-        .badge-completed { background: #3B82F6; color: white; }
-        .badge-planned { background: #e2e8f0; color: #475569; }
-
-        .prog-bar-bg { background: #e5e7eb; border-radius: 4px; height: 6px; width: 100%; margin-top: 3px; }
-        .prog-bar-fill { height: 100%; background: #3B82F6; border-radius: 4px; }
-
-        /* Pipeline Chevron Profesional Sesuai Referensi */
-        .pipeline-container { display: flex; gap: 3px; margin-top: 5px; width: 100%; }
-        .pipe-stage { flex: 1; color: white; padding: 14px 6px; text-align: center; font-size: 11px; clip-path: polygon(0% 0%, 93% 0%, 100% 50%, 93% 100%, 0% 100%, 7% 50%); margin-right: -8px; display: flex; flex-direction: column; justify-content: center; }
-        .pipe-stage:first-child { clip-path: polygon(0% 0%, 93% 0%, 100% 50%, 93% 100%, 0% 100%); }
-        .pipe-stage:last-child { clip-path: polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%, 7% 50%); margin-right: 0; }
-        
-        table.dash-table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
-        table.dash-table th { padding: 8px 6px; border-bottom: 2px solid #e2e8f0; text-align: left; font-weight: 600; text-transform: uppercase;}
-        table.dash-table td { padding: 8px 6px; border-bottom: 1px solid #f1f5f9; }
-
-        @media(max-width: 900px) {
-            .dash-grid-2, .dash-grid-50-50 { grid-template-columns: 1fr; }
-        }
-    </style>
-  `;
-
-  const sortedProjects = [...projects].sort((a,b) => new Date(a.targetRfs||'2099') - new Date(b.targetRfs||'2099'));
-  
+  // ---------- PROJECT TABLE ----------
   let overviewRows = '';
-  sortedProjects.forEach((p, idx) => {
-      overviewRows += `
+
+  if (!sortedProjects.length) {
+    overviewRows = `
       <tr>
-          <td>${idx+1}</td>
-          <td style="font-weight:500; max-width: 120px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${escAttr(p.name)}">${escAttr(p.name)}</td>
-          <td class="mono">${valToM(projectSph(p).awal)}</td>
-          <td>${escAttr(p.leadId)}</td>
-          <td style="white-space: nowrap;">${p.targetRfs ? new Date(p.targetRfs).toLocaleDateString('id-ID', {day:'numeric', month:'short', year:'numeric'}) : '-'}</td>
-          <td>${badgeStatus(getDynamicStatus(p))}</td>
+        <td colspan="7">
+          <div class="ux-empty">Belum ada project.</div>
+        </td>
+      </tr>
+    `;
+  } else {
+    sortedProjects.forEach((p, idx) => {
+      const sph = projectSph(p);
+      const status = getDynamicStatus(p);
+      const progress = Math.max(0, Math.min(100, Number(p.progressPct) || 0));
+
+      const rfs = p.targetRfs
+        ? new Date(p.targetRfs).toLocaleDateString('id-ID', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric'
+          })
+        : '—';
+
+      overviewRows += `
+        <tr>
+          <td class="ux-no">${idx + 1}</td>
+
           <td>
-            <div style="display:flex; align-items:center; gap:6px;">
-                <div style="width:28px; text-align:right; font-size:10.5px;">${p.progressPct||0}%</div>
-                <div class="prog-bar-bg" style="width:38px;"><div class="prog-bar-fill" style="width:${p.progressPct||0}%;"></div></div>
+            <div class="ux-project-name" title="${escAttr(p.name)}">
+              ${escAttr(p.name) || 'Unnamed Project'}
+            </div>
+            <div class="ux-project-meta">
+              ${escAttr(p.requestorDept || '—')}
             </div>
           </td>
-      </tr>`;
+
+          <td class="mono">
+            ${valToM(sph.awal)} M
+          </td>
+
+          <td>
+            <div class="ux-pic">${escAttr(p.leadId || '—')}</div>
+          </td>
+
+          <td class="ux-nowrap">${rfs}</td>
+
+          <td>${badgeStatus(status)}</td>
+
+          <td>
+            <div class="ux-progress-wrap">
+              <div class="ux-progress-head">
+                <span>${progress}%</span>
+              </div>
+              <div class="ux-progress-track">
+                <div
+                  class="ux-progress-fill"
+                  style="width:${progress}%"
+                ></div>
+              </div>
+            </div>
+          </td>
+        </tr>
+      `;
+    });
+  }
+
+  // ---------- EARLY WARNING ----------
+  const attentionProjects = sortedProjects.filter(p => {
+    const s = getDynamicStatus(p);
+    return s === 'Overdue' || s === 'At Risk';
   });
 
   let ewsRows = '';
-  sortedProjects.filter(p => ['Overdue', 'At Risk'].includes(getDynamicStatus(p))).forEach(p => {
-      ewsRows += `
-      <tr>
-          <td style="font-weight:500;">${escAttr(p.name)}</td>
-          <td style="white-space: nowrap;">${p.targetRfs ? new Date(p.targetRfs).toLocaleDateString('id-ID', {day:'numeric', month:'short', year:'numeric'}) : '-'}</td>
-          <td>${p.progressPct||0}%</td>
-          <td>${badgeStatus(getDynamicStatus(p))}</td>
-      </tr>`;
-  });
-  if(!ewsRows) ewsRows = `<tr><td colspan="4" style="text-align:center; color:var(--green); padding:20px;">Semua project aman! 🎉</td></tr>`;
 
-  // Pipeline HTML Sesuai Mockup Referensi
-  const pNames = ['Project Identification', 'SPH Preparation', 'Vendor Selection', 'Negotiation', 'Finalization', 'RFS'];
-  let pipelineHtml = '<div class="pipeline-container">';
-  pNames.forEach((name, i) => {
-      const n = i+1;
-      const count = pCount[n];
-      const pct = totalProj ? Math.round((count / totalProj) * 100) : 0;
-      pipelineHtml += `
-          <div class="pipe-stage" style="z-index: ${6-i}; background: ${n<=3 ? '#1E63C8' : (n<=5 ? '#0EA5E9' : '#22C55E')};">
-              <div style="font-size: 13px; font-weight: bold; margin-bottom: 2px;">${n}</div>
-              <div style="font-size: 9.5px; line-height: 1.1; margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${name}</div>
-              <div style="font-weight: bold; font-size: 10.5px;">${count} Proyek</div>
-              <div style="font-size: 9px; opacity: 0.9; margin-top: 1px;">${pct}%</div>
+  if (!attentionProjects.length) {
+    ewsRows = `
+      <tr>
+        <td colspan="4">
+          <div class="ux-safe-state">
+            <div class="ux-safe-icon">✓</div>
+            <div>
+              <strong>Tidak ada project yang perlu perhatian khusus</strong>
+              <span>Seluruh project masih dalam kondisi terkendali.</span>
+            </div>
           </div>
+        </td>
+      </tr>
+    `;
+  } else {
+    attentionProjects.forEach(p => {
+      const status = getDynamicStatus(p);
+      const progress = Math.max(0, Math.min(100, Number(p.progressPct) || 0));
+
+      const rfs = p.targetRfs
+        ? new Date(p.targetRfs).toLocaleDateString('id-ID', {
+            day: '2-digit',
+            month: 'short'
+          })
+        : '—';
+
+      ewsRows += `
+        <tr>
+          <td>
+            <div class="ux-ew-project">${escAttr(p.name)}</div>
+            <div class="ux-project-meta">
+              PIC: ${escAttr(p.leadId || '—')}
+            </div>
+          </td>
+
+          <td class="ux-nowrap">${rfs}</td>
+
+          <td>
+            <div class="ux-ew-progress">${progress}%</div>
+          </td>
+
+          <td>${badgeStatus(status)}</td>
+        </tr>
       `;
+    });
+  }
+
+  // ---------- PIPELINE ----------
+  const pipelineNames = [
+    'Project Identification',
+    'SPH Preparation',
+    'Vendor Selection',
+    'Negotiation',
+    'Finalization',
+    'RFS'
+  ];
+
+  let pipelineHtml = '';
+
+  pipelineNames.forEach((name, i) => {
+    const stageNo = i + 1;
+    const count = pCount[stageNo];
+
+    pipelineHtml += `
+      <div class="ux-pipeline-stage">
+        <div class="ux-pipeline-no">${stageNo}</div>
+        <div class="ux-pipeline-name">${name}</div>
+        <div class="ux-pipeline-count">${count}</div>
+        <div class="ux-pipeline-label">project</div>
+      </div>
+    `;
   });
-  pipelineHtml += '</div>';
+
+  const dashStyles = `
+    <style>
+      .ux-overview {
+        display:flex;
+        flex-direction:column;
+        gap:16px;
+      }
+
+      .ux-kpi-grid {
+        display:grid;
+        grid-template-columns:repeat(6, minmax(0, 1fr));
+        gap:12px;
+      }
+
+      .ux-kpi {
+        background:#fff;
+        border:1px solid #e2e8f0;
+        border-radius:10px;
+        padding:15px 16px;
+        min-height:88px;
+        position:relative;
+        overflow:hidden;
+      }
+
+      .ux-kpi::before {
+        content:'';
+        position:absolute;
+        left:0;
+        top:0;
+        bottom:0;
+        width:3px;
+        background:#2563eb;
+      }
+
+      .ux-kpi.warning::before { background:#f59e0b; }
+      .ux-kpi.danger::before { background:#dc2626; }
+      .ux-kpi.success::before { background:#16a34a; }
+      .ux-kpi.neutral::before { background:#64748b; }
+
+      .ux-kpi-label {
+        color:#64748b;
+        font-size:11px;
+        margin-bottom:7px;
+        font-weight:600;
+        letter-spacing:.01em;
+      }
+
+      .ux-kpi-value {
+        font-size:22px;
+        line-height:1.1;
+        font-weight:700;
+        color:#0f172a;
+      }
+
+      .ux-kpi-sub {
+        margin-top:5px;
+        font-size:10.5px;
+        color:#94a3b8;
+      }
+
+      .ux-grid-main {
+        display:grid;
+        grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);
+        gap:16px;
+      }
+
+      .ux-grid-half {
+        display:grid;
+        grid-template-columns:1fr 1fr;
+        gap:16px;
+      }
+
+      .ux-panel {
+        background:#fff;
+        border:1px solid #e2e8f0;
+        border-radius:10px;
+        overflow:hidden;
+        min-width:0;
+      }
+
+      .ux-panel-hd {
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        padding:13px 16px;
+        border-bottom:1px solid #e2e8f0;
+      }
+
+      .ux-panel-title {
+        font-size:13px;
+        font-weight:700;
+        color:#0f172a;
+      }
+
+      .ux-panel-sub {
+        font-size:10.5px;
+        color:#94a3b8;
+        margin-top:2px;
+      }
+
+      .ux-panel-body {
+        padding:14px 16px;
+      }
+
+      .ux-table-wrap {
+        max-height:320px;
+        overflow:auto;
+      }
+
+      .ux-table {
+        width:100%;
+        border-collapse:collapse;
+      }
+
+      .ux-table th {
+        position:sticky;
+        top:0;
+        z-index:2;
+        background:#f8fafc;
+        color:#64748b;
+        font-size:10px;
+        font-weight:700;
+        text-transform:uppercase;
+        letter-spacing:.03em;
+        padding:9px 10px;
+        border-bottom:1px solid #e2e8f0;
+        white-space:nowrap;
+      }
+
+      .ux-table td {
+        padding:10px;
+        border-bottom:1px solid #f1f5f9;
+        font-size:11.5px;
+        color:#334155;
+        vertical-align:middle;
+      }
+
+      .ux-table tbody tr:hover {
+        background:#f8fafc;
+      }
+
+      .ux-no {
+        color:#94a3b8 !important;
+        width:30px;
+      }
+
+      .ux-project-name {
+        font-size:11.8px;
+        font-weight:600;
+        color:#0f172a;
+        max-width:190px;
+        overflow:hidden;
+        text-overflow:ellipsis;
+        white-space:nowrap;
+      }
+
+      .ux-project-meta {
+        margin-top:2px;
+        font-size:10px;
+        color:#94a3b8;
+      }
+
+      .ux-pic {
+        font-weight:600;
+        color:#334155;
+      }
+
+      .ux-nowrap {
+        white-space:nowrap;
+      }
+
+      .ux-progress-wrap {
+        min-width:70px;
+      }
+
+      .ux-progress-head {
+        display:flex;
+        justify-content:flex-end;
+        font-size:10px;
+        color:#475569;
+        margin-bottom:3px;
+      }
+
+      .ux-progress-track {
+        height:5px;
+        background:#e2e8f0;
+        border-radius:10px;
+        overflow:hidden;
+      }
+
+      .ux-progress-fill {
+        height:100%;
+        background:#2563eb;
+        border-radius:10px;
+      }
+
+      .ux-chart {
+        height:230px;
+        position:relative;
+      }
+
+      .ux-chart canvas {
+        width:100% !important;
+        height:100% !important;
+      }
+
+      .ux-warning-summary {
+        display:flex;
+        gap:10px;
+        padding:12px 16px;
+        border-bottom:1px solid #e2e8f0;
+        background:#fffbeb;
+      }
+
+      .ux-warning-box {
+        flex:1;
+        border:1px solid #fde68a;
+        background:#fff;
+        border-radius:7px;
+        padding:9px 11px;
+      }
+
+      .ux-warning-label {
+        font-size:10px;
+        color:#92400e;
+        font-weight:600;
+      }
+
+      .ux-warning-value {
+        margin-top:2px;
+        font-size:18px;
+        font-weight:700;
+        color:#78350f;
+      }
+
+      .ux-safe-state {
+        display:flex;
+        align-items:center;
+        gap:10px;
+        padding:22px 16px;
+      }
+
+      .ux-safe-icon {
+        width:28px;
+        height:28px;
+        border-radius:50%;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        background:#dcfce7;
+        color:#15803d;
+        font-weight:700;
+      }
+
+      .ux-safe-state strong {
+        display:block;
+        font-size:11.5px;
+        color:#166534;
+      }
+
+      .ux-safe-state span {
+        display:block;
+        margin-top:2px;
+        font-size:10.5px;
+        color:#64748b;
+      }
+
+      .ux-ew-project {
+        font-size:11.5px;
+        font-weight:600;
+        color:#0f172a;
+        max-width:220px;
+        overflow:hidden;
+        text-overflow:ellipsis;
+        white-space:nowrap;
+      }
+
+      .ux-ew-progress {
+        font-weight:700;
+        color:#334155;
+      }
+
+      .ux-pipeline {
+        display:grid;
+        grid-template-columns:repeat(6,1fr);
+        gap:8px;
+      }
+
+      .ux-pipeline-stage {
+        min-width:0;
+        padding:14px 10px;
+        border:1px solid #dbeafe;
+        background:#f8fbff;
+        border-radius:8px;
+        position:relative;
+      }
+
+      .ux-pipeline-no {
+        font-size:10px;
+        font-weight:700;
+        color:#2563eb;
+      }
+
+      .ux-pipeline-name {
+        margin-top:5px;
+        min-height:30px;
+        font-size:10.5px;
+        line-height:1.3;
+        color:#475569;
+      }
+
+      .ux-pipeline-count {
+        margin-top:8px;
+        font-size:20px;
+        line-height:1;
+        font-weight:700;
+        color:#0f172a;
+      }
+
+      .ux-pipeline-label {
+        margin-top:3px;
+        font-size:9.5px;
+        color:#94a3b8;
+      }
+
+      .ux-empty {
+        padding:30px;
+        text-align:center;
+        color:#94a3b8;
+      }
+
+      @media(max-width:1200px) {
+        .ux-kpi-grid {
+          grid-template-columns:repeat(3,1fr);
+        }
+
+        .ux-grid-main {
+          grid-template-columns:1fr;
+        }
+      }
+
+      @media(max-width:850px) {
+        .ux-grid-half {
+          grid-template-columns:1fr;
+        }
+
+        .ux-pipeline {
+          grid-template-columns:repeat(3,1fr);
+        }
+      }
+
+      @media(max-width:600px) {
+        .ux-kpi-grid {
+          grid-template-columns:repeat(2,1fr);
+        }
+
+        .ux-pipeline {
+          grid-template-columns:repeat(2,1fr);
+        }
+      }
+    </style>
+  `;
 
   return dashStyles + `
-    <!-- ROW 1: KPI CARDS -->
-    <div class="kpi-row-new">
-        <div class="kpi-card"><div class="kpi-icon" style="color:#0284c7;">📊</div><div><div style="font-size:11px; color:#64748b;">Total Project</div><div style="font-size:18px; font-weight:bold; color:#0f172a;">${totalProj} <span style="font-size:11px; font-weight:normal; color:#64748b;">Projects</span></div></div></div>
-        <div class="kpi-card"><div class="kpi-icon" style="color:#4f46e5;">💰</div><div><div style="font-size:11px; color:#64748b;">Total Value</div><div style="font-size:15px; font-weight:bold; color:#0f172a;">Rp ${valToM(totalVal)} M</div></div></div>
-        <div class="kpi-card"><div class="kpi-icon" style="color:#16a34a;">✅</div><div style="width:100%;"><div style="font-size:11px; color:#64748b;">On Track</div><div style="display:flex; justify-content:space-between; align-items:flex-end;"><div style="font-size:18px; font-weight:bold; color:#0f172a;">${sCount['On Track']}</div><div style="font-size:11px; font-weight:bold; color:#16a34a;">${getPct(sCount['On Track'])}%</div></div></div></div>
-        <div class="kpi-card"><div class="kpi-icon" style="color:#ca8a04;">⚠️</div><div style="width:100%;"><div style="font-size:11px; color:#64748b;">At Risk</div><div style="display:flex; justify-content:space-between; align-items:flex-end;"><div style="font-size:18px; font-weight:bold; color:#0f172a;">${sCount['At Risk']}</div><div style="font-size:11px; font-weight:bold; color:#ca8a04;">${getPct(sCount['At Risk'])}%</div></div></div></div>
-        <div class="kpi-card"><div class="kpi-icon" style="color:#dc2626;">⏳</div><div style="width:100%;"><div style="font-size:11px; color:#64748b;">Overdue</div><div style="display:flex; justify-content:space-between; align-items:flex-end;"><div style="font-size:18px; font-weight:bold; color:#0f172a;">${sCount['Overdue']}</div><div style="font-size:11px; font-weight:bold; color:#dc2626;">${getPct(sCount['Overdue'])}%</div></div></div></div>
-        <div class="kpi-card"><div class="kpi-icon" style="color:#475569;">🏁</div><div style="width:100%;"><div style="font-size:11px; color:#64748b;">Completed</div><div style="display:flex; justify-content:space-between; align-items:flex-end;"><div style="font-size:18px; font-weight:bold; color:#0f172a;">${sCount['Completed']}</div><div style="font-size:11px; font-weight:bold; color:#475569;">${getPct(sCount['Completed'])}%</div></div></div></div>
-    </div>
+    <div class="ux-overview">
 
-    <!-- ROW 1: OVERVIEW & PROJECT VALUE BY PIC -->
-    <div class="dash-grid-2">
-        <div class="dash-panel">
-            <div class="dash-panel-hd">📋 Project Presourcing Overview</div>
-            <div class="scrollable-table-container">
-                <table class="dash-table">
-                    <thead><tr><th>No</th><th>Project Name</th><th>Nilai</th><th>PIC</th><th>Target RFS</th><th>Status</th><th>Progress</th></tr></thead>
-                    <tbody>${overviewRows}</tbody>
-                </table>
-            </div>
-        </div>
-        <div class="dash-panel">
-            <div class="dash-panel-hd">📊 Project Value by PIC Presource (Rp M)</div>
-            <div class="dash-panel-body">
-                <div class="chart-box"><canvas id="chartPicValue"></canvas></div>
-            </div>
-        </div>
-    </div>
+      <!-- KPI -->
+      <div class="ux-kpi-grid">
 
-    <!-- ROW 2: TARGET RFS BY MONTH & EARLY WARNING -->
-    <div class="dash-grid-50-50">
-        <div class="dash-panel">
-            <div class="dash-panel-hd">📈 Target RFS by Month</div>
-            <div class="dash-panel-body">
-                <div class="chart-box"><canvas id="chartRfsMonth"></canvas></div>
-            </div>
+        <div class="ux-kpi">
+          <div class="ux-kpi-label">TOTAL PROJECT</div>
+          <div class="ux-kpi-value">${totalProj}</div>
+          <div class="ux-kpi-sub">${activeProj} sedang berjalan</div>
         </div>
-        <div class="dash-panel">
-            <div class="dash-panel-hd danger-hd">⚠ Early Warning (Need Attention)</div>
-            <div class="scrollable-table-container">
-                <table class="dash-table">
-                    <thead><tr><th>Project Name</th><th>Target RFS</th><th>Progress</th><th>Status</th></tr></thead>
-                    <tbody>${ewsRows}</tbody>
-                </table>
-            </div>
-        </div>
-    </div>
 
-    <!-- ROW 3: TOP 5 PROJECT VALUE & PROJECT STATUS DONUT -->
-    <div class="dash-grid-50-50">
-        <div class="dash-panel">
-            <div class="dash-panel-hd">🏆 Top 5 Project Value</div>
-            <div class="dash-panel-body">
-                <div class="chart-box"><canvas id="chartTop5"></canvas></div>
-            </div>
+        <div class="ux-kpi">
+          <div class="ux-kpi-label">TOTAL PROJECT VALUE</div>
+          <div class="ux-kpi-value" style="font-size:18px;">
+            Rp ${valToM(totalVal)} M
+          </div>
+          <div class="ux-kpi-sub">Berdasarkan SPH Awal</div>
         </div>
-        <div class="dash-panel">
-            <div class="dash-panel-hd">🎯 Project Status</div>
-            <div class="dash-panel-body">
-                <div class="chart-box"><canvas id="chartStatus"></canvas></div>
-            </div>
-        </div>
-    </div>
 
-    <!-- ROW 4: PROGRESS PIPELINE (FULL WIDTH) -->
-    <div class="dash-panel" style="margin-bottom: 16px;">
-        <div class="dash-panel-hd">🔄 Presourcing Progress Pipeline</div>
-        <div class="dash-panel-body" style="padding: 16px;">
+        <div class="ux-kpi success">
+          <div class="ux-kpi-label">ON TRACK</div>
+          <div class="ux-kpi-value">${sCount['On Track']}</div>
+          <div class="ux-kpi-sub">${pct(sCount['On Track'])}% dari portfolio</div>
+        </div>
+
+        <div class="ux-kpi warning">
+          <div class="ux-kpi-label">AT RISK</div>
+          <div class="ux-kpi-value">${watchCount}</div>
+          <div class="ux-kpi-sub">Perlu monitoring</div>
+        </div>
+
+        <div class="ux-kpi danger">
+          <div class="ux-kpi-label">OVERDUE</div>
+          <div class="ux-kpi-value">${criticalCount}</div>
+          <div class="ux-kpi-sub">Target RFS terlewat</div>
+        </div>
+
+        <div class="ux-kpi neutral">
+          <div class="ux-kpi-label">AVG EFFICIENCY</div>
+          <div class="ux-kpi-value">${fmtPct(avgEff)}</div>
+          <div class="ux-kpi-sub">${effCount} project dengan data lengkap</div>
+        </div>
+
+      </div>
+
+      <!-- PROJECT OVERVIEW + PIC VALUE -->
+      <div class="ux-grid-main">
+
+        <div class="ux-panel">
+          <div class="ux-panel-hd">
+            <div>
+              <div class="ux-panel-title">Project Presourcing Overview</div>
+              <div class="ux-panel-sub">Portfolio aktif dan target RFS</div>
+            </div>
+            <div class="ux-panel-sub">${totalProj} project</div>
+          </div>
+
+          <div class="ux-table-wrap">
+            <table class="ux-table">
+              <thead>
+                <tr>
+                  <th>No</th>
+                  <th>Project</th>
+                  <th>Value</th>
+                  <th>PIC</th>
+                  <th>Target RFS</th>
+                  <th>Status</th>
+                  <th>Progress</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${overviewRows}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="ux-panel">
+          <div class="ux-panel-hd">
+            <div>
+              <div class="ux-panel-title">Project Value by PIC</div>
+              <div class="ux-panel-sub">Distribusi nilai portfolio berdasarkan lead presource</div>
+            </div>
+          </div>
+
+          <div class="ux-panel-body">
+            <div class="ux-chart">
+              <canvas id="chartPicValue"></canvas>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- EARLY WARNING + RFS -->
+      <div class="ux-grid-half">
+
+        <div class="ux-panel">
+          <div class="ux-panel-hd">
+            <div>
+              <div class="ux-panel-title">Target RFS by Month</div>
+              <div class="ux-panel-sub">Volume project dan nilai SPH awal</div>
+            </div>
+          </div>
+
+          <div class="ux-panel-body">
+            <div class="ux-chart">
+              <canvas id="chartRfsMonth"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <div class="ux-panel">
+          <div class="ux-panel-hd">
+            <div>
+              <div class="ux-panel-title">Early Warning</div>
+              <div class="ux-panel-sub">Project yang membutuhkan perhatian</div>
+            </div>
+          </div>
+
+          <div class="ux-warning-summary">
+            <div class="ux-warning-box">
+              <div class="ux-warning-label">OVERDUE</div>
+              <div class="ux-warning-value">${criticalCount}</div>
+            </div>
+            <div class="ux-warning-box">
+              <div class="ux-warning-label">AT RISK</div>
+              <div class="ux-warning-value">${watchCount}</div>
+            </div>
+          </div>
+
+          <div class="ux-table-wrap">
+            <table class="ux-table">
+              <thead>
+                <tr>
+                  <th>Project</th>
+                  <th>RFS</th>
+                  <th>Progress</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${ewsRows}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- TOP 5 + STATUS -->
+      <div class="ux-grid-half">
+
+        <div class="ux-panel">
+          <div class="ux-panel-hd">
+            <div>
+              <div class="ux-panel-title">Top 5 Project Value</div>
+              <div class="ux-panel-sub">Project dengan SPH Awal terbesar</div>
+            </div>
+          </div>
+
+          <div class="ux-panel-body">
+            <div class="ux-chart">
+              <canvas id="chartTop5"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <div class="ux-panel">
+          <div class="ux-panel-hd">
+            <div>
+              <div class="ux-panel-title">Project Status</div>
+              <div class="ux-panel-sub">Distribusi kondisi portfolio saat ini</div>
+            </div>
+          </div>
+
+          <div class="ux-panel-body">
+            <div class="ux-chart">
+              <canvas id="chartStatus"></canvas>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- PIPELINE -->
+      <div class="ux-panel">
+
+        <div class="ux-panel-hd">
+          <div>
+            <div class="ux-panel-title">Presourcing Progress Pipeline</div>
+            <div class="ux-panel-sub">Distribusi project berdasarkan tahapan presourcing</div>
+          </div>
+        </div>
+
+        <div class="ux-panel-body">
+          <div class="ux-pipeline">
             ${pipelineHtml}
+          </div>
         </div>
+
+      </div>
+
     </div>
   `;
 }
@@ -589,7 +1151,7 @@ function renderProjects(){
           <td><span style="font-size:12px;">${pipelineText} (${pct}%)</span></td>
           <td class="num mono">${fmtIdr(s.awal)}</td>
           <td class="num mono">${fmtPct(eff)}</td>
-          <td class="num mono">${durationDays(p)}h</td>
+          <td class="num mono">${durationDays(p)}hari</td>
         </tr>
       `;
       if (openProjectId === p.id) {
