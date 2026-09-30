@@ -258,15 +258,15 @@ function render(){
   else if(activeTab === 'projects'){
 
     headerHtml = `
-      <div class="simple-page-header">
+      <div class="page-hero">
 
         <div>
 
-          <div class="simple-page-title">
+          <div class="page-hero-title">
             Project &amp; BoQ Management
           </div>
 
-          <div class="simple-page-sub">
+          <div class="page-hero-sub">
             Detail project, BoQ, SPH, dan progress
           </div>
 
@@ -284,15 +284,15 @@ function render(){
   else if(activeTab === 'team'){
 
     headerHtml = `
-      <div class="simple-page-header">
+      <div class="page-hero">
 
         <div>
 
-          <div class="simple-page-title">
+          <div class="page-hero-title">
             Team &amp; Workload
           </div>
 
-          <div class="simple-page-sub">
+          <div class="page-hero-sub">
             Distribusi project dan beban kerja tim
           </div>
 
