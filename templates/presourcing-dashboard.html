@@ -178,6 +178,57 @@ body{
   .page-shell .panel .panel-hd .filters { width: 100%; flex-wrap: wrap; }
 }
 
+/* =========================================================
+   STATUS BADGES (Global untuk semua Tab)
+   ========================================================= */
+.badge { 
+  padding: 4px 8px; 
+  border-radius: 4px; 
+  font-size: 10.5px; 
+  font-weight: 600; 
+  display: inline-block; 
+  text-align: center;
+  line-height: 1;
+}
+.badge-on-track { background: #16A34A; color: #FFFFFF; }
+.badge-at-risk { background: #F59E0B; color: #FFFFFF; }
+.badge-overdue { background: #DC2626; color: #FFFFFF; }
+.badge-completed { background: #2563EB; color: #FFFFFF; }
+.badge-planned { background: #E2E8F0; color: #475569; }
+
+/* =========================================================
+   PAGE HERO (Header Utama untuk semua Tab)
+   ========================================================= */
+.page-hero { 
+  min-height: 76px; 
+  display: flex; 
+  align-items: center; 
+  justify-content: space-between; 
+  gap: 20px; 
+  padding: 16px 24px; 
+  margin-bottom: 20px; 
+  border-radius: 10px; 
+  color: #fff; 
+  background: linear-gradient(115deg, #0B4F91 0%, #1769C2 58%, #2583DA 100%); 
+  box-shadow: 0 4px 12px rgba(15,23,42,.12); 
+  position: relative; 
+  overflow: hidden; 
+}
+.page-hero::after { 
+  content: ''; 
+  position: absolute; 
+  width: 260px; 
+  height: 160px; 
+  right: -70px; 
+  top: -90px; 
+  background: rgba(255,255,255,.07); 
+  transform: rotate(28deg); 
+  pointer-events: none; 
+}
+.page-hero-main { position: relative; z-index: 1; min-width: 0; }
+.page-hero-title { font-size: 22px; line-height: 1.1; font-weight: 700; letter-spacing: .01em; margin-bottom: 4px; }
+.page-hero-sub { font-size: 11.5px; color: rgba(255,255,255,.85); }
+
 </style>
 </head>
 <body>

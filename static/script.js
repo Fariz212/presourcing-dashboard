@@ -213,10 +213,11 @@ function render(){
         </div>
       </div>
     `;
-  } else if(activeTab === 'projects'){
+  } 
+  else if(activeTab === 'projects'){
     headerHtml = `
       <div class="page-hero">
-        <div>
+        <div class="page-hero-main">
           <div class="page-hero-title">Project &amp; BoQ Management</div>
           <div class="page-hero-sub">Detail project, BoQ, SPH, dan progress</div>
         </div>
@@ -225,7 +226,7 @@ function render(){
   } else if(activeTab === 'team'){
     headerHtml = `
       <div class="page-hero">
-        <div>
+        <div class="page-hero-main">
           <div class="page-hero-title">Team &amp; Workload</div>
           <div class="page-hero-sub">Distribusi project dan beban kerja tim</div>
         </div>
