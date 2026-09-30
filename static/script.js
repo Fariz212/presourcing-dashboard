@@ -918,7 +918,25 @@ function renderProjectDetail(p){
       <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
         <div style="font-size:12px; color:var(--text-muted);">Lead Presource: <strong style="color:var(--text);">${p.leadId||'—'}</strong> · PIC terlibat: ${uniq.join(', ')||'—'}</div>
         <div style="display:flex; gap:6px;">
-          <button class="mini-btn" onclick="event.stopPropagation(); triggerRevisiBoq('${p.id}')">🔄 Revisi Excel BoQ</button>
+          <button
+  class="mini-btn"
+  onclick="
+    event.stopPropagation();
+    downloadRevisionTemplate('${p.id}')
+  "
+>
+  📥 Template Revisi
+</button>
+
+<button
+  class="mini-btn"
+  onclick="
+    event.stopPropagation();
+    triggerRevisiBoq('${p.id}')
+  "
+>
+  🔄 Revisi Excel BoQ
+</button>
           <button class="mini-btn" onclick="downloadProjectReport('${p.id}')">📥 Download Excel</button>
           <button class="mini-btn" data-edit-project="${p.id}">Edit</button>
           <button class="mini-btn danger" data-delete-project="${p.id}">Hapus</button>
@@ -978,7 +996,32 @@ function wireEvents(){
   if(btnTeam) btnTeam.onclick = ()=> openTeamModal();
 }
 
-function downloadProjectReport(projectId) { window.location.href = `/api/download_report?project_id=${projectId}`; }
+function downloadProjectReport(projectId){
+
+  window.location.href =
+    `/api/download_report?project_id=${
+      encodeURIComponent(projectId)
+    }`;
+}
+
+
+function downloadBoqTemplate(){
+
+  window.location.href =
+    '/api/download_template_boq';
+}
+
+
+function downloadRevisionTemplate(
+  projectId
+){
+
+  window.location.href =
+    `/api/projects/${
+      encodeURIComponent(projectId)
+    }/download_boq_template`;
+}
+
 async function triggerRevisiBoq(projectId) {
 
     const fileInput =
@@ -1089,779 +1132,707 @@ async function triggerRevisiBoq(projectId) {
     fileInput.click();
 }
 
-function showRevisionPreview(
-    projectId,
-    file,
-    data
-) {
-
-    const s =
-        data.summary;
-
-    const addedHtml =
-        data.added.length
-            ? data.added.map(
-                item => `
-                    <div class="revision-row added">
-
-                        <div class="revision-mark">
-                            +
-                        </div>
-
-                        <div>
-
-                            <strong>
-                                ${escAttr(
-                                    item.description
-                                )}
-                            </strong>
-
-                            <div class="revision-meta">
-                                ${item.qty || 0}
-                                ${escAttr(item.uom || '')}
-                                ${item.vendor
-                                    ? ` · ${escAttr(item.vendor)}`
-                                    : ''}
-                            </div>
-
-                        </div>
-
-                    </div>
-                `
-            ).join('')
-            : `
-                <div class="revision-empty">
-                    Tidak ada item baru.
-                </div>
-            `;
-
-
-    const updatedHtml =
-        data.updated.length
-            ? data.updated.map(
-                item => {
-
-                    const changeText =
-                        Object.entries(
-                            item.changes
-                        ).map(
-                            ([key, values]) => `
-                                <span>
-                                    <b>${key}</b>:
-                                    ${escAttr(
-                                        String(values[0])
-                                    )}
-                                    →
-                                    ${escAttr(
-                                        String(values[1])
-                                    )}
-                                </span>
-                            `
-                        ).join('<br>');
-
-                    return `
-                        <div class="revision-row updated">
-
-                            <div class="revision-mark">
-                                ~
-                            </div>
-
-                            <div>
-
-                                <strong>
-                                    ${escAttr(
-                                        item.description
-                                    )}
-                                </strong>
-
-                                <div class="revision-meta">
-                                    ${changeText}
-                                </div>
-
-                            </div>
-
-                        </div>
-                    `;
-                }
-            ).join('')
-            : `
-                <div class="revision-empty">
-                    Tidak ada item yang berubah.
-                </div>
-            `;
-
-
-    const removedHtml =
-        data.removed.length
-            ? data.removed.map(
-                item => `
-                    <div class="revision-row removed">
-
-                        <div class="revision-mark">
-                            −
-                        </div>
-
-                        <div>
-
-                            <strong>
-                                ${escAttr(
-                                    item.description
-                                )}
-                            </strong>
-
-                            <div class="revision-meta">
-                                Item ini akan dihapus dari BoQ.
-                            </div>
-
-                        </div>
-
-                    </div>
-                `
-            ).join('')
-            : `
-                <div class="revision-empty">
-                    Tidak ada item yang dihapus.
-                </div>
-            `;
-
-
-    const modal =
-        document.createElement('div');
-
-    modal.id =
-        'revision-preview-modal';
-
-    modal.className =
-        'overlay';
-
-    modal.style.zIndex =
-        '110';
-
-
-    modal.innerHTML = `
-
-        <div
-            class="modal"
-            style="
-                max-width:780px;
-                max-height:90vh;
-            "
-        >
-
-            <div class="modal-hd">
-
-                <div>
-
-                    <h3>
-                        Review Revisi BoQ
-                    </h3>
-
-                    <div
-                        style="
-                            margin-top:3px;
-                            font-size:10px;
-                            color:#94A3B8;
-                        "
-                    >
-
-                        ${escAttr(file.name)}
-
-                    </div>
-
-                </div>
-
-                <button
-                    class="mini-btn"
-                    onclick="closeRevisionPreview()"
-                >
-                    Tutup
-                </button>
-
-            </div>
-
-
-            <div class="modal-body">
-
-                <div
-                    style="
-                        padding:12px;
-                        background:#F8FAFC;
-                        border:1px solid #E2E8F0;
-                        border-radius:7px;
-                        margin-bottom:14px;
-                    "
-                >
-
-                    <div
-                        style="
-                            font-size:10px;
-                            color:#64748B;
-                            margin-bottom:8px;
-                        "
-                    >
-                        Perubahan yang akan diterapkan
-                    </div>
-
-
-                    <div
-                        style="
-                            display:grid;
-                            grid-template-columns:
-                                repeat(4,1fr);
-                            gap:7px;
-                        "
-                    >
-
-                        ${revisionSummaryCard(
-                            '+',
-                            s.added,
-                            'Added',
-                            '#15803D',
-                            '#F0FDF4'
-                        )}
-
-                        ${revisionSummaryCard(
-                            '~',
-                            s.updated,
-                            'Updated',
-                            '#2563EB',
-                            '#EFF6FF'
-                        )}
-
-                        ${revisionSummaryCard(
-                            '−',
-                            s.removed,
-                            'Removed',
-                            '#DC2626',
-                            '#FEF2F2'
-                        )}
-
-                        ${revisionSummaryCard(
-                            '=',
-                            s.unchanged,
-                            'Unchanged',
-                            '#64748B',
-                            '#F8FAFC'
-                        )}
-
-                    </div>
-
-                </div>
-
-
-                <div class="revision-section">
-
-                    <div class="revision-section-title added-title">
-                        + Added (${s.added})
-                    </div>
-
-                    ${addedHtml}
-
-                </div>
-
-
-                <div class="revision-section">
-
-                    <div class="revision-section-title updated-title">
-                        ~ Updated (${s.updated})
-                    </div>
-
-                    ${updatedHtml}
-
-                </div>
-
-
-                <div class="revision-section">
-
-                    <div class="revision-section-title removed-title">
-                        − Removed (${s.removed})
-                    </div>
-
-                    ${removedHtml}
-
-                </div>
-
-            </div>
-
-
-            <div class="modal-ft">
-
-                <button
-                    class="btn-ghost"
-                    onclick="closeRevisionPreview()"
-                >
-                    Batal
-                </button>
-
-                <button
-                    class="btn-primary"
-                    onclick="confirmRevisionBoq(
-                        '${projectId}'
-                    )"
-                >
-                    Confirm &amp; Apply Revision
-                </button>
-
-            </div>
-
-        </div>
-    `;
-
-
-    document.body.appendChild(
-        modal
-    );
-
-    window.pendingRevisionFile =
-        file;
+function revisionSummaryCard(
+  icon,
+  count,
+  label,
+  color,
+  bg
+){
+
+  return `
+    <div style="
+      padding:9px;
+      border:1px solid #E2E8F0;
+      border-radius:7px;
+      background:${bg};
+    ">
+
+      <div style="
+        display:flex;
+        align-items:center;
+        gap:7px;
+      ">
+
+        <span style="
+          width:22px;
+          height:22px;
+          display:inline-flex;
+          align-items:center;
+          justify-content:center;
+          border-radius:6px;
+          background:${color};
+          color:#fff;
+          font-weight:800;
+          font-size:13px;
+        ">
+          ${escAttr(icon)}
+        </span>
+
+        <strong style="
+          font-size:16px;
+          color:#0F172A;
+        ">
+          ${Number(count) || 0}
+        </strong>
+
+      </div>
+
+      <div style="
+        margin-top:4px;
+        font-size:8.5px;
+        color:#64748B;
+      ">
+        ${escAttr(label)}
+      </div>
+
+    </div>
+  `;
 }
+
 
 function showRevisionPreview(
-    projectId,
-    file,
-    data
-) {
+  projectId,
+  file,
+  data
+){
 
-    const s =
-        data.summary;
+  const s =
+    data.summary || {};
 
-    const addedHtml =
-        data.added.length
-            ? data.added.map(
-                item => `
-                    <div class="revision-row added">
+  const issues =
+    Array.isArray(data.issues)
+      ? data.issues
+      : [];
 
-                        <div class="revision-mark">
-                            +
-                        </div>
+  const added =
+    Array.isArray(data.added)
+      ? data.added
+      : [];
 
-                        <div>
+  const updated =
+    Array.isArray(data.updated)
+      ? data.updated
+      : [];
 
-                            <strong>
-                                ${escAttr(
-                                    item.description
-                                )}
-                            </strong>
+  const removed =
+    Array.isArray(data.removed)
+      ? data.removed
+      : [];
 
-                            <div class="revision-meta">
-                                ${item.qty || 0}
-                                ${escAttr(item.uom || '')}
-                                ${item.vendor
-                                    ? ` · ${escAttr(item.vendor)}`
-                                    : ''}
-                            </div>
+  const canApply =
+    !data.has_errors;
 
-                        </div>
 
-                    </div>
-                `
-            ).join('')
-            : `
-                <div class="revision-empty">
-                    Tidak ada item baru.
+  const issueHtml =
+    issues.length
+      ? `
+        <div style="
+          margin-bottom:12px;
+          padding:9px 10px;
+          border:1px solid ${
+            data.has_errors
+              ? '#FECACA'
+              : '#FDE68A'
+          };
+          border-radius:6px;
+          background:${
+            data.has_errors
+              ? '#FEF2F2'
+              : '#FFFBEB'
+          };
+          color:${
+            data.has_errors
+              ? '#B91C1C'
+              : '#92400E'
+          };
+          font-size:9px;
+        ">
+
+          <strong>
+            ${
+              data.has_errors
+                ? 'Excel memiliki error.'
+                : 'Catatan validasi:'
+            }
+          </strong>
+
+          ${
+            issues
+              .slice(0, 8)
+              .map(issue => `
+                <div style="
+                  margin-top:3px;
+                ">
+                  Row ${
+                    escAttr(issue.row)
+                  }
+                  · ${
+                    escAttr(issue.message)
+                  }
                 </div>
-            `;
+              `)
+              .join('')
+          }
 
-
-    const updatedHtml =
-        data.updated.length
-            ? data.updated.map(
-                item => {
-
-                    const changeText =
-                        Object.entries(
-                            item.changes
-                        ).map(
-                            ([key, values]) => `
-                                <span>
-                                    <b>${key}</b>:
-                                    ${escAttr(
-                                        String(values[0])
-                                    )}
-                                    →
-                                    ${escAttr(
-                                        String(values[1])
-                                    )}
-                                </span>
-                            `
-                        ).join('<br>');
-
-                    return `
-                        <div class="revision-row updated">
-
-                            <div class="revision-mark">
-                                ~
-                            </div>
-
-                            <div>
-
-                                <strong>
-                                    ${escAttr(
-                                        item.description
-                                    )}
-                                </strong>
-
-                                <div class="revision-meta">
-                                    ${changeText}
-                                </div>
-
-                            </div>
-
-                        </div>
-                    `;
-                }
-            ).join('')
-            : `
-                <div class="revision-empty">
-                    Tidak ada item yang berubah.
+          ${
+            issues.length > 8
+              ? `
+                <div style="
+                  margin-top:4px;
+                  color:#A16207;
+                ">
+                  +
+                  ${
+                    issues.length - 8
+                  }
+                  issue lainnya
                 </div>
-            `;
-
-
-    const removedHtml =
-        data.removed.length
-            ? data.removed.map(
-                item => `
-                    <div class="revision-row removed">
-
-                        <div class="revision-mark">
-                            −
-                        </div>
-
-                        <div>
-
-                            <strong>
-                                ${escAttr(
-                                    item.description
-                                )}
-                            </strong>
-
-                            <div class="revision-meta">
-                                Item ini akan dihapus dari BoQ.
-                            </div>
-
-                        </div>
-
-                    </div>
-                `
-            ).join('')
-            : `
-                <div class="revision-empty">
-                    Tidak ada item yang dihapus.
-                </div>
-            `;
-
-
-    const modal =
-        document.createElement('div');
-
-    modal.id =
-        'revision-preview-modal';
-
-    modal.className =
-        'overlay';
-
-    modal.style.zIndex =
-        '110';
-
-
-    modal.innerHTML = `
-
-        <div
-            class="modal"
-            style="
-                max-width:780px;
-                max-height:90vh;
-            "
-        >
-
-            <div class="modal-hd">
-
-                <div>
-
-                    <h3>
-                        Review Revisi BoQ
-                    </h3>
-
-                    <div
-                        style="
-                            margin-top:3px;
-                            font-size:10px;
-                            color:#94A3B8;
-                        "
-                    >
-
-                        ${escAttr(file.name)}
-
-                    </div>
-
-                </div>
-
-                <button
-                    class="mini-btn"
-                    onclick="closeRevisionPreview()"
-                >
-                    Tutup
-                </button>
-
-            </div>
-
-
-            <div class="modal-body">
-
-                <div
-                    style="
-                        padding:12px;
-                        background:#F8FAFC;
-                        border:1px solid #E2E8F0;
-                        border-radius:7px;
-                        margin-bottom:14px;
-                    "
-                >
-
-                    <div
-                        style="
-                            font-size:10px;
-                            color:#64748B;
-                            margin-bottom:8px;
-                        "
-                    >
-                        Perubahan yang akan diterapkan
-                    </div>
-
-
-                    <div
-                        style="
-                            display:grid;
-                            grid-template-columns:
-                                repeat(4,1fr);
-                            gap:7px;
-                        "
-                    >
-
-                        ${revisionSummaryCard(
-                            '+',
-                            s.added,
-                            'Added',
-                            '#15803D',
-                            '#F0FDF4'
-                        )}
-
-                        ${revisionSummaryCard(
-                            '~',
-                            s.updated,
-                            'Updated',
-                            '#2563EB',
-                            '#EFF6FF'
-                        )}
-
-                        ${revisionSummaryCard(
-                            '−',
-                            s.removed,
-                            'Removed',
-                            '#DC2626',
-                            '#FEF2F2'
-                        )}
-
-                        ${revisionSummaryCard(
-                            '=',
-                            s.unchanged,
-                            'Unchanged',
-                            '#64748B',
-                            '#F8FAFC'
-                        )}
-
-                    </div>
-
-                </div>
-
-
-                <div class="revision-section">
-
-                    <div class="revision-section-title added-title">
-                        + Added (${s.added})
-                    </div>
-
-                    ${addedHtml}
-
-                </div>
-
-
-                <div class="revision-section">
-
-                    <div class="revision-section-title updated-title">
-                        ~ Updated (${s.updated})
-                    </div>
-
-                    ${updatedHtml}
-
-                </div>
-
-
-                <div class="revision-section">
-
-                    <div class="revision-section-title removed-title">
-                        − Removed (${s.removed})
-                    </div>
-
-                    ${removedHtml}
-
-                </div>
-
-            </div>
-
-
-            <div class="modal-ft">
-
-                <button
-                    class="btn-ghost"
-                    onclick="closeRevisionPreview()"
-                >
-                    Batal
-                </button>
-
-                <button
-                    class="btn-primary"
-                    onclick="confirmRevisionBoq(
-                        '${projectId}'
-                    )"
-                >
-                    Confirm &amp; Apply Revision
-                </button>
-
-            </div>
+              `
+              : ''
+          }
 
         </div>
-    `;
+      `
+      : '';
 
 
-    document.body.appendChild(
-        modal
-    );
+  const addedHtml =
+    added.length
+      ? added.map(item => `
+          <div class="revision-row added">
 
-    window.pendingRevisionFile =
-        file;
-}
+            <div class="revision-mark">
+              +
+            </div>
 
-function closeRevisionPreview() {
+            <div>
 
-    const modal =
-        document.getElementById(
-            'revision-preview-modal'
-        );
+              <strong>
+                ${escAttr(
+                  item.description || ''
+                )}
+              </strong>
 
-    if(modal){
-        modal.remove();
-    }
-
-    window.pendingRevisionFile =
-        null;
-}
-
-async function confirmRevisionBoq(
-    projectId
-) {
-
-    const file =
-        window.pendingRevisionFile;
-
-    if(!file){
-        alert(
-            'File revision tidak ditemukan.'
-        );
-        return;
-    }
-
-
-    const formData =
-        new FormData();
-
-    formData.append(
-        'file',
-        file
-    );
-
-    formData.append(
-        'ticket_id',
-        projectId
-    );
-
-
-    const btn =
-        document.querySelector(
-            '#revision-preview-modal .btn-primary'
-        );
-
-    if(btn){
-        btn.disabled = true;
-        btn.innerText =
-            'Applying revision...';
-    }
-
-
-    try {
-
-        const res =
-            await fetch(
-                '/api/revisi_boq',
-                {
-                    method:'POST',
-                    body:formData
+              <div class="revision-meta">
+                ${
+                  escAttr(
+                    String(
+                      item.qty ?? 0
+                    )
+                  )
                 }
-            );
 
-        const result =
-            await res.json();
+                ${
+                  escAttr(
+                    item.uom || ''
+                  )
+                }
+
+                ${
+                  item.vendor
+                    ? ` · ${
+                        escAttr(
+                          item.vendor
+                        )
+                      }`
+                    : ''
+                }
+              </div>
+
+            </div>
+
+          </div>
+        `).join('')
+      : `
+        <div class="revision-empty">
+          Tidak ada item baru.
+        </div>
+      `;
 
 
-        if(
-            res.ok &&
-            result.success
-        ){
+  const updatedHtml =
+    updated.length
+      ? updated.map(item => {
 
-            closeRevisionPreview();
+          const changeText =
+            Object.entries(
+              item.changes || {}
+            )
+            .map(
+              ([key, values]) => `
+                <span>
+                  <b>
+                    ${escAttr(key)}
+                  </b>:
 
-            alert(
-                'BoQ berhasil direvisi.'
-            );
+                  ${
+                    escAttr(
+                      String(
+                        values[0] ?? ''
+                      )
+                    )
+                  }
 
-            loadAll();
+                  →
 
-        }
-        else {
+                  ${
+                    escAttr(
+                      String(
+                        values[1] ?? ''
+                      )
+                    )
+                  }
+                </span>
+              `
+            )
+            .join('<br>');
 
-            alert(
-                `Gagal menerapkan revisi: ${
-                    result.message || ''
-                }`
-            );
 
-            if(btn){
-                btn.disabled = false;
-                btn.innerText =
-                    'Confirm & Apply Revision';
+          return `
+            <div class="revision-row updated">
+
+              <div class="revision-mark">
+                ~
+              </div>
+
+              <div>
+
+                <strong>
+                  ${escAttr(
+                    item.description || ''
+                  )}
+                </strong>
+
+                <div class="revision-meta">
+                  ${changeText}
+                </div>
+
+              </div>
+
+            </div>
+          `;
+        })
+        .join('')
+      : `
+        <div class="revision-empty">
+          Tidak ada item yang berubah.
+        </div>
+      `;
+
+
+  const removedHtml =
+    removed.length
+      ? removed.map(item => `
+          <div class="revision-row removed">
+
+            <div class="revision-mark">
+              −
+            </div>
+
+            <div>
+
+              <strong>
+                ${escAttr(
+                  item.description || ''
+                )}
+              </strong>
+
+              <div class="revision-meta">
+
+                ${
+                  item.itemNo
+                    ? `Item No: ${
+                        escAttr(
+                          item.itemNo
+                        )
+                      } · `
+                    : ''
+                }
+
+                Item ini akan dihapus
+                dari BoQ.
+
+              </div>
+
+            </div>
+
+          </div>
+        `).join('')
+      : `
+        <div class="revision-empty">
+          Tidak ada item yang dihapus.
+        </div>
+      `;
+
+
+  const overlay =
+    document.createElement(
+      'div'
+    );
+
+  overlay.id =
+    'revision-preview-modal';
+
+  overlay.className =
+    'overlay';
+
+  overlay.style.zIndex =
+    '110';
+
+
+  overlay.innerHTML = `
+
+    <div
+      class="modal"
+      style="
+        max-width:780px;
+        max-height:90vh;
+      "
+    >
+
+      <div class="modal-hd">
+
+        <div>
+
+          <h3>
+            Review Revisi BoQ
+          </h3>
+
+          <div style="
+            margin-top:3px;
+            font-size:10px;
+            color:#94A3B8;
+          ">
+            ${escAttr(
+              file.name
+            )}
+          </div>
+
+        </div>
+
+        <button
+          class="mini-btn"
+          type="button"
+          onclick="closeRevisionPreview()"
+        >
+          Tutup
+        </button>
+
+      </div>
+
+
+      <div class="modal-body">
+
+        ${issueHtml}
+
+
+        <div style="
+          padding:12px;
+          background:#F8FAFC;
+          border:1px solid #E2E8F0;
+          border-radius:7px;
+          margin-bottom:14px;
+        ">
+
+          <div style="
+            font-size:10px;
+            color:#64748B;
+            margin-bottom:8px;
+          ">
+            Perubahan yang akan diterapkan
+          </div>
+
+
+          <div style="
+            display:grid;
+            grid-template-columns:
+              repeat(4,1fr);
+            gap:7px;
+          ">
+
+            ${
+              revisionSummaryCard(
+                '+',
+                s.added,
+                'Added',
+                '#15803D',
+                '#F0FDF4'
+              )
             }
 
+            ${
+              revisionSummaryCard(
+                '~',
+                s.updated,
+                'Updated',
+                '#2563EB',
+                '#EFF6FF'
+              )
+            }
+
+            ${
+              revisionSummaryCard(
+                '−',
+                s.removed,
+                'Removed',
+                '#DC2626',
+                '#FEF2F2'
+              )
+            }
+
+            ${
+              revisionSummaryCard(
+                '=',
+                s.unchanged,
+                'Unchanged',
+                '#64748B',
+                '#F8FAFC'
+              )
+            }
+
+          </div>
+
+        </div>
+
+
+        <div class="revision-section">
+
+          <div class="
+            revision-section-title
+            added-title
+          ">
+            + Added (${s.added || 0})
+          </div>
+
+          ${addedHtml}
+
+        </div>
+
+
+        <div class="revision-section">
+
+          <div class="
+            revision-section-title
+            updated-title
+          ">
+            ~ Updated (${s.updated || 0})
+          </div>
+
+          ${updatedHtml}
+
+        </div>
+
+
+        <div class="revision-section">
+
+          <div class="
+            revision-section-title
+            removed-title
+          ">
+            − Removed (${s.removed || 0})
+          </div>
+
+          ${removedHtml}
+
+        </div>
+
+      </div>
+
+
+      <div class="modal-ft">
+
+        <button
+          class="btn-ghost"
+          type="button"
+          onclick="closeRevisionPreview()"
+        >
+          Batal
+        </button>
+
+
+        <button
+          class="btn-primary"
+          id="btn-confirm-revision"
+          type="button"
+          ${canApply ? '' : 'disabled'}
+          onclick="
+            confirmRevisionBoq(
+              '${escAttr(projectId)}'
+            )
+          "
+        >
+          ${
+            canApply
+              ? 'Confirm & Apply Revision'
+              : 'Perbaiki Error Terlebih Dahulu'
+          }
+        </button>
+
+      </div>
+
+    </div>
+
+  `;
+
+
+  document.body.appendChild(
+    overlay
+  );
+
+  window.pendingRevisionFile =
+    file;
+}
+
+
+function closeRevisionPreview(){
+
+  const modal =
+    document.getElementById(
+      'revision-preview-modal'
+    );
+
+  if(modal){
+    modal.remove();
+  }
+
+  window.pendingRevisionFile =
+    null;
+}
+
+
+async function confirmRevisionBoq(
+  projectId
+){
+
+  const file =
+    window.pendingRevisionFile;
+
+  if(!file){
+
+    alert(
+      'File revision tidak ditemukan.'
+    );
+
+    return;
+  }
+
+
+  const formData =
+    new FormData();
+
+  formData.append(
+    'file',
+    file
+  );
+
+  formData.append(
+    'ticket_id',
+    projectId
+  );
+
+
+  const btn =
+    document.getElementById(
+      'btn-confirm-revision'
+    );
+
+
+  if(btn){
+
+    btn.disabled = true;
+
+    btn.innerText =
+      'Applying revision...';
+  }
+
+
+  try{
+
+    const res =
+      await fetch(
+        '/api/revisi_boq',
+        {
+          method:'POST',
+          body:formData
         }
+      );
 
+    const result =
+      await res.json();
+
+
+    if(
+      res.ok &&
+      result.success
+    ){
+
+      closeRevisionPreview();
+
+      alert(
+        'BoQ berhasil direvisi.'
+      );
+
+      await loadAll();
+
+      return;
     }
-    catch(error){
 
-        console.error(
-            error
-        );
 
-        alert(
-            'Terjadi kesalahan saat menerapkan revisi.'
-        );
+    const details =
+      Array.isArray(
+        result.issues
+      )
+        ? '\n' +
+          result
+            .issues
+            .slice(0, 5)
+            .map(
+              x =>
+                `Row ${x.row}: ${x.message}`
+            )
+            .join('\n')
+        : '';
 
-        if(btn){
-            btn.disabled = false;
-            btn.innerText =
-                'Confirm & Apply Revision';
-        }
 
+    alert(
+      `Gagal menerapkan revisi: ${
+        result.message || 'Error'
+      }${details}`
+    );
+
+
+    if(btn){
+
+      btn.disabled = false;
+
+      btn.innerText =
+        'Confirm & Apply Revision';
     }
+
+  }
+  catch(error){
+
+    console.error(
+      'Apply revision error:',
+      error
+    );
+
+    alert(
+      'Terjadi kesalahan saat menerapkan revisi.'
+    );
+
+
+    if(btn){
+
+      btn.disabled = false;
+
+      btn.innerText =
+        'Confirm & Apply Revision';
+    }
+
+  }
+
 }
 
 // ---------- Modals ----------
@@ -2376,6 +2347,19 @@ function projectModalHtml(d, isNew){
       📥 Import Excel
 
     </button>
+
+    <button
+  class="mini-btn"
+  type="button"
+  onclick="downloadBoqTemplate()"
+  style="
+    color:#166534;
+    border-color:#86EFAC;
+    background:#F0FDF4;
+  "
+>
+  📥 Template
+</button>
 
     <input
       id="m-import-boq-file"
