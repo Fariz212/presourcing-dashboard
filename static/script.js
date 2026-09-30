@@ -996,128 +996,526 @@ let dCharts = {};
 function renderDashboardCharts() {
     if (typeof Chart === 'undefined') return;
 
-    // 1. Chart Status (Donut Chart)
-    let sCount = { 'On Track':0, 'At Risk':0, 'Overdue':0, 'Completed':0, 'Planned':0 };
-    projects.forEach(p => sCount[getDynamicStatus(p)]++);
+    // ----------------------------------------------------
+    // COMMON CHART CONFIG
+    // ----------------------------------------------------
+    const chartFont = {
+        family: "'Inter', 'Segoe UI', Arial, sans-serif",
+        size: 10
+    };
 
-    const ctxStatus = document.getElementById('chartStatus');
-    if (ctxStatus) {
-        if(dCharts.status) dCharts.status.destroy();
-        dCharts.status = new Chart(ctxStatus, {
-            type: 'doughnut',
-            data: {
-                labels: ['On Track', 'At Risk', 'Overdue', 'Completed', 'Planned'],
-                datasets: [{
-                    data: [sCount['On Track'], sCount['At Risk'], sCount['Overdue'], sCount['Completed'], sCount['Planned']],
-                    backgroundColor: ['#22C55E', '#F59E0B', '#EF4444', '#3B82F6', '#e2e8f0']
-                }]
-            },
-            options: {
-                responsive: true, maintainAspectRatio: false,
-                plugins: { legend: { position: 'right', labels: { boxWidth: 10, font: {size: 10} } } }
-            }
-        });
-    }
+    const axisColor = '#64748b';
+    const gridColor = '#eef2f7';
+    const primary = '#2563eb';
+    const primarySoft = '#93c5fd';
+    const dark = '#0f172a';
 
-    // 2. Chart Target RFS by Month (Mixed Line & Bar Chart)
-    const rfsData = {};
+    const destroyChart = (key) => {
+        if (dCharts[key]) {
+            dCharts[key].destroy();
+            dCharts[key] = null;
+        }
+    };
+
+    const fmtRpM = (value) => {
+        const num = Number(value) || 0;
+        return `Rp ${num.toLocaleString('id-ID', {
+            minimumFractionDigits: 1,
+            maximumFractionDigits: 1
+        })} M`;
+    };
+
+    // ----------------------------------------------------
+    // 1. PROJECT STATUS — DONUT
+    // ----------------------------------------------------
+    const statusLabels = ['On Track', 'At Risk', 'Overdue', 'Completed', 'Planned'];
+    const statusColors = ['#16a34a', '#f59e0b', '#dc2626', '#2563eb', '#cbd5e1'];
+
+    const sCount = {
+        'On Track': 0,
+        'At Risk': 0,
+        'Overdue': 0,
+        'Completed': 0,
+        'Planned': 0
+    };
+
     projects.forEach(p => {
-        if(!p.targetRfs) return;
-        const d = new Date(p.targetRfs);
-        const months = ["Jan","Feb","Mar","Apr","Mei","Jun","Jul","Ags","Sep","Okt","Nov","Des"];
-        const key = months[d.getMonth()] + " " + d.getFullYear();
-        const sortK = d.getFullYear() * 100 + d.getMonth();
-        
-        if(!rfsData[key]) rfsData[key] = { count: 0, val: 0, sortK: sortK };
-        rfsData[key].count += 1;
-        rfsData[key].val += (projectSph(p).awal || 0);
-    });
-    const rfsKeys = Object.keys(rfsData).sort((a,b) => rfsData[a].sortK - rfsData[b].sortK);
-
-    const ctxRfs = document.getElementById('chartRfsMonth');
-    if (ctxRfs) {
-        if(dCharts.rfsMonth) dCharts.rfsMonth.destroy();
-        dCharts.rfsMonth = new Chart(ctxRfs, {
-            type: 'bar',
-            data: {
-                labels: rfsKeys,
-                datasets: [
-                    { type: 'line', label: 'Nilai (Rp M)', data: rfsKeys.map(k=>(rfsData[k].val/1000000000).toFixed(1)), borderColor: '#0f172a', backgroundColor: '#0f172a', yAxisID: 'y1', tension: 0.3, borderWidth: 2 },
-                    { type: 'bar', label: 'Jumlah', data: rfsKeys.map(k=>rfsData[k].count), backgroundColor: '#93c5fd', yAxisID: 'y', borderRadius: 4 }
-                ]
-            },
-            options: {
-                responsive: true, maintainAspectRatio: false,
-                scales: {
-                    y: { type: 'linear', position: 'left', ticks: { stepSize: 1, font: {size: 9} }, grid: {color: '#f1f5f9'} },
-                    y1: { type: 'linear', position: 'right', grid: { drawOnChartArea: false }, ticks: { font: {size: 9} } },
-                    x: { ticks: { font: {size: 9} }, grid: {display: false} }
-                },
-                plugins: { legend: { position: 'bottom', labels: { boxWidth: 8, font: {size: 9} } } }
-            }
-        });
-    }
-
-    // 3. Chart Top 5 Project Value (Horizontal Bar Chart)
-    const top5 = [...projects]
-        .filter(p => p.status !== 'lose')
-        .map(p => ({ 
-            name: p.name.replace('Project ', '').substring(0, 15) + (p.name.length > 20 ? '...' : ''), 
-            val: ((projectSph(p).awal || 0) / 1000000000).toFixed(1) 
-        }))
-        .sort((a,b) => b.val - a.val)
-        .slice(0, 5);
-
-    const ctxTop5 = document.getElementById('chartTop5');
-    if (ctxTop5) {
-        if(dCharts.top5) dCharts.top5.destroy();
-        dCharts.top5 = new Chart(ctxTop5, {
-            type: 'bar',
-            data: {
-                labels: top5.map(t=>t.name),
-                datasets: [{ label: 'Nilai (Rp M)', data: top5.map(t=>t.val), backgroundColor: '#3B82F6', borderRadius: 4 }]
-            },
-            options: {
-                indexAxis: 'y', responsive: true, maintainAspectRatio: false,
-                scales: {
-                    x: { ticks: { font: {size: 9} }, grid: {color: '#f1f5f9'} },
-                    y: { ticks: { font: {size: 9} }, grid: {display: false} }
-                },
-                plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => 'Rp ' + ctx.raw + ' M' } } }
-            }
-        });
-    }
-
-    // 4. Chart Project Value by PIC Presource (Bar Chart - Tambahan Sesuai Mockup)
-    const picValData = {};
-    team.forEach(m => picValData[m] = 0);
-    projects.forEach(p => {
-        if(p.leadId && picValData[p.leadId] !== undefined) {
-            picValData[p.leadId] += ((projectSph(p).awal || 0) / 1000000000);
+        const status = getDynamicStatus(p);
+        if (sCount[status] !== undefined) {
+            sCount[status]++;
         }
     });
 
-    const ctxPic = document.getElementById('chartPicValue');
-    if (ctxPic) {
-        if(dCharts.picVal) dCharts.picVal.destroy();
-        dCharts.picVal = new Chart(ctxPic, {
-            type: 'bar',
+    const statusData = statusLabels.map(label => sCount[label]);
+
+    const ctxStatus = document.getElementById('chartStatus');
+
+    if (ctxStatus) {
+        destroyChart('status');
+
+        const hasStatusData = statusData.some(v => v > 0);
+
+        dCharts.status = new Chart(ctxStatus, {
+            type: 'doughnut',
             data: {
-                labels: team,
+                labels: hasStatusData ? statusLabels : ['Belum ada data'],
                 datasets: [{
-                    label: 'Nilai (Rp M)',
-                    data: team.map(m => picValData[m].toFixed(1)),
-                    backgroundColor: '#1E63C8',
-                    borderRadius: 4
+                    data: hasStatusData ? statusData : [1],
+                    backgroundColor: hasStatusData ? statusColors : ['#e2e8f0'],
+                    borderWidth: 0,
+                    hoverOffset: 4
                 }]
             },
             options: {
-                responsive: true, maintainAspectRatio: false,
-                scales: {
-                    x: { ticks: { font: {size: 9} }, grid: {display: false} },
-                    y: { ticks: { font: {size: 9} }, grid: {color: '#f1f5f9'} }
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '72%',
+
+                layout: {
+                    padding: 4
                 },
-                plugins: { legend: { display: false } }
+
+                plugins: {
+                    legend: {
+                        position: 'right',
+                        labels: {
+                            usePointStyle: true,
+                            pointStyle: 'circle',
+                            boxWidth: 7,
+                            boxHeight: 7,
+                            padding: 12,
+                            color: axisColor,
+                            font: chartFont
+                        }
+                    },
+
+                    tooltip: {
+                        padding: 10,
+                        callbacks: {
+                            label: function(ctx) {
+                                if (!hasStatusData) {
+                                    return ' Belum ada data';
+                                }
+
+                                const value = ctx.raw || 0;
+                                const total = statusData.reduce((a, b) => a + b, 0);
+                                const pct = total ? Math.round((value / total) * 100) : 0;
+
+                                return ` ${ctx.label}: ${value} project (${pct}%)`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // ----------------------------------------------------
+    // 2. TARGET RFS BY MONTH — BAR + LINE
+    // ----------------------------------------------------
+    const rfsData = {};
+
+    projects.forEach(p => {
+        if (!p.targetRfs) return;
+
+        const d = new Date(p.targetRfs);
+        if (isNaN(d.getTime())) return;
+
+        const months = [
+            'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
+            'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des'
+        ];
+
+        const key = `${months[d.getMonth()]} ${d.getFullYear()}`;
+        const sortK = d.getFullYear() * 100 + d.getMonth();
+
+        if (!rfsData[key]) {
+            rfsData[key] = {
+                count: 0,
+                val: 0,
+                sortK
+            };
+        }
+
+        rfsData[key].count += 1;
+        rfsData[key].val += (projectSph(p).awal || 0);
+    });
+
+    const rfsKeys = Object.keys(rfsData).sort(
+        (a, b) => rfsData[a].sortK - rfsData[b].sortK
+    );
+
+    const ctxRfs = document.getElementById('chartRfsMonth');
+
+    if (ctxRfs) {
+        destroyChart('rfsMonth');
+
+        dCharts.rfsMonth = new Chart(ctxRfs, {
+            type: 'bar',
+
+            data: {
+                labels: rfsKeys,
+
+                datasets: [
+                    {
+                        type: 'bar',
+                        label: 'Jumlah Project',
+                        data: rfsKeys.map(k => rfsData[k].count),
+
+                        backgroundColor: primarySoft,
+                        borderColor: primarySoft,
+                        borderWidth: 0,
+
+                        borderRadius: 5,
+                        borderSkipped: false,
+
+                        barPercentage: 0.6,
+                        categoryPercentage: 0.7,
+
+                        yAxisID: 'y'
+                    },
+
+                    {
+                        type: 'line',
+                        label: 'Project Value',
+                        data: rfsKeys.map(k =>
+                            Number((rfsData[k].val / 1000000000).toFixed(1))
+                        ),
+
+                        borderColor: dark,
+                        backgroundColor: dark,
+
+                        borderWidth: 2,
+                        pointRadius: 3,
+                        pointHoverRadius: 5,
+
+                        tension: 0.3,
+                        fill: false,
+
+                        yAxisID: 'y1'
+                    }
+                ]
+            },
+
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+
+                interaction: {
+                    mode: 'index',
+                    intersect: false
+                },
+
+                scales: {
+                    x: {
+                        grid: {
+                            display: false
+                        },
+                        border: {
+                            display: false
+                        },
+                        ticks: {
+                            color: axisColor,
+                            font: chartFont,
+                            maxRotation: 0,
+                            autoSkip: true
+                        }
+                    },
+
+                    y: {
+                        beginAtZero: true,
+
+                        ticks: {
+                            color: axisColor,
+                            font: chartFont,
+                            precision: 0,
+                            stepSize: 1
+                        },
+
+                        grid: {
+                            color: gridColor
+                        },
+
+                        border: {
+                            display: false
+                        }
+                    },
+
+                    y1: {
+                        beginAtZero: true,
+                        position: 'right',
+
+                        ticks: {
+                            color: axisColor,
+                            font: chartFont,
+                            callback: value => `Rp ${value} M`
+                        },
+
+                        grid: {
+                            drawOnChartArea: false
+                        },
+
+                        border: {
+                            display: false
+                        }
+                    }
+                },
+
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+
+                        labels: {
+                            usePointStyle: true,
+                            pointStyle: 'circle',
+                            boxWidth: 7,
+                            boxHeight: 7,
+                            padding: 14,
+                            color: axisColor,
+                            font: chartFont
+                        }
+                    },
+
+                    tooltip: {
+                        padding: 10,
+
+                        callbacks: {
+                            label: function(ctx) {
+                                if (ctx.dataset.label === 'Jumlah Project') {
+                                    return ` ${ctx.raw} project`;
+                                }
+
+                                return ` ${fmtRpM(ctx.raw)}`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // ----------------------------------------------------
+    // 3. TOP 5 PROJECT VALUE — HORIZONTAL BAR
+    // ----------------------------------------------------
+    const top5 = [...projects]
+        .filter(p => p.status !== 'lose')
+        .map(p => ({
+            name: p.name || 'Unnamed Project',
+            val: Number(((projectSph(p).awal || 0) / 1000000000).toFixed(1))
+        }))
+        .sort((a, b) => b.val - a.val)
+        .slice(0, 5);
+
+    const ctxTop5 = document.getElementById('chartTop5');
+
+    if (ctxTop5) {
+        destroyChart('top5');
+
+        dCharts.top5 = new Chart(ctxTop5, {
+            type: 'bar',
+
+            data: {
+                labels: top5.map(t => {
+                    const name = t.name;
+                    return name.length > 28
+                        ? name.substring(0, 28) + '...'
+                        : name;
+                }),
+
+                datasets: [{
+                    label: 'Project Value',
+                    data: top5.map(t => t.val),
+
+                    backgroundColor: primary,
+                    borderWidth: 0,
+
+                    borderRadius: 5,
+                    borderSkipped: false,
+
+                    barPercentage: 0.62,
+                    categoryPercentage: 0.72
+                }]
+            },
+
+            options: {
+                indexAxis: 'y',
+
+                responsive: true,
+                maintainAspectRatio: false,
+
+                scales: {
+                    x: {
+                        beginAtZero: true,
+
+                        grid: {
+                            color: gridColor
+                        },
+
+                        border: {
+                            display: false
+                        },
+
+                        ticks: {
+                            color: axisColor,
+                            font: chartFont,
+
+                            callback: value =>
+                                `Rp ${value} M`
+                        }
+                    },
+
+                    y: {
+                        grid: {
+                            display: false
+                        },
+
+                        border: {
+                            display: false
+                        },
+
+                        ticks: {
+                            color: '#334155',
+                            font: {
+                                ...chartFont,
+                                weight: '500'
+                            }
+                        }
+                    }
+                },
+
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+
+                    tooltip: {
+                        padding: 10,
+
+                        callbacks: {
+                            label: ctx =>
+                                ` ${fmtRpM(ctx.raw)}`
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // ----------------------------------------------------
+    // 4. PROJECT VALUE BY PIC — HORIZONTAL BAR
+    // ----------------------------------------------------
+    const picValData = {};
+
+    team.forEach(m => {
+        picValData[m] = 0;
+    });
+
+    projects.forEach(p => {
+        if (!p.leadId) return;
+
+        if (picValData[p.leadId] === undefined) {
+            picValData[p.leadId] = 0;
+        }
+
+        picValData[p.leadId] += (
+            (projectSph(p).awal || 0) / 1000000000
+        );
+    });
+
+    const picData = Object.entries(picValData)
+        .map(([name, value]) => ({
+            name,
+            value: Number(value.toFixed(1))
+        }))
+        .filter(x => x.value > 0)
+        .sort((a, b) => b.value - a.value);
+
+    const ctxPic = document.getElementById('chartPicValue');
+
+    if (ctxPic) {
+        destroyChart('picVal');
+
+        dCharts.picVal = new Chart(ctxPic, {
+            type: 'bar',
+
+            data: {
+                labels: picData.map(x => x.name),
+
+                datasets: [{
+                    label: 'Project Value',
+                    data: picData.map(x => x.value),
+
+                    backgroundColor: '#3b82f6',
+                    borderWidth: 0,
+
+                    borderRadius: 5,
+                    borderSkipped: false,
+
+                    barPercentage: 0.58,
+                    categoryPercentage: 0.72
+                }]
+            },
+
+            options: {
+                indexAxis: 'y',
+
+                responsive: true,
+                maintainAspectRatio: false,
+
+                scales: {
+                    x: {
+                        beginAtZero: true,
+
+                        grid: {
+                            color: gridColor
+                        },
+
+                        border: {
+                            display: false
+                        },
+
+                        ticks: {
+                            color: axisColor,
+                            font: chartFont,
+
+                            callback: value =>
+                                `Rp ${value} M`
+                        }
+                    },
+
+                    y: {
+                        grid: {
+                            display: false
+                        },
+
+                        border: {
+                            display: false
+                        },
+
+                        ticks: {
+                            color: '#334155',
+                            font: {
+                                ...chartFont,
+                                weight: '500'
+                            }
+                        }
+                    }
+                },
+
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+
+                    tooltip: {
+                        padding: 10,
+
+                        callbacks: {
+                            label: ctx =>
+                                ` ${fmtRpM(ctx.raw)}`
+                        }
+                    }
+                }
             }
         });
     }
