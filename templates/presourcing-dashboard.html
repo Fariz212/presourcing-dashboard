@@ -43,6 +43,10 @@ body{
 .navbar .brand h2 { margin: 0; font-size: 18px; color: #0F172A; letter-spacing: -0.02em; line-height: 1.2; }
 .navbar .brand span { font-size: 12px; color: var(--text-muted); font-weight: 500; }
 .navbar .user-info { display: flex; align-items: center; gap: 16px; font-size: 13px; }
+
+/* --- Tweak Navbar Buttons --- */
+.btn-nav-outline { background: transparent; border: 1px solid var(--border); color: var(--text); padding: 7px 12px; border-radius: 6px; cursor: pointer; font-weight: 500; font-family: inherit; font-size: 12.5px; transition: all 0.15s ease; display: flex; align-items: center; gap: 6px; }
+.btn-nav-outline:hover { background: var(--panel-2); border-color: var(--text-muted); }
 .btn-danger-outline { background: transparent; border: 1px solid var(--red); color: var(--red); padding: 7px 14px; border-radius: 6px; cursor: pointer; font-weight: 600; font-family: inherit; font-size: 12.5px; transition: all 0.15s ease; }
 .btn-danger-outline:hover { background: var(--red-soft); }
 
@@ -57,7 +61,6 @@ body{
 
 .btn-primary{padding:9px 18px; background:var(--primary); border:none; color:#FFFFFF; font-weight:600; cursor:pointer; font-family:inherit; font-size:13px; border-radius:6px; transition:background .15s ease;}
 .btn-primary:hover{background:var(--primary-hover);}
-
 .btn-ghost{padding:8px 14px; background:transparent; border:1px solid var(--border); color:var(--text-muted); cursor:pointer; font-family:inherit; font-size:12.5px; border-radius:6px;}
 .btn-ghost:hover{border-color:var(--text-muted); color:var(--text); background:var(--panel-2);}
 
@@ -137,11 +140,11 @@ tr.proj-row:hover{background:var(--panel-2);}
 .note{font-size:11.5px; color:var(--text-muted); margin-top:6px; line-height:1.4;}
 
 /* --- NOTIFICATION BELL --- */
-.notif-wrapper { position: relative; display: inline-block; margin-right: 16px; }
+.notif-wrapper { position: relative; display: inline-block; }
 .notif-btn { background: transparent; border: none; cursor: pointer; color: var(--text-muted); position: relative; padding: 6px; border-radius: 50%; transition: background 0.2s; display: flex; align-items: center; justify-content: center; }
 .notif-btn:hover { background: var(--panel-2, #F1F5F9); color: var(--text); }
 .notif-badge { position: absolute; top: 0; right: 0; background: var(--red, #DC2626); color: white; font-size: 10px; font-weight: bold; padding: 2px 5px; border-radius: 10px; border: 2px solid var(--panel, #fff); line-height: 1; display: none; }
-.notif-dropdown { position: absolute; top: 120%; right: -10px; width: 320px; background: var(--panel, #fff); border: 1px solid var(--border, #e2e8f0); border-radius: 8px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); display: none; z-index: 100; overflow: hidden; text-align: left; }
+.notif-dropdown { position: absolute; top: 130%; right: -10px; width: 320px; background: var(--panel, #fff); border: 1px solid var(--border, #e2e8f0); border-radius: 8px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); display: none; z-index: 100; overflow: hidden; text-align: left; }
 .notif-dropdown.active { display: block; }
 .notif-header { padding: 12px 16px; font-weight: 600; border-bottom: 1px solid var(--border, #e2e8f0); background: #FAFAFA; font-size: 13px; color: var(--text); }
 .notif-body { max-height: 320px; overflow-y: auto; }
@@ -161,6 +164,11 @@ tr.proj-row:hover{background:var(--panel-2);}
   </div>
   <div class="user-info">
     <span><b id="display-name">Loading...</b> &middot; <span id="display-dept">...</span></span>
+    
+    <!-- TOMBOL INBOX BARU -->
+    <button class="btn-nav-outline" onclick="openGlobalInboxModal()">
+      <span>📬</span> Inbox
+    </button>
     
     <!-- WADAH NOTIFIKASI TUNGGAL -->
     <div class="notif-wrapper">
@@ -184,20 +192,22 @@ tr.proj-row:hover{background:var(--panel-2);}
   </div>
 </nav>
 
-<!-- WADAH 1: KHUSUS INBOX -->
-<div style="max-width:1180px; margin:0 auto; padding:28px 24px 0;">
-  <div class="panel" style="border-left: 4px solid var(--primary); margin-bottom: 0;">
-    <div class="panel-hd" style="display: flex; justify-content: space-between; align-items: center;">
-      <div>
-        <h2 style="font-size: 16px;">📬 Inbox Request (Dari Presales)</h2>
-        <div style="font-size: 12.5px; color: var(--text-muted); margin-top: 4px;">Tiket baru yang belum di-assign ke tim Presourcing.</div>
+<!-- MODAL INBOX REQUEST (Dulu ada di luar, sekarang disembunyikan sebagai modal) -->
+<div class="overlay" id="global-inbox-modal" style="display: none; z-index: 99;">
+  <div class="modal" style="max-width: 900px;">
+    <div class="modal-hd">
+      <div style="display: flex; flex-direction: column;">
+          <h3>📬 Inbox Request (Dari Presales)</h3>
+          <span style="font-size: 12px; color: var(--text-muted); font-weight: normal; margin-top: 2px;">Tiket baru yang belum di-assign ke tim Presourcing.</span>
       </div>
-      
-      <button class="btn-ghost" onclick="fetchInbox()">🔄 Refresh Inbox</button>
+      <div style="display: flex; gap: 8px;">
+          <button class="btn-ghost" style="padding: 6px 12px;" onclick="fetchInbox()">🔄 Refresh</button>
+          <button class="btn-ghost" style="padding: 6px 10px;" onclick="closeGlobalInboxModal()">&times;</button>
+      </div>
     </div>
     
-    <div style="overflow-x:auto;">
-      <table>
+    <div class="modal-body" style="padding: 0; overflow-x: auto;">
+      <table style="width: 100%; border-collapse: collapse;">
         <thead>
           <tr>
             <th>Ticket ID</th>
@@ -216,7 +226,7 @@ tr.proj-row:hover{background:var(--panel-2);}
   </div>
 </div>
 
-<!-- WADAH 2: DASHBOARD UTAMA (Diinjeksi oleh script.js) -->
+<!-- WADAH DASHBOARD UTAMA (Diinjeksi oleh script.js) -->
 <div class="app" id="app" style="padding-top: 20px;"></div>
 
 <!-- Memanggil JavaScript Utama -->
@@ -224,6 +234,27 @@ tr.proj-row:hover{background:var(--panel-2);}
 
 <!-- Skrip Khusus Inbox & Notifikasi -->
 <script>
+  // Fungsi Kendali Modal Inbox
+  function openGlobalInboxModal() {
+      const modal = document.getElementById('global-inbox-modal');
+      if (modal) {
+          modal.style.display = 'flex';
+          fetchInbox(); // Pastikan data paling baru setiap kali dibuka
+      }
+  }
+
+  function closeGlobalInboxModal() {
+      const modal = document.getElementById('global-inbox-modal');
+      if (modal) {
+          modal.style.display = 'none';
+      }
+  }
+
+  // Tutup Modal Inbox jika klik area overlay gelap
+  document.getElementById('global-inbox-modal').addEventListener('click', function(e) {
+      if (e.target === this) closeGlobalInboxModal();
+  });
+
   async function fetchInbox() {
       try {
           const res = await fetch('/api/requests?role=admin'); 
@@ -244,7 +275,7 @@ tr.proj-row:hover{background:var(--panel-2);}
       const newRequests = data.filter(req => req.status === 'unassigned');
 
       if (newRequests.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 24px;">Tidak ada request baru. Inbox bersih! 🎉</td></tr>`;
+          tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 40px 20px;">Tidak ada request baru. Inbox bersih! 🎉</td></tr>`;
           return;
       }
 
@@ -257,18 +288,18 @@ tr.proj-row:hover{background:var(--panel-2);}
           const deptDisplay = req.department || 'Presales Team';
 
           tr.innerHTML = `
-              <td><b style="color: var(--text); font-family: 'JetBrains Mono', monospace;">${req.ticket_id}</b></td>
-              <td>
+              <td style="padding: 12px 16px;"><b style="color: var(--text); font-family: 'JetBrains Mono', monospace;">${req.ticket_id}</b></td>
+              <td style="padding: 12px 16px;">
                   <div style="font-weight: 600; color: var(--text);">${requesterDisplay}</div>
                   <div style="font-size: 11px; color: var(--text-muted);">@${req.requester_username} &middot; ${deptDisplay}</div>
               </td>
-              <td style="font-weight: 500;">
+              <td style="padding: 12px 16px; font-weight: 500;">
                   ${req.title}
                   <div style="font-size: 11.5px; color: var(--text-muted);">Klien: ${req.client_name || '-'}</div>
               </td>
-              <td style="color: var(--red); font-weight: 600;">${req.sla_date}</td>
-              <td><span class="tag tag-high" style="font-weight: 700;">New Request</span></td>
-              <td>
+              <td style="padding: 12px 16px; color: var(--red); font-weight: 600;">${req.sla_date}</td>
+              <td style="padding: 12px 16px;"><span class="tag tag-high" style="font-weight: 700;">New Request</span></td>
+              <td style="padding: 12px 16px;">
                   <button class="btn-primary" style="padding: 6px 12px; font-size: 12px;" onclick="openReviewModal('${req.ticket_id}')">
                       Review & Assign
                   </button>
@@ -278,6 +309,7 @@ tr.proj-row:hover{background:var(--panel-2);}
       });
   }
 
+  // Load awal Inbox di *background* untuk counter dll jika diperlukan kelak
   document.addEventListener('DOMContentLoaded', () => {
       fetchInbox();
   });
@@ -289,7 +321,7 @@ tr.proj-row:hover{background:var(--panel-2);}
       const teamList = (typeof team !== 'undefined' && Array.isArray(team)) ? team : ["Decki Okmal Pratama", "Ahmad Fauzi", "Siti Rahma", "Budi Santoso"];
 
       const modalHtml = `
-          <div class="overlay" id="review-modal">
+          <div class="overlay" id="review-modal" style="z-index: 100;">
               <div class="modal">
                   <div class="modal-hd">
                       <h3>Review & Assign Tiket: ${ticketId}</h3>
@@ -305,7 +337,7 @@ tr.proj-row:hover{background:var(--panel-2);}
                       </div>
 
                       <h4 style="margin: 16px 0 8px 0; font-size: 13px; font-weight: 600;">Daftar Item BoQ dari SA:</h4>
-                      <div id="modal-boq-items-container" style="border: 1px solid var(--border); border-radius: 6px; padding: 10px; font-size: 12.5px; background: #FFFFFF;">
+                      <div id="modal-boq-items-container" style="border: 1px solid var(--border); border-radius: 6px; padding: 10px; font-size: 12.5px; background: #FFFFFF; max-height: 250px; overflow-y: auto;">
                           Memuat rincian item BoQ...
                       </div>
 
@@ -396,9 +428,8 @@ tr.proj-row:hover{background:var(--panel-2);}
               
               fetchInbox(); 
               
-              if (typeof loadProjects === 'function') {
-                  loadProjects();
-              } else if (typeof loadAll === 'function') {
+              // Coba render ulang dashboard utama agar langsung terlihat
+              if (typeof loadAll === 'function') {
                   loadAll();
               } else {
                   location.reload(); 
