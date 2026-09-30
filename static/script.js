@@ -176,33 +176,108 @@ function fmtPct(n){ return n==null ? '—' : n.toFixed(1)+'%'; }
 
 function render(){
   const app = document.getElementById('app');
+
+  const pageTitle =
+    activeTab === 'overview'
+      ? 'Presourcing Overview'
+      : activeTab === 'projects'
+      ? 'Project & BoQ Management'
+      : 'Team & Workload';
+
+  const pageSub =
+    activeTab === 'overview'
+      ? 'Executive view of the current presourcing portfolio'
+      : activeTab === 'projects'
+      ? 'Detail project, BoQ, SPH, dan progress'
+      : 'Distribusi project dan beban kerja tim';
+
+  const lastUpdated = new Date().toLocaleTimeString('id-ID', {
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+
   app.innerHTML = `
-    <div class="hdr">
+    <div class="page-header-clean">
+
       <div>
-        <h1>Presourcing Project Dashboard</h1>
-        <div class="sub">Pipeline, Progress, and Target RFS${storageOk?' · <span style="color:var(--green)">Online</span>':' · <span style="color:var(--red)">Offline</span>'}</div>
+        <div class="page-eyebrow">
+          PRESOURCING CONTROL
+        </div>
+
+        <h1>
+          ${pageTitle}
+        </h1>
+
+        <div class="page-sub">
+          ${pageSub}
+        </div>
       </div>
-      <div class="tabs">
-        ${tabBtn('overview','Executive Dashboard')}
-        ${tabBtn('projects','Detail BoQ & SPH')}
-        ${tabBtn('team','Tim &amp; Beban Kerja')}
+
+      <div class="page-meta">
+        <span>
+          Last updated
+        </span>
+
+        <strong>
+          ${lastUpdated}
+        </strong>
+
+        <span class="page-status ${storageOk ? 'online' : 'offline'}">
+          ${storageOk ? '● Online' : '● Offline'}
+        </span>
       </div>
+
     </div>
+
     <div id="tabcontent"></div>
   `;
+
   const content = document.getElementById('tabcontent');
-  if(activeTab==='overview') content.innerHTML = renderOverview();
-  if(activeTab==='projects') content.innerHTML = renderProjects();
-  if(activeTab==='team') content.innerHTML = renderTeam();
-  
+
+  if(activeTab === 'overview') {
+    content.innerHTML = renderOverview();
+  }
+
+  if(activeTab === 'projects') {
+    content.innerHTML = renderProjects();
+  }
+
+  if(activeTab === 'team') {
+    content.innerHTML = renderTeam();
+  }
+
   wireEvents();
-  if(modal) renderModal();
+
+  if(modal) {
+    renderModal();
+  }
+
+  // sync navbar state
+  document.querySelectorAll('.app-nav-item').forEach(el => {
+    el.classList.toggle(
+      'active',
+      el.dataset.tab === activeTab
+    );
+  });
 }
 
 function tabBtn(id,label){
   return `<div class="tab ${activeTab===id?'active':''}" data-tab="${id}">${label}</div>`;
 }
 
+function switchDashboardTab(id) {
+  activeTab = id;
+  openProjectId = null;
+
+  document.querySelectorAll('.app-nav-item').forEach(el => {
+    el.classList.toggle(
+      'active',
+      el.dataset.tab === id
+    );
+  });
+
+  render();
+}
 // --------------------------------------------------------
 // RENDER OVERVIEW: EXECUTIVE DASHBOARD (PIXEL-PERFECT MOCKUP ALIGNMENT)
 // --------------------------------------------------------
@@ -395,12 +470,12 @@ function renderOverview(){
 
   // ---------- PIPELINE ----------
   const pipelineNames = [
-    'Project Identification',
-    'SPH Preparation',
-    'Vendor Selection',
-    'Negotiation',
-    'Finalization',
-    'RFS'
+  'Project Identification',
+  'SPH Preparation',
+  'Vendor Selection',
+  'Negotiation',
+  'Finalization',
+  'RFS'
   ];
 
   let pipelineHtml = '';
@@ -408,15 +483,34 @@ function renderOverview(){
   pipelineNames.forEach((name, i) => {
     const stageNo = i + 1;
     const count = pCount[stageNo];
+    const pct = totalProj ? Math.round((count / totalProj) * 100) : 0;
+
+    const isActive = count > 0 && stageNo < 6;
+    const isFinal = stageNo === 6;
 
     pipelineHtml += `
-      <div class="ux-pipeline-stage">
-        <div class="ux-pipeline-no">${stageNo}</div>
-        <div class="ux-pipeline-name">${name}</div>
-        <div class="ux-pipeline-count">${count}</div>
-        <div class="ux-pipeline-label">project</div>
-      </div>
-    `;
+        <div class="ux-pipeline-stage ${isActive ? 'is-active' : ''} ${isFinal ? 'is-final' : ''}">
+
+          <div class="ux-pipeline-top">
+            <div class="ux-pipeline-no">${stageNo}</div>
+            <div class="ux-pipeline-count">${count}</div>
+          </div>
+
+          <div class="ux-pipeline-name">${name}</div>
+
+          <div class="ux-pipeline-label">
+            ${count === 1 ? '1 project' : `${count} projects`}
+          </div>
+
+          <div class="ux-pipeline-share">
+            <div
+              class="ux-pipeline-share-fill"
+              style="width:${pct}%;">
+            </div>
+          </div>
+
+        </div>
+      `;
   });
 
   const dashStyles = `
@@ -702,83 +796,162 @@ function renderOverview(){
       }
 
       .ux-pipeline {
-        display:grid;
-        grid-template-columns:repeat(6,1fr);
-        gap:8px;
-      }
+  display:grid;
+  grid-template-columns:repeat(6, minmax(0,1fr));
+  gap:0;
+  padding:8px 4px 4px;
+}
 
-      .ux-pipeline-stage {
-        min-width:0;
-        padding:14px 10px;
-        border:1px solid #dbeafe;
-        background:#f8fbff;
-        border-radius:8px;
-        position:relative;
-      }
+.ux-pipeline-stage {
+  min-width:0;
+  position:relative;
+  padding:12px 14px 12px 18px;
+  background:#f8fafc;
+  border-top:1px solid #e2e8f0;
+  border-bottom:1px solid #e2e8f0;
+  border-left:1px solid #e2e8f0;
+}
 
-      .ux-pipeline-no {
-        font-size:10px;
-        font-weight:700;
-        color:#2563eb;
-      }
+.ux-pipeline-stage:first-child {
+  border-radius:8px 0 0 8px;
+}
 
-      .ux-pipeline-name {
-        margin-top:5px;
-        min-height:30px;
-        font-size:10.5px;
-        line-height:1.3;
-        color:#475569;
-      }
+.ux-pipeline-stage:last-child {
+  border-right:1px solid #e2e8f0;
+  border-radius:0 8px 8px 0;
+}
 
-      .ux-pipeline-count {
-        margin-top:8px;
-        font-size:20px;
-        line-height:1;
-        font-weight:700;
-        color:#0f172a;
-      }
+.ux-pipeline-stage:not(:last-child)::after {
+  content:'';
+  position:absolute;
+  top:50%;
+  right:-10px;
+  width:18px;
+  height:18px;
+  transform:translateY(-50%) rotate(45deg);
+  background:#f8fafc;
+  border-top:1px solid #e2e8f0;
+  border-right:1px solid #e2e8f0;
+  z-index:3;
+}
 
-      .ux-pipeline-label {
-        margin-top:3px;
-        font-size:9.5px;
-        color:#94a3b8;
-      }
+.ux-pipeline-stage.is-active {
+  background:#eff6ff;
+  border-color:#bfdbfe;
+}
 
-      .ux-empty {
-        padding:30px;
-        text-align:center;
-        color:#94a3b8;
-      }
+.ux-pipeline-stage.is-active::after {
+  background:#eff6ff;
+  border-color:#bfdbfe;
+}
 
-      @media(max-width:1200px) {
-        .ux-kpi-grid {
-          grid-template-columns:repeat(3,1fr);
-        }
+.ux-pipeline-stage.is-final {
+  background:#f0fdf4;
+  border-color:#bbf7d0;
+}
 
-        .ux-grid-main {
-          grid-template-columns:1fr;
-        }
-      }
+.ux-pipeline-stage.is-final::after {
+  background:#f0fdf4;
+  border-color:#bbf7d0;
+}
 
-      @media(max-width:850px) {
-        .ux-grid-half {
-          grid-template-columns:1fr;
-        }
+.ux-pipeline-top {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+}
 
-        .ux-pipeline {
-          grid-template-columns:repeat(3,1fr);
-        }
-      }
+.ux-pipeline-no {
+  width:24px;
+  height:24px;
+  border-radius:50%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:#e2e8f0;
+  color:#64748b;
+  font-size:10px;
+  font-weight:700;
+}
 
-      @media(max-width:600px) {
-        .ux-kpi-grid {
-          grid-template-columns:repeat(2,1fr);
-        }
+.ux-pipeline-stage.is-active .ux-pipeline-no {
+  background:#2563eb;
+  color:#fff;
+}
 
-        .ux-pipeline {
-          grid-template-columns:repeat(2,1fr);
-        }
-      }
+.ux-pipeline-stage.is-final .ux-pipeline-no {
+  background:#16a34a;
+  color:#fff;
+}
+
+.ux-pipeline-count {
+  font-size:18px;
+  line-height:1;
+  font-weight:700;
+  color:#0f172a;
+}
+
+.ux-pipeline-name {
+  margin-top:9px;
+  min-height:28px;
+  font-size:10.5px;
+  line-height:1.25;
+  color:#475569;
+  font-weight:600;
+}
+
+.ux-pipeline-label {
+  margin-top:5px;
+  font-size:9.5px;
+  color:#94a3b8;
+}
+
+.ux-pipeline-share {
+  margin-top:7px;
+  height:4px;
+  background:#e2e8f0;
+  border-radius:10px;
+  overflow:hidden;
+}
+
+.ux-pipeline-share-fill {
+  height:100%;
+  background:#93c5fd;
+  border-radius:10px;
+}
+
+.ux-pipeline-stage.is-active .ux-pipeline-share-fill {
+  background:#2563eb;
+}
+
+.ux-pipeline-stage.is-final .ux-pipeline-share-fill {
+  background:#16a34a;
+}
+
+@media(max-width:900px) {
+  .ux-pipeline {
+    grid-template-columns:repeat(3,1fr);
+    gap:8px;
+  }
+
+  .ux-pipeline-stage,
+  .ux-pipeline-stage:first-child,
+  .ux-pipeline-stage:last-child {
+    border:1px solid #e2e8f0;
+    border-radius:8px;
+  }
+
+  .ux-pipeline-stage::after {
+    display:none;
+  }
+}
+
+@media(max-width:600px) {
+  .ux-pipeline {
+    grid-template-columns:repeat(2,1fr);
+  }
+}
     </style>
   `;
 
