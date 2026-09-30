@@ -179,7 +179,10 @@ function render(){
 
   let headerHtml = '';
 
-  // HERO KHUSUS OVERVIEW
+  // =====================================================
+  // OVERVIEW HEADER
+  // =====================================================
+
   if(activeTab === 'overview'){
 
     const now = new Date();
@@ -194,6 +197,7 @@ function render(){
       <div class="page-hero">
 
         <div class="page-hero-main">
+
           <div class="page-hero-title">
             Presourcing Project Dashboard
           </div>
@@ -201,28 +205,43 @@ function render(){
           <div class="page-hero-sub">
             Pipeline, Progress, and Target RFS
           </div>
+
         </div>
 
         <div class="page-hero-side">
 
           <div class="objective-box">
-            <div class="objective-icon">◎</div>
+
+            <div class="objective-icon">
+              ◎
+            </div>
 
             <div>
+
               <div class="objective-label">
                 Objective
               </div>
 
               <div class="objective-text">
-                Ensure project readiness &amp; competitive sourcing
-                through effective presourcing
+                Ensure project readiness &amp;
+                competitive sourcing through effective
+                presourcing
               </div>
+
             </div>
+
           </div>
 
           <div class="data-date">
-            <span>Data per:</span>
-            <strong>${dateText}</strong>
+
+            <span>
+              Data per:
+            </span>
+
+            <strong>
+              ${dateText}
+            </strong>
+
           </div>
 
         </div>
@@ -232,12 +251,17 @@ function render(){
   }
 
 
-  // PAGE HEADER UNTUK PROJECTS / TEAM
-  if(activeTab === 'projects'){
+  // =====================================================
+  // PROJECTS HEADER
+  // =====================================================
+
+  else if(activeTab === 'projects'){
 
     headerHtml = `
       <div class="simple-page-header">
+
         <div>
+
           <div class="simple-page-title">
             Project &amp; BoQ Management
           </div>
@@ -245,17 +269,25 @@ function render(){
           <div class="simple-page-sub">
             Detail project, BoQ, SPH, dan progress
           </div>
+
         </div>
+
       </div>
     `;
   }
 
 
-  if(activeTab === 'team'){
+  // =====================================================
+  // TEAM HEADER
+  // =====================================================
+
+  else if(activeTab === 'team'){
 
     headerHtml = `
       <div class="simple-page-header">
+
         <div>
+
           <div class="simple-page-title">
             Team &amp; Workload
           </div>
@@ -263,11 +295,17 @@ function render(){
           <div class="simple-page-sub">
             Distribusi project dan beban kerja tim
           </div>
+
         </div>
+
       </div>
     `;
   }
 
+
+  // =====================================================
+  // GLOBAL PAGE WRAPPER
+  // =====================================================
 
   app.innerHTML = `
     <div class="page-shell">
@@ -289,14 +327,12 @@ function render(){
       renderOverview();
   }
 
-
-  if(activeTab === 'projects'){
+  else if(activeTab === 'projects'){
     content.innerHTML =
       renderProjects();
   }
 
-
-  if(activeTab === 'team'){
+  else if(activeTab === 'team'){
     content.innerHTML =
       renderTeam();
   }
@@ -321,13 +357,6 @@ function render(){
 
     });
 }
-
-function switchDashboardTab(id){
-  activeTab = id;
-  openProjectId = null;
-  render();
-}
-
 function tabBtn(id,label){
   return `<div class="tab ${activeTab===id?'active':''}" data-tab="${id}">${label}</div>`;
 }
@@ -362,43 +391,60 @@ function renderOverview(){
     'Planned': 0
   };
 
-  const pCount = {
-    1: 0,
-    2: 0,
-    3: 0,
-    4: 0,
-    5: 0,
-    6: 0
-  };
+ const pCount = {
+  1: 0,
+  2: 0,
+  3: 0,
+  4: 0,
+  5: 0,
+  6: 0
+};
 
-  projects.forEach(p => {
+projects.forEach(p => {
 
-    totalVal += (
-      projectSph(p).awal || 0
+  totalVal += (
+    projectSph(p).awal || 0
+  );
+
+  const status =
+    getDynamicStatus(p);
+
+  if(
+    sCount[status] !== undefined
+  ){
+    sCount[status]++;
+  }
+
+
+  let stage =
+    parseInt(
+      String(
+        p.pipelineStage || ''
+      ).charAt(0)
     );
 
-    const status = getDynamicStatus(p);
 
-    if(sCount[status] !== undefined){
-      sCount[status]++;
+  if(
+    !isNaN(stage) &&
+    stage >= 1 &&
+    stage <= 6
+  ){
+
+    // Project dihitung telah mencapai
+    // seluruh stage sebelum/current stage.
+    for(
+      let s = 1;
+      s <= stage;
+      s++
+    ){
+
+      pCount[s]++;
+
     }
 
-    if(p.status === 'ongoing'){
+  }
 
-      const stage = parseInt(
-        (p.pipelineStage || '1').charAt(0)
-      );
-
-      if(
-        !isNaN(stage) &&
-        stage >= 1 &&
-        stage <= 6
-      ){
-        pCount[stage]++;
-      }
-    }
-
-  });
+});
 
   const efficiencies = projects
     .map(p =>
@@ -599,30 +645,6 @@ function renderOverview(){
       background:
         rgba(255,255,255,.08);
     }
-
-    .simple-page-header{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-
-  padding:10px 2px 12px;
-
-  margin-bottom:8px;
-
-  border-bottom:1px solid #E2E8F0;
-}
-
-.simple-page-title{
-  font-size:18px;
-  font-weight:700;
-  color:#0F172A;
-}
-
-.simple-page-sub{
-  margin-top:3px;
-  font-size:10.5px;
-  color:#64748B;
-}
 
     .objective-icon{
       width:28px;
@@ -2896,7 +2918,7 @@ function renderProjects(){
           <td><span style="font-size:12px;">${pipelineText} (${pct}%)</span></td>
           <td class="num mono">${fmtIdr(s.awal)}</td>
           <td class="num mono">${fmtPct(eff)}</td>
-          <td class="num mono">${durationDays(p)}hari</td>
+          <td class="num mono">${durationDays(p)} hari</td>
         </tr>
       `;
       if (openProjectId === p.id) {
@@ -3052,14 +3074,151 @@ function renderTeam(){
 }
 
 function wireEvents(){
-  document.querySelectorAll('[data-tab]').forEach(el=> el.onclick = ()=>{ activeTab = el.dataset.tab; openProjectId=null; render(); });
-  const fp = document.getElementById('f-priority'); if(fp){ fp.value=filters.priority; fp.onchange=()=>{filters.priority=fp.value; render();}; }
-  const fs = document.getElementById('f-status'); if(fs){ fs.value=filters.status; fs.onchange=()=>{filters.status=fs.value; render();}; }
-  document.querySelectorAll('[data-open]').forEach(el=> el.onclick = ()=>{ const id=el.dataset.open; openProjectId = openProjectId===id?null:id; render(); });
-  const btnNew = document.getElementById('btn-new-project'); if(btnNew) btnNew.onclick = ()=> openProjectModal(null);
-  document.querySelectorAll('[data-edit-project]').forEach(el=> el.onclick=(e)=>{ e.stopPropagation(); openProjectModal(el.dataset.editProject); });
-  document.querySelectorAll('[data-delete-project]').forEach(el=> el.onclick=(e)=>{ e.stopPropagation(); if(confirm('Hapus project ini?')){ projects = projects.filter(p=>p.id!==el.dataset.deleteProject); saveAll(); render(); } });
-  const btnTeam = document.getElementById('btn-manage-team'); if(btnTeam) btnTeam.onclick = ()=> openTeamModal();
+
+  document
+    .querySelectorAll('[data-tab]')
+    .forEach(el => {
+
+      el.onclick = () =>
+        switchDashboardTab(
+          el.dataset.tab
+        );
+
+    });
+
+  const fp =
+    document.getElementById('f-priority');
+
+  if(fp){
+
+    fp.value =
+      filters.priority;
+
+    fp.onchange = () => {
+
+      filters.priority =
+        fp.value;
+
+      render();
+
+    };
+  }
+
+
+  const fs =
+    document.getElementById('f-status');
+
+  if(fs){
+
+    fs.value =
+      filters.status;
+
+    fs.onchange = () => {
+
+      filters.status =
+        fs.value;
+
+      render();
+
+    };
+  }
+
+
+  document
+    .querySelectorAll('[data-open]')
+    .forEach(el => {
+
+      el.onclick = () => {
+
+        const id =
+          el.dataset.open;
+
+        openProjectId =
+          openProjectId === id
+            ? null
+            : id;
+
+        render();
+
+      };
+
+    });
+
+
+  const btnNew =
+    document.getElementById(
+      'btn-new-project'
+    );
+
+  if(btnNew){
+
+    btnNew.onclick = () =>
+      openProjectModal(null);
+
+  }
+
+
+  document
+    .querySelectorAll('[data-edit-project]')
+    .forEach(el => {
+
+      el.onclick = e => {
+
+        e.stopPropagation();
+
+        openProjectModal(
+          el.dataset.editProject
+        );
+
+      };
+
+    });
+
+
+  document
+    .querySelectorAll('[data-delete-project]')
+    .forEach(el => {
+
+      el.onclick = e => {
+
+        e.stopPropagation();
+
+        if(
+          confirm(
+            'Hapus project ini?'
+          )
+        ){
+
+          projects =
+            projects.filter(
+              p =>
+                p.id !==
+                el.dataset.deleteProject
+            );
+
+          saveAll();
+
+          render();
+
+        }
+
+      };
+
+    });
+
+
+  const btnTeam =
+    document.getElementById(
+      'btn-manage-team'
+    );
+
+  if(btnTeam){
+
+    btnTeam.onclick =
+      () => openTeamModal();
+
+  }
+
 }
 
 function downloadProjectReport(projectId) { window.location.href = `/api/download_report?project_id=${projectId}`; }
