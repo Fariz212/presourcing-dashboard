@@ -121,10 +121,9 @@ function uniquePicsInProject(proj){
   return [...set];
 }
 function valToM(val) {
-    return ((val || 0) / 1000000000).toFixed(1); // Konversi ke Rp Miliar
+    return ((val || 0) / 1000000000).toFixed(1);
 }
 
-// --- FUNGSI STATUS DINAMIS EWS ---
 function getDynamicStatus(proj) {
     if (proj.status === 'win' || proj.status === 'lose') return 'Completed';
     if (!proj.targetRfs) return 'Planned';
@@ -175,7 +174,6 @@ function computePicStats(){
 function fmtIdr(n){ return n==null ? '—' : 'Rp ' + Math.round(n).toLocaleString('id-ID'); }
 function fmtPct(n){ return n==null ? '—' : n.toFixed(1)+'%'; }
 
-// ---------- render ----------
 function render(){
   const app = document.getElementById('app');
   app.innerHTML = `
@@ -206,7 +204,7 @@ function tabBtn(id,label){
 }
 
 // --------------------------------------------------------
-// RENDER OVERVIEW: EXECUTIVE DASHBOARD (RESPONSIF & SCROLLABLE OVERVIEW)
+// RENDER OVERVIEW: EXECUTIVE DASHBOARD (PRO UI/UX OPTIMIZED)
 // --------------------------------------------------------
 function renderOverview(){
   const totalProj = projects.length;
@@ -235,11 +233,10 @@ function renderOverview(){
       setTimeout(renderDashboardCharts, 100);
   }
 
-  // CSS Responsif & Tabel dengan Scroll Terbatas (Max 5 baris / ~320px)
+  // CSS Profesional: Equal-height cards, tabel compact anti-wrapping, chart container presisi
   const dashStyles = `
     <style>
-        /* KPI Cards responsif menggunakan auto-fit */
-        .kpi-row-new { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin-bottom: 20px; }
+        .kpi-row-new { display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); gap: 14px; margin-bottom: 20px; }
         .kpi-card { background: #fff; padding: 14px 16px; border-radius: 6px; border: 1px solid #e2e8f0; display:flex; align-items:center; gap: 12px; position: relative; box-shadow: 0 1px 2px rgba(0,0,0,0.02);}
         .kpi-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px; border-radius: 6px 6px 0 0; }
         .kpi-card:nth-child(1)::before { background: #0ea5e9; }
@@ -251,47 +248,51 @@ function renderOverview(){
 
         .kpi-icon { width: 38px; height: 38px; border-radius: 50%; display:flex; align-items:center; justify-content:center; font-size: 18px; }
         
-        /* Grid 3 Kolom yang responsif (otomatis turun ke bawah jika layar sempit) */
-        .dash-grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; margin-bottom: 16px; }
+        /* Grid 3 Kolom sejajar sempurna (align-items: stretch) */
+        .dash-grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; margin-bottom: 16px; align-items: stretch; }
         
-        .dash-panel { background: #fff; border-radius: 8px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.04); display:flex; flex-direction:column; }
-        .dash-panel-hd { background: #1E63C8; color: white; padding: 12px 16px; font-weight: 600; font-size: 13.5px; display: flex; align-items: center; gap: 8px; }
+        .dash-panel { background: #fff; border-radius: 8px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.04); display: flex; flex-direction: column; height: 100%; min-height: 310px; }
+        .dash-panel-hd { background: #1E63C8; color: white; padding: 11px 14px; font-weight: 600; font-size: 13px; display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
         .dash-panel-hd.danger-hd { background: #DC3545; }
-        .dash-panel-body { padding: 16px; flex: 1; }
         
-        /* TABEL DENGAN SCROLL VERTIKAL (Maksimal menampilkan ~5 baris agar tidak redundant) */
+        .dash-panel-body { padding: 14px; flex: 1; display: flex; flex-direction: column; justify-content: center; }
+        
+        /* Kontainer Chart Presisi Tinggi */
+        .chart-box { position: relative; width: 100%; height: 210px; flex: 1; display: flex; align-items: center; justify-content: center; }
+
+        /* Scrollable Table dipatok pas untuk 5 baris */
         .scrollable-table-container {
-            max-height: 310px; 
+            max-height: 255px; 
             overflow-y: auto; 
             overflow-x: auto;
-            border-bottom: 1px solid #f1f5f9;
+            flex: 1;
         }
-        /* Sticky header tabel agar tetap terlihat saat di-scroll */
         .dash-table thead th {
             position: sticky;
             top: 0;
             background: #F8FAFC;
             z-index: 2;
+            white-space: nowrap; /* Mencegah judul kolom terpotong / turun baris */
         }
 
-        .badge { padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+        .badge { padding: 3px 8px; border-radius: 4px; font-size: 10.5px; font-weight: 600; }
         .badge-on-track { background: #22C55E; color: white; }
         .badge-at-risk { background: #F59E0B; color: white; }
         .badge-overdue { background: #EF4444; color: white; }
         .badge-completed { background: #3B82F6; color: white; }
         .badge-planned { background: #e2e8f0; color: #475569; }
 
-        .prog-bar-bg { background: #e5e7eb; border-radius: 4px; height: 8px; width: 100%; margin-top: 4px; }
+        .prog-bar-bg { background: #e5e7eb; border-radius: 4px; height: 6px; width: 100%; margin-top: 3px; }
         .prog-bar-fill { height: 100%; background: #3B82F6; border-radius: 4px; }
 
-        .pipeline-container { display: flex; gap: 2px; margin-top: 5px; }
-        .pipe-stage { flex: 1; color: white; padding: 12px 5px; text-align: center; font-size: 11px; clip-path: polygon(0% 0%, 92% 0%, 100% 50%, 92% 100%, 0% 100%, 8% 50%); margin-right: -8px; }
+        .pipeline-container { display: flex; gap: 2px; margin-top: 5px; width: 100%; }
+        .pipe-stage { flex: 1; color: white; padding: 10px 4px; text-align: center; font-size: 10.5px; clip-path: polygon(0% 0%, 92% 0%, 100% 50%, 92% 100%, 0% 100%, 8% 50%); margin-right: -8px; }
         .pipe-stage:first-child { clip-path: polygon(0% 0%, 92% 0%, 100% 50%, 92% 100%, 0% 100%); }
         .pipe-stage:last-child { clip-path: polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%, 8% 50%); margin-right: 0; }
         
-        table.dash-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-        table.dash-table th { padding: 10px 8px; border-bottom: 2px solid #e2e8f0; text-align: left; color: #64748b; font-weight: 600; font-size: 11px; text-transform: uppercase;}
-        table.dash-table td { padding: 10px 8px; border-bottom: 1px solid #f1f5f9; }
+        table.dash-table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+        table.dash-table th { padding: 8px 6px; border-bottom: 2px solid #e2e8f0; text-align: left; color: #64748b; font-weight: 600; font-size: 10.5px; text-transform: uppercase;}
+        table.dash-table td { padding: 8px 6px; border-bottom: 1px solid #f1f5f9; }
     </style>
   `;
 
@@ -302,15 +303,15 @@ function renderOverview(){
       overviewRows += `
       <tr>
           <td>${idx+1}</td>
-          <td style="font-weight:500;">${escAttr(p.name)}</td>
-          <td>${valToM(projectSph(p).awal)}</td>
+          <td style="font-weight:500; max-width: 120px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${escAttr(p.name)}">${escAttr(p.name)}</td>
+          <td class="mono">${valToM(projectSph(p).awal)}</td>
           <td>${escAttr(p.leadId)}</td>
-          <td>${p.targetRfs ? new Date(p.targetRfs).toLocaleDateString('id-ID', {day:'numeric', month:'short', year:'numeric'}) : '-'}</td>
+          <td style="white-space: nowrap;">${p.targetRfs ? new Date(p.targetRfs).toLocaleDateString('id-ID', {day:'numeric', month:'short', year:'numeric'}) : '-'}</td>
           <td>${badgeStatus(getDynamicStatus(p))}</td>
           <td>
-            <div style="display:flex; align-items:center; gap:8px;">
-                <div style="width:35px; text-align:right;">${p.progressPct||0}%</div>
-                <div class="prog-bar-bg"><div class="prog-bar-fill" style="width:${p.progressPct||0}%;"></div></div>
+            <div style="display:flex; align-items:center; gap:6px;">
+                <div style="width:30px; text-align:right; font-size:11px;">${p.progressPct||0}%</div>
+                <div class="prog-bar-bg" style="width:45px;"><div class="prog-bar-fill" style="width:${p.progressPct||0}%;"></div></div>
             </div>
           </td>
       </tr>`;
@@ -321,22 +322,22 @@ function renderOverview(){
       ewsRows += `
       <tr>
           <td style="font-weight:500;">${escAttr(p.name)}</td>
-          <td>${p.targetRfs ? new Date(p.targetRfs).toLocaleDateString('id-ID', {day:'numeric', month:'short', year:'numeric'}) : '-'}</td>
+          <td style="white-space: nowrap;">${p.targetRfs ? new Date(p.targetRfs).toLocaleDateString('id-ID', {day:'numeric', month:'short', year:'numeric'}) : '-'}</td>
           <td>${p.progressPct||0}%</td>
           <td>${badgeStatus(getDynamicStatus(p))}</td>
       </tr>`;
   });
   if(!ewsRows) ewsRows = `<tr><td colspan="4" style="text-align:center; color:var(--green); padding:20px;">Semua project aman! 🎉</td></tr>`;
 
-  const pNames = ['Identification', 'SPH Prep', 'Vendor Select', 'Negotiation', 'Finalization', 'RFS'];
+  const pNames = ['Ident', 'Prep', 'Vendor', 'Negot', 'Final', 'RFS'];
   let pipelineHtml = '<div class="pipeline-container">';
   pNames.forEach((name, i) => {
       const n = i+1;
       pipelineHtml += `
           <div class="pipe-stage" style="z-index: ${6-i}; background: ${n<=3 ? '#3B82F6' : (n<=5 ? '#0EA5E9' : '#22C55E')};">
-              <div style="font-size:14px; font-weight:bold; margin-bottom:2px;">${n}</div>
-              <div style="line-height:1.1;">${name}</div>
-              <div style="margin-top:6px; font-weight:bold;">${pCount[n]} Proj</div>
+              <div style="font-size:12px; font-weight:bold; margin-bottom:2px;">${n}</div>
+              <div style="line-height:1.1; font-size:9.5px;">${name}</div>
+              <div style="margin-top:4px; font-weight:bold; font-size:10.5px;">${pCount[n]} P</div>
           </div>
       `;
   });
@@ -346,51 +347,50 @@ function renderOverview(){
     <!-- ROW 1: KPI CARDS -->
     <div class="kpi-row-new">
         <div class="kpi-card"><div class="kpi-icon" style="background:#e0f2fe; color:#0284c7;">📊</div><div><div style="font-size:11px; color:#64748b;">Total Project</div><div style="font-size:18px; font-weight:bold;">${totalProj}</div></div></div>
-        <div class="kpi-card"><div class="kpi-icon" style="background:#e0e7ff; color:#4f46e5;">💰</div><div><div style="font-size:11px; color:#64748b;">Total Value</div><div style="font-size:16px; font-weight:bold; color:#0f172a;">Rp ${valToM(totalVal)} M</div></div></div>
+        <div class="kpi-card"><div class="kpi-icon" style="background:#e0e7ff; color:#4f46e5;">💰</div><div><div style="font-size:11px; color:#64748b;">Total Value</div><div style="font-size:15px; font-weight:bold; color:#0f172a;">Rp ${valToM(totalVal)} M</div></div></div>
         <div class="kpi-card"><div class="kpi-icon" style="background:#dcfce7; color:#16a34a;">✅</div><div style="width:100%;"><div style="font-size:11px; color:#64748b;">On Track</div><div style="display:flex; justify-content:space-between; align-items:flex-end;"><div style="font-size:18px; font-weight:bold;">${sCount['On Track']}</div><div style="font-size:11px; font-weight:bold; color:#16a34a;">${getPct(sCount['On Track'])}%</div></div></div></div>
         <div class="kpi-card"><div class="kpi-icon" style="background:#fef9c3; color:#ca8a04;">⚠️</div><div style="width:100%;"><div style="font-size:11px; color:#64748b;">At Risk</div><div style="display:flex; justify-content:space-between; align-items:flex-end;"><div style="font-size:18px; font-weight:bold;">${sCount['At Risk']}</div><div style="font-size:11px; font-weight:bold; color:#ca8a04;">${getPct(sCount['At Risk'])}%</div></div></div></div>
         <div class="kpi-card"><div class="kpi-icon" style="background:#fee2e2; color:#dc2626;">⏳</div><div style="width:100%;"><div style="font-size:11px; color:#64748b;">Overdue</div><div style="display:flex; justify-content:space-between; align-items:flex-end;"><div style="font-size:18px; font-weight:bold;">${sCount['Overdue']}</div><div style="font-size:11px; font-weight:bold; color:#dc2626;">${getPct(sCount['Overdue'])}%</div></div></div></div>
         <div class="kpi-card"><div class="kpi-icon" style="background:#f1f5f9; color:#475569;">🏁</div><div style="width:100%;"><div style="font-size:11px; color:#64748b;">Completed</div><div style="display:flex; justify-content:space-between; align-items:flex-end;"><div style="font-size:18px; font-weight:bold;">${sCount['Completed']}</div><div style="font-size:11px; font-weight:bold; color:#475569;">${getPct(sCount['Completed'])}%</div></div></div></div>
     </div>
 
-    <!-- ROW 2: OVERVIEW TABLE (SCROLLABLE), STATUS CHART, LINE CHART -->
+    <!-- ROW 2: OVERVIEW TABLE, STATUS CHART, RFS MONTH -->
     <div class="dash-grid-3">
         <div class="dash-panel">
             <div class="dash-panel-hd">📋 Project Presourcing Overview</div>
-            <!-- Dibungkus container dengan tinggi maksimal dan scroll vertikal -->
             <div class="scrollable-table-container">
                 <table class="dash-table">
-                    <thead><tr><th>No</th><th>Project Name</th><th>Nilai (Rp M)</th><th>PIC</th><th>Target RFS</th><th>Status</th><th>Progress</th></tr></thead>
+                    <thead><tr><th>No</th><th>Project Name</th><th>Nilai</th><th>PIC</th><th>Target RFS</th><th>Status</th><th>Progress</th></tr></thead>
                     <tbody>${overviewRows}</tbody>
                 </table>
             </div>
         </div>
         <div class="dash-panel">
             <div class="dash-panel-hd">🎯 Project Status</div>
-            <div class="dash-panel-body" style="display:flex; align-items:center; justify-content:center;">
-                <canvas id="chartStatus" style="max-height:220px;"></canvas>
+            <div class="dash-panel-body">
+                <div class="chart-box"><canvas id="chartStatus"></canvas></div>
             </div>
         </div>
         <div class="dash-panel">
             <div class="dash-panel-hd">📈 Target RFS by Month</div>
-            <div class="dash-panel-body" style="display:flex; align-items:center; justify-content:center; padding:10px;">
-                <canvas id="chartRfsMonth" style="max-height:220px;"></canvas>
+            <div class="dash-panel-body">
+                <div class="chart-box"><canvas id="chartRfsMonth"></canvas></div>
             </div>
         </div>
     </div>
 
-    <!-- ROW 3: PIPELINE, BAR CHART, EWS TABLE -->
+    <!-- ROW 3: PIPELINE, TOP 5 VALUE, EWS TABLE -->
     <div class="dash-grid-3">
         <div class="dash-panel">
             <div class="dash-panel-hd">🔄 Presourcing Progress Pipeline</div>
-            <div class="dash-panel-body">
+            <div class="dash-panel-body" style="justify-content: flex-start; padding-top: 20px;">
                 ${pipelineHtml}
             </div>
         </div>
         <div class="dash-panel">
             <div class="dash-panel-hd">🏆 Top 5 Project Value</div>
-            <div class="dash-panel-body" style="display:flex; align-items:center; justify-content:center; padding:10px;">
-                <canvas id="chartTop5" style="max-height:220px;"></canvas>
+            <div class="dash-panel-body">
+                <div class="chart-box"><canvas id="chartTop5"></canvas></div>
             </div>
         </div>
         <div class="dash-panel">
@@ -406,13 +406,11 @@ function renderOverview(){
   `;
 }
 
-// Global variable untuk menyimpan instance grafik agar bisa di-destroy saat re-render
 let dCharts = {}; 
 
 function renderDashboardCharts() {
     if (typeof Chart === 'undefined') return;
 
-    // 1. Persiapan Data Chart Status
     let sCount = { 'On Track':0, 'At Risk':0, 'Overdue':0, 'Completed':0, 'Planned':0 };
     projects.forEach(p => sCount[getDynamicStatus(p)]++);
 
@@ -430,12 +428,11 @@ function renderDashboardCharts() {
             },
             options: {
                 responsive: true, maintainAspectRatio: false,
-                plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: {size: 11} } } }
+                plugins: { legend: { position: 'right', labels: { boxWidth: 10, font: {size: 10} } } }
             }
         });
     }
 
-    // 2. Persiapan Data RFS by Month (Mixed Line & Bar Chart)
     const rfsData = {};
     projects.forEach(p => {
         if(!p.targetRfs) return;
@@ -458,27 +455,26 @@ function renderDashboardCharts() {
             data: {
                 labels: rfsKeys,
                 datasets: [
-                    { type: 'line', label: 'Nilai Project (Rp M)', data: rfsKeys.map(k=>(rfsData[k].val/1000000000).toFixed(1)), borderColor: '#0f172a', backgroundColor: '#0f172a', yAxisID: 'y1', tension: 0.3, borderWidth: 2 },
-                    { type: 'bar', label: 'Jumlah Project', data: rfsKeys.map(k=>rfsData[k].count), backgroundColor: '#93c5fd', yAxisID: 'y', borderRadius: 4 }
+                    { type: 'line', label: 'Nilai (Rp M)', data: rfsKeys.map(k=>(rfsData[k].val/1000000000).toFixed(1)), borderColor: '#0f172a', backgroundColor: '#0f172a', yAxisID: 'y1', tension: 0.3, borderWidth: 2 },
+                    { type: 'bar', label: 'Jumlah', data: rfsKeys.map(k=>rfsData[k].count), backgroundColor: '#93c5fd', yAxisID: 'y', borderRadius: 4 }
                 ]
             },
             options: {
                 responsive: true, maintainAspectRatio: false,
                 scales: {
-                    y: { type: 'linear', position: 'left', ticks: { stepSize: 1, font: {size: 10} }, grid: {color: '#f1f5f9'} },
-                    y1: { type: 'linear', position: 'right', grid: { drawOnChartArea: false }, ticks: { font: {size: 10} } },
-                    x: { ticks: { font: {size: 10} }, grid: {display: false} }
+                    y: { type: 'linear', position: 'left', ticks: { stepSize: 1, font: {size: 9} }, grid: {color: '#f1f5f9'} },
+                    y1: { type: 'linear', position: 'right', grid: { drawOnChartArea: false }, ticks: { font: {size: 9} } },
+                    x: { ticks: { font: {size: 9} }, grid: {display: false} }
                 },
-                plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: {size: 10} } } }
+                plugins: { legend: { position: 'bottom', labels: { boxWidth: 8, font: {size: 9} } } }
             }
         });
     }
 
-    // 3. Persiapan Data Top 5 Project (Horizontal Bar Chart)
     const top5 = [...projects]
         .filter(p => p.status !== 'lose')
         .map(p => ({ 
-            name: p.name.replace('Project ', '').substring(0, 18) + (p.name.length > 25 ? '...' : ''), 
+            name: p.name.replace('Project ', '').substring(0, 15) + (p.name.length > 20 ? '...' : ''), 
             val: ((projectSph(p).awal || 0) / 1000000000).toFixed(1) 
         }))
         .sort((a,b) => b.val - a.val)
@@ -496,8 +492,8 @@ function renderDashboardCharts() {
             options: {
                 indexAxis: 'y', responsive: true, maintainAspectRatio: false,
                 scales: {
-                    x: { ticks: { font: {size: 10} }, grid: {color: '#f1f5f9'} },
-                    y: { ticks: { font: {size: 10} }, grid: {display: false} }
+                    x: { ticks: { font: {size: 9} }, grid: {color: '#f1f5f9'} },
+                    y: { ticks: { font: {size: 9} }, grid: {display: false} }
                 },
                 plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => 'Rp ' + ctx.raw + ' M' } } }
             }
@@ -688,7 +684,6 @@ function renderTeam(){
   `;
 }
 
-// ---------- events & wire ----------
 function wireEvents(){
   document.querySelectorAll('[data-tab]').forEach(el=> el.onclick = ()=>{ activeTab = el.dataset.tab; openProjectId=null; render(); });
   const fp = document.getElementById('f-priority'); if(fp){ fp.value=filters.priority; fp.onchange=()=>{filters.priority=fp.value; render();}; }
@@ -726,7 +721,6 @@ function triggerRevisiBoq(projectId) {
     fileInput.click();
 }
 
-// ---------- modal functions ----------
 function blankProject(){
   return {
     id: uid('proj'), name:'', requestorName:'', requestorDept:'',
@@ -925,7 +919,6 @@ function wireModalEvents(){
 function val(id){ const el=document.getElementById(id); return el?el.value:''; }
 function numOrNull(v){ return (v===''||v==null) ? null : Number(v); }
 
-// ---------- FUNGSI MODAL UPLOAD SPH PEMBANDING ----------
 function openUploadPembandingModal(projectId) {
     const modalHtml = `
         <div class="overlay" id="upload-pembanding-modal" style="z-index: 100;">
