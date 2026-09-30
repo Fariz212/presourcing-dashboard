@@ -9,13 +9,12 @@ let modal = null;
 let modalScroll = 0;
 let filters = { priority:'all', status:'all' };
 let storageOk = true;
-let isSaving = false; // Guard untuk mencegah double-click / race condition saat save
+let isSaving = false; 
 
 function uid(p){ return p + '_' + Math.random().toString(36).slice(2,9); }
 function todayStr(){ return new Date().toISOString().slice(0,10); }
 
 // ---------- Fungsi Keamanan (XSS Protection) ----------
-// Mencegah kode HTML/JS nakal dieksekusi jika SA/Admin menginputkan karakter khusus
 function escAttr(s){ 
   if (s === null || s === undefined) return '';
   return String(s)
@@ -26,47 +25,29 @@ function escAttr(s){
     .replace(/'/g, '&#039;');
 }
 
-// ---------- seed data (Fallback jika server mati) ----------
+// ---------- seed data (Fallback) ----------
 function seedData(){
   team = ['Budi','Sari','Andi','Rahma','Fajar'];
   projects = [
     {
-      id: uid('proj'), name:'Project Pertamina — Security & Monitoring',
+      id: uid('proj'), name:'Project Backbone Expansion',
       requestorName:'Marcel', requestorDept:'SA G&P',
-      priority:'High', status:'win', leadId:'Budi',
+      priority:'High', status:'ongoing', leadId:'Andi',
       sphMode:'item', projectSphAwal:null, projectSphFinal:null,
-      createdAt:'2026-07-02', closedAt:'2026-07-22',
-      comparison_docs: [], // Properti baru untuk dokumen pembanding
-      sows:[{
-        id:uid('sow'), name:'SoW Security & Monitoring',
-        boqs:[{
-          id:uid('boq'), name:'BoQ Utama',
-          items:[
-            {id:uid('item'), product:'CCTV', picIds:['Budi','Sari'], sphAwal:520000000, sphFinal:452000000},
-            {id:uid('item'), product:'SDWAN', picIds:['Andi'], sphAwal:310000000, sphFinal:298000000},
-            {id:uid('item'), product:'License Security', picIds:['Rahma'], sphAwal:145000000, sphFinal:145000000},
-            {id:uid('item'), product:'Monitoring System', picIds:['Budi','Fajar'], sphAwal:210000000, sphFinal:187000000}
-          ]
-        }]
-      }]
+      createdAt:'2026-07-02', closedAt:null, targetRfs:'2026-10-15',
+      pipelineStage:'4 - Negotiation', progressPct:85,
+      comparison_docs: [],
+      sows:[{ id:uid('sow'), name:'SoW Core', boqs:[{ id:uid('boq'), name:'BoQ Utama', items:[ {id:uid('item'), product:'Router', picIds:['Andi'], sphAwal:25000000000, sphFinal:null} ] }] }]
     },
     {
-      id: uid('proj'), name:'Project Jakarta Commerce — Network Upgrade',
-      requestorName:'Megati', requestorDept:'SA Jakarta Commerce',
-      priority:'Urgent', status:'ongoing', leadId:'Andi',
-      sphMode:'project', projectSphAwal:680000000, projectSphFinal:null,
-      createdAt:'2026-08-15', closedAt:null,
-      comparison_docs: [], // Properti baru untuk dokumen pembanding
-      sows:[{
-        id:uid('sow'), name:'SoW Network Upgrade',
-        boqs:[{
-          id:uid('boq'), name:'BoQ Core',
-          items:[
-            {id:uid('item'), product:'Router & Switching', picIds:['Andi'], sphAwal:null, sphFinal:null},
-            {id:uid('item'), product:'Wifi Access Point', picIds:['Sari','Fajar'], sphAwal:null, sphFinal:null}
-          ]
-        }]
-      }]
+      id: uid('proj'), name:'Project Cloud Services',
+      requestorName:'Farizky', requestorDept:'SA Digital',
+      priority:'Urgent', status:'ongoing', leadId:'Fajar',
+      sphMode:'project', projectSphAwal:30000000000, projectSphFinal:null,
+      createdAt:'2026-08-15', closedAt:null, targetRfs: todayStr(), // Dibuat mepet agar Overdue/At Risk
+      pipelineStage:'2 - SPH Preparation', progressPct:40,
+      comparison_docs: [],
+      sows:[{ id:uid('sow'), name:'SoW Cloud', boqs:[{ id:uid('boq'), name:'BoQ AWS', items:[] }] }]
     }
   ];
 }
@@ -79,13 +60,10 @@ async function loadAll(){
     if (!response.ok) throw new Error("Gagal terhubung ke Backend");
     
     const data = await response.json();
-    
     if (!data.projects || !data.team || (data.projects.length === 0 && data.team.length === 0)) {
-      seedData();
-      await saveAll(); 
+      seedData(); await saveAll(); 
     } else {
-      projects = data.projects;
-      team = data.team;
+      projects = data.projects; team = data.team;
     }
     storageOk = true;
   } catch(e) {
@@ -97,9 +75,9 @@ async function loadAll(){
 }
 
 async function saveAll(){
-  if (isSaving) return; // Guard agar tidak terjadi penumpukan request jika tombol di-klik berkali-kali
+  if (isSaving) return;
   isSaving = true;
-  document.body.style.cursor = 'wait'; // Indikator loading visual
+  document.body.style.cursor = 'wait';
 
   try {
     const response = await fetch(API_URL, {
@@ -107,29 +85,23 @@ async function saveAll(){
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ projects: projects, team: team })
     });
-    
     if (!response.ok) throw new Error("Gagal menyimpan ke Backend");
     storageOk = true;
   } catch(e) {
     console.error("Gagal menyimpan data:", e);
     storageOk = false; 
   } finally {
-    isSaving = false;
-    document.body.style.cursor = 'default';
+    isSaving = false; document.body.style.cursor = 'default';
   }
   render(); 
 }
 
 // ---------- computations ----------
 function allItems(proj){
-  const out=[];
-  (proj.sows||[]).forEach(s=> (s.boqs||[]).forEach(b=> (b.items||[]).forEach(it=> out.push(it))));
-  return out;
+  const out=[]; (proj.sows||[]).forEach(s=> (s.boqs||[]).forEach(b=> (b.items||[]).forEach(it=> out.push(it)))); return out;
 }
 function projectSph(proj){
-  if(proj.sphMode==='project'){
-    return { awal: proj.projectSphAwal, final: proj.projectSphFinal };
-  }
+  if(proj.sphMode==='project') return { awal: proj.projectSphAwal, final: proj.projectSphFinal };
   const items = allItems(proj);
   let awal=0, final=0, hasAwal=false, hasFinal=true;
   items.forEach(it=>{
@@ -153,6 +125,29 @@ function uniquePicsInProject(proj){
   allItems(proj).forEach(it=> (it.picIds||[]).forEach(p=>set.add(p)));
   return [...set];
 }
+function valToM(val) {
+    return ((val || 0) / 1000000000).toFixed(1); // Konversi ke Rp Miliar
+}
+
+// --- FUNGSI STATUS DINAMIS EWS (EARLY WARNING SYSTEM) ---
+function getDynamicStatus(proj) {
+    if (proj.status === 'win' || proj.status === 'lose') return 'Completed';
+    if (!proj.targetRfs) return 'Planned';
+    
+    const today = new Date(todayStr());
+    const rfs = new Date(proj.targetRfs);
+    const diffTime = rfs - today;
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays < 0) return 'Overdue';
+    if (diffDays <= 14) return 'At Risk';
+    return 'On Track';
+}
+function badgeStatus(stat) {
+    const cls = stat.toLowerCase().replace(' ', '-');
+    return `<span class="badge badge-${cls}">${stat}</span>`;
+}
+
 function computePicStats(){
   const stats = {};
   team.forEach(m=> stats[m] = { leadCount:0, supportLoad:0, participationShare:0, winShare:0, effSum:0, effWeight:0 });
@@ -167,84 +162,39 @@ function computePicStats(){
         if(proj.status==='win') stats[p].winShare += share;
       });
     }
-    if(proj.sphMode==='item'){
-      allItems(proj).forEach(it=>{
-        const pics = it.picIds && it.picIds.length ? it.picIds : [];
-        if(!pics.length) return;
-        const share = 1/pics.length;
-        const eff = efficiencyPct(it.sphAwal, it.sphFinal);
-        pics.forEach(p=>{
-          if(!stats[p]) return;
-          stats[p].supportLoad += share;
-          if(eff!=null){ stats[p].effSum += eff*share; stats[p].effWeight += share; }
-        });
+    const eff = efficiencyPct(projectSph(proj).awal, projectSph(proj).final);
+    allItems(proj).forEach(it=>{
+      const pics = it.picIds && it.picIds.length ? it.picIds : [];
+      if(!pics.length) return;
+      const share = 1/pics.length;
+      pics.forEach(p=>{
+        if(!stats[p]) return;
+        stats[p].supportLoad += share;
+        if(eff!=null){ stats[p].effSum += eff*share; stats[p].effWeight += share; }
       });
-    } else {
-      const eff = efficiencyPct(proj.projectSphAwal, proj.projectSphFinal);
-      allItems(proj).forEach(it=>{
-        const pics = it.picIds && it.picIds.length ? it.picIds : [];
-        if(!pics.length) return;
-        const share = 1/pics.length;
-        pics.forEach(p=>{
-          if(!stats[p]) return;
-          stats[p].supportLoad += share;
-          if(eff!=null){ stats[p].effSum += eff*share; stats[p].effWeight += share; }
-        });
-      });
-    }
+    });
   });
   return stats;
 }
-function overallKpis(){
-  const active = projects.filter(p=>p.status==='ongoing').length;
-  const closed = projects.filter(p=>p.status!=='ongoing');
-  const wins = closed.filter(p=>p.status==='win').length;
-  const winRate = closed.length ? (wins/closed.length*100) : null;
-  const effs = projects.map(p=>{ const s=projectSph(p); return efficiencyPct(s.awal,s.final); }).filter(e=>e!=null);
-  const avgEff = effs.length ? effs.reduce((a,b)=>a+b,0)/effs.length : null;
-  const durs = closed.map(p=>durationDays(p));
-  const avgDur = durs.length ? Math.round(durs.reduce((a,b)=>a+b,0)/durs.length) : null;
-  return { active, winRate, avgEff, avgDur, total: projects.length };
-}
-function fmtIdr(n){
-  if(n==null) return '—';
-  return 'Rp ' + Math.round(n).toLocaleString('id-ID');
-}
+
+function fmtIdr(n){ return n==null ? '—' : 'Rp ' + Math.round(n).toLocaleString('id-ID'); }
 function fmtPct(n){ return n==null ? '—' : n.toFixed(1)+'%'; }
-function tagPriority(p){
-  const cls = p==='Urgent'?'tag-urgent':p==='High'?'tag-high':'tag-medium';
-  return `<span class="tag ${cls}">${p}</span>`;
-}
-function tagStatus(s){
-  const cls = s==='win'?'tag-win':s==='lose'?'tag-lose':'tag-ongoing';
-  const label = s==='win'?'Menang':s==='lose'?'Kalah':'Berjalan';
-  return `<span class="tag ${cls}">${label}</span>`;
-}
 
 // ---------- render ----------
 function render(){
   const app = document.getElementById('app');
-  const k = overallKpis();
   app.innerHTML = `
     <div class="hdr">
       <div>
-        <h1>Presourcing Control</h1>
-        <div class="sub">Monitoring beban, efisiensi, dan win rate tim presourcing lintas project${storageOk?' · <span style="color:var(--green)">Online (tersinkronisasi)</span>':' · <span style="color:var(--red)">Offline (koneksi database terputus)</span>'}</div>
+        <h1>Presourcing Project Dashboard</h1>
+        <div class="sub">Pipeline, Progress, and Target RFS${storageOk?' · <span style="color:var(--green)">Online</span>':' · <span style="color:var(--red)">Offline</span>'}</div>
       </div>
       <div class="tabs">
-        ${tabBtn('overview','Overview')}
-        ${tabBtn('projects','Project')}
-        ${tabBtn('team','Tim &amp; Load')}
+        ${tabBtn('overview','Executive Dashboard')}
+        ${tabBtn('projects','Detail BoQ & SPH')}
+        ${tabBtn('team','Tim &amp; Beban Kerja')}
       </div>
     </div>
-
-    <div class="kpirow">
-      <div class="kpi"><div class="label">Project Aktif</div><div class="val">${k.active}</div></div>
-      <div class="kpi"><div class="label">Win Rate Project</div><div class="val">${k.winRate==null?'—':k.winRate.toFixed(0)}<span class="unit">${k.winRate==null?'':'%'}</span></div></div>
-      <div class="kpi"><div class="label">Rata-rata Efficiency</div><div class="val">${k.avgEff==null?'—':k.avgEff.toFixed(1)}<span class="unit">${k.avgEff==null?'':'%'}</span></div></div>
-      <div class="kpi"><div class="label">Rata-rata Durasi (closed)</div><div class="val">${k.avgDur==null?'—':k.avgDur}<span class="unit">${k.avgDur==null?'':'hari'}</span></div></div>
-    </div>
-
     <div id="tabcontent"></div>
   `;
   const content = document.getElementById('tabcontent');
@@ -260,43 +210,250 @@ function tabBtn(id,label){
   return `<div class="tab ${activeTab===id?'active':''}" data-tab="${id}">${label}</div>`;
 }
 
+// --------------------------------------------------------
+// RENDER OVERVIEW: EXECUTIVE DASHBOARD (MOCKUP MANAJEMEN)
+// --------------------------------------------------------
 function renderOverview(){
-  const byPriority = {Urgent:0, High:0, Medium:0};
-  projects.forEach(p=> byPriority[p.priority] = (byPriority[p.priority]||0)+1);
-  const urgentActive = projects.filter(p=>p.priority==='Urgent' && p.status==='ongoing');
-  return `
-    <div class="panel">
-      <div class="panel-hd"><h2>Distribusi prioritas</h2></div>
-      <div class="panel-body">
-        <div class="lb-row"><div class="lb-name">Urgent</div><div class="lb-bar-track"><div class="lb-bar-fill" style="width:${pct(byPriority.Urgent,projects.length)}%; background:var(--red)"></div></div><div class="lb-val">${byPriority.Urgent}</div></div>
-        <div class="lb-row"><div class="lb-name">High</div><div class="lb-bar-track"><div class="lb-bar-fill" style="width:${pct(byPriority.High,projects.length)}%"></div></div><div class="lb-val">${byPriority.High}</div></div>
-        <div class="lb-row"><div class="lb-name">Medium</div><div class="lb-bar-track"><div class="lb-bar-fill" style="width:${pct(byPriority.Medium,projects.length)}%; background:var(--slate)"></div></div><div class="lb-val">${byPriority.Medium}</div></div>
-      </div>
+  // Hitung KPI
+  const totalProj = projects.length;
+  let totalVal = 0;
+  const sCount = { 'On Track':0, 'At Risk':0, 'Overdue':0, 'Completed':0, 'Planned':0 };
+  const pCount = { 1:0, 2:0, 3:0, 4:0, 5:0, 6:0 };
+  
+  projects.forEach(p => {
+      totalVal += (projectSph(p).awal || 0);
+      sCount[getDynamicStatus(p)]++;
+      
+      if(p.status === 'ongoing') {
+          const stage = parseInt((p.pipelineStage || '1').charAt(0));
+          if(!isNaN(stage) && stage >= 1 && stage <= 6) pCount[stage]++;
+      }
+  });
+
+  const getPct = (val) => totalProj ? Math.round((val/totalProj)*100) : 0;
+  
+  // Suntik Chart.js jika belum ada
+  if (!window.Chart && !document.getElementById('chartjs-script')) {
+      const script = document.createElement('script');
+      script.id = 'chartjs-script';
+      script.src = "https://cdn.jsdelivr.net/npm/chart.js";
+      script.onload = () => setTimeout(renderDashboardCharts, 100);
+      document.head.appendChild(script);
+  } else {
+      setTimeout(renderDashboardCharts, 100);
+  }
+
+  // CSS Khusus Dashboard Baru
+  const dashStyles = `
+    <style>
+        .kpi-row-new { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom: 20px; }
+        .kpi-card { background: #fff; padding: 16px; border-radius: 8px; border: 1px solid var(--border-soft); box-shadow: 0 1px 3px rgba(0,0,0,0.05); display:flex; align-items:center; gap: 12px;}
+        .kpi-icon { width: 40px; height: 40px; border-radius: 50%; display:flex; align-items:center; justify-content:center; font-size: 20px; }
+        .dash-grid { display: grid; grid-template-columns: 2.5fr 1fr; gap: 16px; margin-bottom: 16px; }
+        .dash-grid-half { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+        .dash-panel { background: #fff; border-radius: 8px; border: 1px solid var(--border-soft); overflow: hidden; }
+        .dash-panel-hd { background: #0056b3; color: white; padding: 10px 16px; font-weight: 600; font-size: 13px; }
+        .dash-panel-body { padding: 16px; }
+        
+        .badge { padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+        .badge-on-track { background: #28a745; color: white; }
+        .badge-at-risk { background: #ffc107; color: #333; }
+        .badge-overdue { background: #dc3545; color: white; }
+        .badge-completed { background: #17a2b8; color: white; }
+        .badge-planned { background: #e2e8f0; color: #475569; }
+
+        .prog-bar-bg { background: #e5e7eb; border-radius: 4px; height: 8px; width: 100%; margin-top: 4px; }
+        .prog-bar-fill { height: 100%; background: #007bff; border-radius: 4px; }
+
+        .pipeline-container { display: flex; gap: 4px; margin-top: 10px; }
+        .pipe-stage { flex: 1; color: white; padding: 10px 5px; text-align: center; font-size: 11px; clip-path: polygon(0% 0%, 90% 0%, 100% 50%, 90% 100%, 0% 100%, 10% 50%); margin-right: -10px; }
+        .pipe-stage:first-child { clip-path: polygon(0% 0%, 90% 0%, 100% 50%, 90% 100%, 0% 100%); }
+        .pipe-stage:last-child { clip-path: polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%, 10% 50%); margin-right: 0; }
+        
+        table.dash-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        table.dash-table th { background: #f8f9fa; padding: 8px; border-bottom: 2px solid #dee2e6; text-align: left; }
+        table.dash-table td { padding: 8px; border-bottom: 1px solid #e9ecef; }
+    </style>
+  `;
+
+  // HTML Data Tabel EWS & Overview
+  const sortedProjects = [...projects].sort((a,b) => new Date(a.targetRfs||'2099') - new Date(b.targetRfs||'2099'));
+  
+  let overviewRows = '';
+  sortedProjects.forEach((p, idx) => {
+      const stat = getDynamicStatus(p);
+      overviewRows += `
+      <tr>
+          <td>${idx+1}</td>
+          <td style="font-weight:500;">${escAttr(p.name)}</td>
+          <td>${valToM(projectSph(p).awal)}</td>
+          <td>${escAttr(p.leadId)}</td>
+          <td>${p.targetRfs ? new Date(p.targetRfs).toLocaleDateString('id-ID', {day:'numeric', month:'short', year:'numeric'}) : '-'}</td>
+          <td>${badgeStatus(stat)}</td>
+          <td>
+            <div style="display:flex; align-items:center; gap:8px;">
+                <div style="width:40px;">${p.progressPct||0}%</div>
+                <div class="prog-bar-bg"><div class="prog-bar-fill" style="width:${p.progressPct||0}%;"></div></div>
+            </div>
+          </td>
+      </tr>`;
+  });
+
+  let ewsRows = '';
+  sortedProjects.filter(p => ['Overdue', 'At Risk'].includes(getDynamicStatus(p))).forEach(p => {
+      const stat = getDynamicStatus(p);
+      ewsRows += `
+      <tr>
+          <td style="font-weight:500;">${escAttr(p.name)}</td>
+          <td>${p.targetRfs ? new Date(p.targetRfs).toLocaleDateString('id-ID', {day:'numeric', month:'short', year:'numeric'}) : '-'}</td>
+          <td>${p.progressPct||0}%</td>
+          <td>${badgeStatus(stat)}</td>
+      </tr>`;
+  });
+  if(!ewsRows) ewsRows = `<tr><td colspan="4" style="text-align:center; color:var(--green); padding:20px;">Semua project aman, tidak ada Early Warning! 🎉</td></tr>`;
+
+  const pNames = ['Identification', 'SPH Prep', 'Vendor Select', 'Negotiation', 'Finalization', 'RFS'];
+  let pipelineHtml = '<div class="pipeline-container">';
+  pNames.forEach((name, i) => {
+      const n = i+1;
+      pipelineHtml += `
+          <div class="pipe-stage" style="z-index: ${6-i}; background: ${n<=3 ? '#007bff' : (n<=5 ? '#17a2b8' : '#28a745')};">
+              <div style="font-size:14px; font-weight:bold; margin-bottom:2px;">${n}</div>
+              <div style="line-height:1.1;">${name}</div>
+              <div style="margin-top:6px; font-weight:bold;">${pCount[n]} Proj</div>
+          </div>
+      `;
+  });
+  pipelineHtml += '</div>';
+
+  return dashStyles + `
+    <!-- ROW 1: KPI CARDS -->
+    <div class="kpi-row-new">
+        <div class="kpi-card"><div class="kpi-icon" style="background:#e0f2fe; color:#0284c7;">📊</div><div><div style="font-size:11px; color:#64748b;">Total Project</div><div style="font-size:20px; font-weight:bold;">${totalProj}</div></div></div>
+        <div class="kpi-card"><div class="kpi-icon" style="background:#e0e7ff; color:#4f46e5;">💰</div><div><div style="font-size:11px; color:#64748b;">Total Value</div><div style="font-size:18px; font-weight:bold; color:#0f172a;">Rp ${valToM(totalVal)} M</div></div></div>
+        <div class="kpi-card"><div class="kpi-icon" style="background:#dcfce7; color:#16a34a;">✅</div><div style="width:100%;"><div style="font-size:11px; color:#64748b;">On Track</div><div style="display:flex; justify-content:space-between; align-items:flex-end;"><div style="font-size:20px; font-weight:bold;">${sCount['On Track']}</div><div style="font-weight:bold; color:#16a34a;">${getPct(sCount['On Track'])}%</div></div></div></div>
+        <div class="kpi-card"><div class="kpi-icon" style="background:#fef9c3; color:#ca8a04;">⚠️</div><div style="width:100%;"><div style="font-size:11px; color:#64748b;">At Risk</div><div style="display:flex; justify-content:space-between; align-items:flex-end;"><div style="font-size:20px; font-weight:bold;">${sCount['At Risk']}</div><div style="font-weight:bold; color:#ca8a04;">${getPct(sCount['At Risk'])}%</div></div></div></div>
+        <div class="kpi-card"><div class="kpi-icon" style="background:#fee2e2; color:#dc2626;">⏳</div><div style="width:100%;"><div style="font-size:11px; color:#64748b;">Overdue</div><div style="display:flex; justify-content:space-between; align-items:flex-end;"><div style="font-size:20px; font-weight:bold;">${sCount['Overdue']}</div><div style="font-weight:bold; color:#dc2626;">${getPct(sCount['Overdue'])}%</div></div></div></div>
+        <div class="kpi-card"><div class="kpi-icon" style="background:#f1f5f9; color:#475569;">🏁</div><div style="width:100%;"><div style="font-size:11px; color:#64748b;">Completed</div><div style="display:flex; justify-content:space-between; align-items:flex-end;"><div style="font-size:20px; font-weight:bold;">${sCount['Completed']}</div><div style="font-weight:bold; color:#475569;">${getPct(sCount['Completed'])}%</div></div></div></div>
     </div>
-    <div class="panel">
-      <div class="panel-hd"><h2>Perlu perhatian — project urgent yang masih berjalan</h2></div>
-      <div class="panel-body">
-        ${urgentActive.length===0 ? '<div class="empty">Tidak ada project urgent yang masih berjalan.</div>' :
-          urgentActive.map(p=>`<div style="padding:6px 0; border-bottom:1px solid var(--border-soft); font-size:13px;">
-            <strong>${p.name}</strong> ·${p.requestorName} (${p.requestorDept}) · berjalan ${durationDays(p)} hari
-          </div>`).join('')}
-      </div>
+
+    <!-- ROW 2: OVERVIEW TABLE & STATUS CHART -->
+    <div class="dash-grid">
+        <div class="dash-panel">
+            <div class="dash-panel-hd">📋 Project Presourcing Overview</div>
+            <div class="dash-panel-body" style="padding:0; overflow-x:auto;">
+                <table class="dash-table">
+                    <thead><tr><th>No</th><th>Project Name</th><th>Nilai (Rp M)</th><th>PIC Presource</th><th>Target RFS</th><th>Status</th><th>Progress</th></tr></thead>
+                    <tbody>${overviewRows}</tbody>
+                </table>
+            </div>
+        </div>
+        <div class="dash-panel" style="display:flex; flex-direction:column;">
+            <div class="dash-panel-hd">🎯 Project Status</div>
+            <div class="dash-panel-body" style="flex:1; display:flex; align-items:center; justify-content:center;">
+                <canvas id="chartStatus" style="max-height:220px;"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- ROW 3: PIPELINE & EARLY WARNING -->
+    <div class="dash-grid">
+        <div class="dash-panel">
+            <div class="dash-panel-hd">🔄 Presourcing Progress Pipeline</div>
+            <div class="dash-panel-body">
+                ${pipelineHtml}
+            </div>
+        </div>
+        <div class="dash-panel">
+            <div class="dash-panel-hd" style="background:#dc3545;">⚠️ Early Warning (Need Attention)</div>
+            <div class="dash-panel-body" style="padding:0;">
+                <table class="dash-table">
+                    <thead><tr><th>Project Name</th><th>Target RFS</th><th>Progress</th><th>Status</th></tr></thead>
+                    <tbody>${ewsRows}</tbody>
+                </table>
+            </div>
+        </div>
     </div>
   `;
 }
 
-function pct(n,total){ return total? (n/total*100).toFixed(0) : 0; }
+// Global variable untuk menyimpan instance grafik agar bisa di-destroy saat re-render
+let dCharts = {}; 
 
+function renderDashboardCharts() {
+    if (typeof Chart === 'undefined') return;
+
+    // Persiapan Data Chart Status
+    let sCount = { 'On Track':0, 'At Risk':0, 'Overdue':0, 'Completed':0, 'Planned':0 };
+    projects.forEach(p => sCount[getDynamicStatus(p)]++);
+
+    const ctxStatus = document.getElementById('chartStatus');
+    if (ctxStatus) {
+        if(dCharts.status) dCharts.status.destroy();
+        dCharts.status = new Chart(ctxStatus, {
+            type: 'doughnut',
+            data: {
+                labels: ['On Track', 'At Risk', 'Overdue', 'Completed', 'Planned'],
+                datasets: [{
+                    data: [sCount['On Track'], sCount['At Risk'], sCount['Overdue'], sCount['Completed'], sCount['Planned']],
+                    backgroundColor: ['#28a745', '#ffc107', '#dc3545', '#17a2b8', '#e2e8f0']
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { position: 'right', labels: { boxWidth: 12, font: {size: 11} } } }
+            }
+        });
+    }
+}
+
+// --------------------------------------------------------
+// RENDER DETAIL PROJECTS (Sesuai Vanilla JS Best Practice)
+// --------------------------------------------------------
 function renderProjects(){
   const filtered = projects.filter(p=>{
     if(filters.priority!=='all' && p.priority!==filters.priority) return false;
     if(filters.status!=='all' && p.status!==filters.status) return false;
     return true;
   });
+
+  // BEST PRACTICE: Bangun baris tabel (tr) secara linear, hindari nested backticks .map().join()
+  let tbodyHtml = '';
+  
+  if(filtered.length === 0){
+    tbodyHtml = '<tr><td colspan="7"><div class="empty">Tidak ada project yang cocok.</div></td></tr>';
+  } else {
+    filtered.forEach(p => {
+      const s = projectSph(p); 
+      const eff = efficiencyPct(s.awal, s.final);
+      const pipelineText = escAttr(p.pipelineStage) || '-'; // Memperbaiki error \vert{}\vert{} menjadi ||
+      const pct = p.progressPct || 0;
+
+      // Baris utama project
+      tbodyHtml += `
+        <tr class="proj-row" data-open="${p.id}">
+          <td>${escAttr(p.name)}</td>
+          <td>${escAttr(p.requestorName)}<br><span style="color:var(--text-muted); font-size:11.5px;">${escAttr(p.requestorDept)}</span></td>
+          <td>${badgeStatus(getDynamicStatus(p))}</td>
+          <td><span style="font-size:12px;">${pipelineText} (${pct}%)</span></td>
+          <td class="num mono">${fmtIdr(s.awal)}</td>
+          <td class="num mono">${fmtPct(eff)}</td>
+          <td class="num mono">${durationDays(p)}h</td>
+        </tr>
+      `;
+
+      // Baris detail BoQ jika project sedang diklik/dibuka
+      if (openProjectId === p.id) {
+        tbodyHtml += `<tr><td colspan="7">${renderProjectDetail(p)}</td></tr>`;
+      }
+    });
+  }
+
+  // Gabungkan semua komponen menjadi satu kesatuan
   return `
     <div class="panel">
       <div class="panel-hd">
-        <h2>Daftar Project</h2>
+        <h2>Daftar Detail Project & BoQ</h2>
         <div style="display:flex; gap:8px; align-items:center;">
           <div class="filters">
             <select id="f-priority">
@@ -318,33 +475,17 @@ function renderProjects(){
       <div class="panel-body">
         <table>
           <thead><tr>
-            <th>Project</th><th>Pemohon</th><th>Prioritas</th><th>Status</th>
-            <th class="num">SPH Awal</th><th class="num">SPH Final</th><th class="num">Efficiency</th><th class="num">Durasi</th>
+            <th>Project</th><th>Pemohon</th><th>Status EWS</th><th>Tahap Pipeline</th>
+            <th class="num">SPH Awal</th><th class="num">Efficiency</th><th class="num">Durasi</th>
           </tr></thead>
           <tbody>
-          ${filtered.map(p=>{
-            const s = projectSph(p); const eff = efficiencyPct(s.awal,s.final);
-            return `<tr class="proj-row" data-open="${p.id}">
-              <td>${p.name}</td>
-              <td>${p.requestorName}<br><span style="color:var(--text-muted); font-size:11.5px;">${p.requestorDept}</span></td>
-              <td>${tagPriority(p.priority)}</td>
-              <td>${tagStatus(p.status)}</td>
-              <td class="num mono">${fmtIdr(s.awal)}</td>
-              <td class="num mono">${fmtIdr(s.final)}</td>
-              <td class="num mono">${fmtPct(eff)}</td>
-              <td class="num mono">${durationDays(p)}h</td>
-            </tr>
-            ${openProjectId===p.id ? `<tr><td colspan="8">${renderProjectDetail(p)}</td></tr>` : ''}
-            `;
-          }).join('')}
+            ${tbodyHtml}
           </tbody>
         </table>
-        ${filtered.length===0?'<div class="empty">Tidak ada project yang cocok dengan filter ini.</div>':''}
       </div>
     </div>
   `;
 }
-
 function renderProjectDetail(p){
   const uniq = uniquePicsInProject(p);
   
@@ -370,7 +511,7 @@ function renderProjectDetail(p){
     </div>
   `;
 
-  // 2. Bangun HTML SoW, BoQ, dan Item secara linear (mencegah nested backticks yang bikin error VS Code)
+  // 2. Bangun HTML SoW, BoQ, dan Item secara linear
   let sowsHtml = '';
   (p.sows || []).forEach(sow => {
     sowsHtml += `<div class="sow-title">Scope of Work: ${escAttr(sow.name)}</div>`;
@@ -383,7 +524,6 @@ function renderProjectDetail(p){
         </div>
       `;
       
-      // Reset itemsHtml KHUSUS untuk BoQ ini saja (Menjamin tidak akan ketumpuk)
       let itemsHtml = '';
       (boq.items || []).forEach(it => {
         const eff = p.sphMode === 'item' ? efficiencyPct(it.sphAwal, it.sphFinal) : null;
@@ -406,12 +546,10 @@ function renderProjectDetail(p){
           </div>
         `;
       });
-      // Masukkan item-item tadi tepat di bawah Header BoQ-nya
       sowsHtml += itemsHtml; 
     });
   });
 
-  // 3. Gabungkan semua lapisan tadi ke dalam blok utama
   return `
     <div class="detail-block">
       <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
@@ -467,19 +605,6 @@ function renderTeam(){
         </table>
       </div>
     </div>
-    <div class="panel">
-      <div class="panel-hd"><h2>Support Load per anggota</h2></div>
-      <div class="panel-body">
-        ${rows.map(r=>`<div class="lb-row">
-          <div class="lb-name">${escAttr(r.name)}</div>
-          <div class="lb-bar-track"><div class="lb-bar-fill" style="width:${(r.supportLoad/maxLoad*100).toFixed(0)}%"></div></div>
-          <div class="lb-val">${r.supportLoad.toFixed(2)}</div>
-        </div>`).join('')}
-      </div>
-      <div class="panel-body" style="padding-top:0;">
-        <div class="note">Support Load = jumlah kredit fractional dari item yang ditangani (1 ÷ jumlah PIC per item). Lead Count dihitung terpisah, tidak fractional.</div>
-      </div>
-    </div>
   `;
 }
 
@@ -495,58 +620,35 @@ function wireEvents(){
   const btnTeam = document.getElementById('btn-manage-team'); if(btnTeam) btnTeam.onclick = ()=> openTeamModal();
 }
 
-// ----------- download project ---------
 function downloadProjectReport(projectId) {
     window.location.href = `/api/download_report?project_id=${projectId}`;
 }
 
-// ---------- FUNGSI REVISI BOQ (ANTI-BLOCKED) ----------
 function triggerRevisiBoq(projectId) {
     const fileInput = document.createElement('input');
-    fileInput.type = 'file';
-    fileInput.accept = '.xlsx, .xls';
-    fileInput.style.display = 'none'; 
+    fileInput.type = 'file'; fileInput.accept = '.xlsx, .xls'; fileInput.style.display = 'none'; 
     document.body.appendChild(fileInput);
     
     fileInput.onchange = async (e) => {
         const file = e.target.files[0];
         document.body.removeChild(fileInput); 
-        
         if (!file) return;
-
-        if (!confirm(`Unggah revisi BoQ untuk project ini?\n\nItem yang sama akan diperbarui qty/vendor-nya. Item baru ditambahkan, dan item yang hilang dihapus.`)) {
-            return;
-        }
+        if (!confirm(`Unggah revisi BoQ untuk project ini?`)) return;
 
         const formData = new FormData();
         formData.append('file', file);
         formData.append('ticket_id', projectId);
 
-        // Ubah kursor menjadi loading agar user tahu proses sedang berjalan
         document.body.style.cursor = 'wait';
-        
         try {
-            const res = await fetch('/api/revisi_boq', {
-                method: 'POST',
-                body: formData
-            });
+            const res = await fetch('/api/revisi_boq', { method: 'POST', body: formData });
             const result = await res.json();
-            
-            if (res.ok && result.success) {
-                alert(result.message);
-                loadAll(); 
-            } else {
-                alert(`Gagal merevisi BoQ: ${result.message}`);
-            }
+            if (res.ok && result.success) { alert(result.message); loadAll(); } 
+            else alert(`Gagal merevisi BoQ: ${result.message}`);
         } catch (error) {
-            console.error("Error revisi BoQ:", error);
-            alert('Terjadi kesalahan saat mengunggah file.');
-        } finally {
-            // Kembalikan kursor ke normal
-            document.body.style.cursor = 'default';
-        }
+            console.error("Error revisi BoQ:", error); alert('Terjadi kesalahan.');
+        } finally { document.body.style.cursor = 'default'; }
     };
-    
     fileInput.click();
 }
 
@@ -557,6 +659,7 @@ function blankProject(){
     priority:'Medium', status:'ongoing', leadId: team[0]||'',
     sphMode:'item', projectSphAwal:null, projectSphFinal:null,
     createdAt: todayStr(), closedAt:null,
+    targetRfs: '', pipelineStage: '1 - Project Identification', progressPct: 0,
     comparison_docs: [],
     sows:[{ id:uid('sow'), name:'', boqs:[{ id:uid('boq'), name:'', items:[{ id:uid('item'), product:'', qty:1, vendor:'', notes:'', picIds:[], sphAwal:null, sphFinal:null }] }] }]
   };
@@ -571,14 +674,12 @@ function openTeamModal(){
   modalScroll = 0; 
   modal = { type:'team', data:{ names: team.join(', ') } }; render(); 
 }
-
 function renderModal(){
   let root = document.getElementById('modal-root');
   if(!root){ root = document.createElement('div'); root.id='modal-root'; document.body.appendChild(root); }
   if(modal.type==='project') root.innerHTML = projectModalHtml(modal.data, modal.isNew);
   if(modal.type==='team') root.innerHTML = teamModalHtml(modal.data);
   wireModalEvents();
-  
   const m = document.querySelector('.modal');
   if(m) m.scrollTop = modalScroll;
 }
@@ -594,33 +695,45 @@ function projectModalHtml(d, isNew){
       <div class="modal-body">
         <div class="field"><label>Nama project</label><input id="m-name" value="${escAttr(d.name)}" placeholder="Project Pertamina — ..."></div>
         <div class="grid2">
-          <div class="field"><label>Nama pemohon (SA)</label><input id="m-req-name" value="${escAttr(d.requestorName)}" placeholder="Marcel"></div>
-          <div class="field"><label>Departemen pemohon</label><input id="m-req-dept" value="${escAttr(d.requestorDept)}" placeholder="SA G&P"></div>
+          <div class="field"><label>Nama pemohon (SA)</label><input id="m-req-name" value="${escAttr(d.requestorName)}"></div>
+          <div class="field"><label>Departemen</label><input id="m-req-dept" value="${escAttr(d.requestorDept)}"></div>
         </div>
+        
+        <!-- KOLOM BARU UNTUK EWS -->
+        <div class="grid3" style="background: #f8f9fa; padding: 12px; border-radius: 6px; margin-bottom: 12px; border: 1px dashed #ced4da;">
+           <div class="field" style="margin:0;"><label>Target RFS</label><input type="date" id="m-target-rfs" value="${escAttr(d.targetRfs)}"></div>
+           <div class="field" style="margin:0;"><label>Tahap Pipeline</label>
+             <select id="m-pipeline-stage">
+                <option value="1 - Project Identification" ${d.pipelineStage==='1 - Project Identification'?'selected':''}>1 - Identification</option>
+                <option value="2 - SPH Preparation" ${d.pipelineStage==='2 - SPH Preparation'?'selected':''}>2 - SPH Prep</option>
+                <option value="3 - Vendor Selection" ${d.pipelineStage==='3 - Vendor Selection'?'selected':''}>3 - Vendor Select</option>
+                <option value="4 - Negotiation" ${d.pipelineStage==='4 - Negotiation'?'selected':''}>4 - Negotiation</option>
+                <option value="5 - Finalization" ${d.pipelineStage==='5 - Finalization'?'selected':''}>5 - Finalization</option>
+                <option value="6 - RFS" ${d.pipelineStage==='6 - RFS'?'selected':''}>6 - RFS</option>
+             </select>
+           </div>
+           <div class="field" style="margin:0;"><label>Progress (%)</label><input type="number" id="m-progress" min="0" max="100" value="${d.progressPct || 0}"></div>
+        </div>
+
         <div class="grid3">
           <div class="field"><label>Prioritas</label>
-            <select id="m-priority">
-              ${['Medium','High','Urgent'].map(x=>`<option ${d.priority===x?'selected':''}>${x}</option>`).join('')}
-            </select>
+            <select id="m-priority">${['Medium','High','Urgent'].map(x=>`<option ${d.priority===x?'selected':''}>${x}</option>`).join('')}</select>
           </div>
-          <div class="field"><label>Status</label>
+          <div class="field"><label>Status (Tutup Project)</label>
             <select id="m-status">
               <option value="ongoing" ${d.status==='ongoing'?'selected':''}>Berjalan</option>
-              <option value="win" ${d.status==='win'?'selected':''}>Menang</option>
-              <option value="lose" ${d.status==='lose'?'selected':''}>Kalah</option>
+              <option value="win" ${d.status==='win'?'selected':''}>Menang (Win)</option>
+              <option value="lose" ${d.status==='lose'?'selected':''}>Kalah (Lose)</option>
             </select>
           </div>
           <div class="field"><label>Lead Presource</label>
             <select id="m-lead">${team.map(t=>`<option ${d.leadId===t?'selected':''}>${escAttr(t)}</option>`).join('')}</select>
           </div>
         </div>
-        <div class="grid2">
-          <div class="field"><label>Tanggal request masuk</label><input type="date" id="m-created" value="${escAttr(d.createdAt)||''}"></div>
-          <div class="field"><label>Tanggal SPH final / ditutup</label><input type="date" id="m-closed" value="${escAttr(d.closedAt)||''}"></div>
-        </div>
-        <div class="field"><label>Mode pencatatan SPH</label>
+        
+        <div class="field"><label>Mode SPH</label>
           <select id="m-sphmode">
-            <option value="item" ${d.sphMode==='item'?'selected':''}>Per item/produk (di dalam BoQ)</option>
+            <option value="item" ${d.sphMode==='item'?'selected':''}>Per item/produk</option>
             <option value="project" ${d.sphMode==='project'?'selected':''}>Total project saja</option>
           </select>
         </div>
@@ -641,9 +754,10 @@ function projectModalHtml(d, isNew){
     </div>
   </div>`;
 }
+
 function sowBlockHtml(sow, si){
   return `<div class="sow-block" data-sow-idx="${si}">
-    <div class="field"><label>Scope of Work</label><input class="sow-name" data-si="${si}" value="${escAttr(sow.name)}" placeholder="SoW Security & Monitoring"></div>
+    <div class="field"><label>Scope of Work</label><input class="sow-name" data-si="${si}" value="${escAttr(sow.name)}"></div>
     ${sow.boqs.map((boq,bi)=>boqBlockHtml(boq,si,bi)).join('')}
     <button class="mini-btn" data-add-boq="${si}" type="button">+ Tambah BoQ</button>
     <button class="mini-btn danger" data-del-sow="${si}" type="button" style="float:right;">Hapus SoW</button>
@@ -651,7 +765,7 @@ function sowBlockHtml(sow, si){
 }
 function boqBlockHtml(boq, si, bi){
   return `<div class="boq-block" data-boq-idx="${bi}">
-    <div class="field"><label>Bill of Quantity</label><input class="boq-name" data-si="${si}" data-bi="${bi}" value="${escAttr(boq.name)}" placeholder="BoQ Utama"></div>
+    <div class="field"><label>Bill of Quantity</label><input class="boq-name" data-si="${si}" data-bi="${bi}" value="${escAttr(boq.name)}"></div>
     ${boq.items.map((it,ii)=>itemBlockHtml(it,si,bi,ii)).join('')}
     <button class="mini-btn" data-add-item="${si}:${bi}" type="button">+ Tambah item/produk</button>
     <button class="mini-btn danger" data-del-boq="${si}:${bi}" type="button" style="float:right;">Hapus BoQ</button>
@@ -660,45 +774,25 @@ function boqBlockHtml(boq, si, bi){
 function itemBlockHtml(it, si, bi, ii){
   return `<div class="item-block" data-item-idx="${ii}">
     <div style="display:grid; grid-template-columns: 2fr 0.4fr 0.6fr 1.5fr; gap:12px; margin-bottom:12px;">
-      <div class="field" style="margin:0;"><label>Produk</label><input class="it-product" data-path="${si}:${bi}:${ii}" value="${escAttr(it.product)}" placeholder="CCTV"></div>
+      <div class="field" style="margin:0;"><label>Produk</label><input class="it-product" data-path="${si}:${bi}:${ii}" value="${escAttr(it.product)}"></div>
       <div class="field" style="margin:0;"><label>Qty</label><input type="number" class="it-qty" data-path="${si}:${bi}:${ii}" value="${it.qty??1}"></div>
-      <div class="field" style="margin:0;"><label>UoM</label><input class="it-uom" data-path="${si}:${bi}:${ii}" value="${escAttr(it.uom)}" placeholder="Unit"></div>
-      <div class="field" style="margin:0;"><label>Vendor</label><input class="it-vendor" data-path="${si}:${bi}:${ii}" value="${escAttr(it.vendor)}" placeholder="Nama Vendor"></div>
+      <div class="field" style="margin:0;"><label>UoM</label><input class="it-uom" data-path="${si}:${bi}:${ii}" value="${escAttr(it.uom)}"></div>
+      <div class="field" style="margin:0;"><label>Vendor</label><input class="it-vendor" data-path="${si}:${bi}:${ii}" value="${escAttr(it.vendor)}"></div>
     </div>
     <div class="grid3">
       <div class="field"><label>SPH Awal item</label><input type="number" class="it-awal" data-path="${si}:${bi}:${ii}" value="${it.sphAwal??''}"></div>
       <div class="field"><label>SPH Final item</label><input type="number" class="it-final" data-path="${si}:${bi}:${ii}" value="${it.sphFinal??''}"></div>
-      <div class="field"><label>PIC untuk item ini</label>
-        <div class="pic-select">${team.map(t=>`<div class="pic-opt ${it.picIds.includes(t)?'on':''}" data-pic="${si}:${bi}:${ii}:${escAttr(t)}">${escAttr(t)}</div>`).join('')}</div>
-      </div>
+      <div class="field"><label>PIC</label><div class="pic-select">${team.map(t=>`<div class="pic-opt ${it.picIds.includes(t)?'on':''}" data-pic="${si}:${bi}:${ii}:${escAttr(t)}">${escAttr(t)}</div>`).join('')}</div></div>
     </div>
-    <div class="field"><label>Notes (Opsional)</label><input class="it-notes" data-path="${si}:${bi}:${ii}" value="${escAttr(it.notes)}" placeholder="Catatan tambahan..."></div>
-    <button class="mini-btn danger" data-del-item="${si}:${bi}:${ii}" type="button">Hapus item</button>
   </div>`;
 }
-
 function teamModalHtml(d){
-  return `<div class="overlay" id="ov">
-    <div class="modal" style="max-width:480px;">
-      <div class="modal-hd">
-        <h3>Kelola anggota tim presourcing</h3>
-        <button class="mini-btn" id="m-close" type="button">Tutup</button>
-      </div>
-      <div class="modal-body">
-        <div class="field"><label>Nama anggota, pisahkan dengan koma</label>
-          <textarea id="m-team-names" rows="4">${escAttr(d.names)}</textarea>
-        </div>
-        <div class="note">Mengubah daftar ini tidak menghapus data project yang sudah ada.</div>
-      </div>
-      <div class="modal-ft">
-        <button class="btn-ghost" id="m-cancel" type="button">Batal</button>
-        <button class="btn-primary" id="m-save-team" type="button">Simpan</button>
-      </div>
-    </div>
-  </div>`;
+  return `<div class="overlay" id="ov"><div class="modal" style="max-width:480px;"><div class="modal-hd"><h3>Kelola tim</h3><button class="mini-btn" id="m-close">Tutup</button></div>
+    <div class="modal-body"><textarea id="m-team-names" rows="4">${escAttr(d.names)}</textarea></div>
+    <div class="modal-ft"><button class="btn-ghost" id="m-cancel">Batal</button><button class="btn-primary" id="m-save-team">Simpan</button></div>
+  </div></div>`;
 }
 
-// ---------- FUNGSI SIMPAN SEMENTARA ----------
 function syncModalData() {
   if(!modal || modal.type !== 'project') return;
   const m = document.querySelector('.modal');
@@ -706,7 +800,12 @@ function syncModalData() {
   const d = modal.data;
   d.name = val('m-name'); d.requestorName = val('m-req-name'); d.requestorDept = val('m-req-dept');
   d.priority = val('m-priority'); d.status = val('m-status'); d.leadId = val('m-lead');
-  d.createdAt = val('m-created') || todayStr(); d.closedAt = val('m-closed') || null;
+  
+  // Tangkap nilai EWS
+  d.targetRfs = val('m-target-rfs');
+  d.pipelineStage = val('m-pipeline-stage');
+  d.progressPct = numOrNull(val('m-progress')) || 0;
+
   d.sphMode = val('m-sphmode');
   if(d.sphMode==='project'){
     d.projectSphAwal = numOrNull(document.getElementById('m-proj-awal').value);
@@ -718,123 +817,47 @@ function syncModalData() {
   document.querySelectorAll('.it-qty').forEach(el=>{ const [si,bi,ii]=el.dataset.path.split(':').map(Number); d.sows[si].boqs[bi].items[ii].qty = numOrNull(el.value); });
   document.querySelectorAll('.it-uom').forEach(el=>{ const [si,bi,ii]=el.dataset.path.split(':').map(Number); d.sows[si].boqs[bi].items[ii].uom = el.value; });
   document.querySelectorAll('.it-vendor').forEach(el=>{ const [si,bi,ii]=el.dataset.path.split(':').map(Number); d.sows[si].boqs[bi].items[ii].vendor = el.value; });
-  document.querySelectorAll('.it-notes').forEach(el=>{ const [si,bi,ii]=el.dataset.path.split(':').map(Number); d.sows[si].boqs[bi].items[ii].notes = el.value; });
   document.querySelectorAll('.it-product').forEach(el=>{ const [si,bi,ii]=el.dataset.path.split(':').map(Number); d.sows[si].boqs[bi].items[ii].product = el.value; });
   document.querySelectorAll('.it-awal').forEach(el=>{ const [si,bi,ii]=el.dataset.path.split(':').map(Number); d.sows[si].boqs[bi].items[ii].sphAwal = numOrNull(el.value); });
   document.querySelectorAll('.it-final').forEach(el=>{ const [si,bi,ii]=el.dataset.path.split(':').map(Number); d.sows[si].boqs[bi].items[ii].sphFinal = numOrNull(el.value); });
 }
 
-// ---------- wire modal events with safety checks ----------
 function wireModalEvents(){
   if (!modal) return;
-
-  const close = ()=>{ 
-    modal = null; 
-    let root = document.getElementById('modal-root');
-    if(root) root.innerHTML = ''; 
-    render(); 
-  };
-  
+  const close = ()=>{ modal=null; document.getElementById('modal-root').innerHTML=''; render(); };
   const c1 = document.getElementById('m-close'); if(c1) c1.onclick = close;
   const c2 = document.getElementById('m-cancel'); if(c2) c2.onclick = close;
-  
-  const ov = document.getElementById('ov');
-  if(ov) {
-    ov.onclick = (e) => { if(e.target === ov) close(); };
-  }
+  const ov = document.getElementById('ov'); if(ov) ov.onclick = (e) => { if(e.target === ov) close(); };
 
   if(modal.type==='team'){
-    const saveTeamBtn = document.getElementById('m-save-team');
-    if(saveTeamBtn){
-      saveTeamBtn.onclick = ()=>{
-        const names = document.getElementById('m-team-names').value.split(',').map(s=>s.trim()).filter(Boolean);
-        team = names.length?names:team;
-        modal = null;
-        render();
-        saveAll();
-      };
-    }
+    const sBtn = document.getElementById('m-save-team');
+    if(sBtn) sBtn.onclick = ()=>{ team = val('m-team-names').split(',').map(s=>s.trim()).filter(Boolean); modal=null; render(); saveAll(); };
     return;
   }
 
   const sphmode = document.getElementById('m-sphmode');
   if(sphmode) sphmode.onchange = ()=>{ syncModalData(); modal.data.sphMode = sphmode.value; render(); };
 
-  const addSowBtn = document.getElementById('m-add-sow');
-  if(addSowBtn) addSowBtn.onclick = ()=>{
-    syncModalData();
-    modal.data.sows.push({
-      id:uid('sow'), name:'', 
-      boqs:[{
-        id:uid('boq'), name:'', 
-        items:[{id:uid('item'), product:'', qty:1, vendor:'', notes:'', picIds:[], sphAwal:null, sphFinal:null}]
-      }]
-    });
-    render();
+  document.getElementById('m-add-sow').onclick = ()=>{
+    syncModalData(); modal.data.sows.push({id:uid('sow'), name:'', boqs:[{id:uid('boq'), name:'', items:[{id:uid('item'), product:'', qty:1, vendor:'', picIds:[], sphAwal:null, sphFinal:null}]}]}); render();
   };
-
-  document.querySelectorAll('[data-add-boq]').forEach(el=> el.onclick=()=>{
-    syncModalData();
-    const si = +el.dataset.addBoq;
-    modal.data.sows[si].boqs.push({
-      id:uid('boq'), name:'', 
-      items:[{id:uid('item'), product:'', qty:1, vendor:'', notes:'', picIds:[], sphAwal:null, sphFinal:null}]
-    });
-    render();
-  });
-
-  document.querySelectorAll('[data-add-item]').forEach(el=>{
-    const [si,bi] = el.dataset.addItem.split(':').map(Number);
-    el.onclick = ()=>{ 
-      syncModalData();
-      modal.data.sows[si].boqs[bi].items.push({
-        id:uid('item'), product:'', qty:1, vendor:'', notes:'', picIds:[], sphAwal:null, sphFinal:null
-      }); 
-      render(); 
-    };
-  });
-
-  document.querySelectorAll('[data-del-sow]').forEach(el=>{
-    const si = +el.dataset.delSow;
-    el.onclick = ()=>{ syncModalData(); modal.data.sows.splice(si,1); render(); };
-  });
-
-  document.querySelectorAll('[data-del-boq]').forEach(el=>{
-    const [si,bi] = el.dataset.delBoq.split(':').map(Number);
-    el.onclick = ()=>{ syncModalData(); modal.data.sows[si].boqs.splice(bi,1); render(); };
-  });
-
-  document.querySelectorAll('[data-del-item]').forEach(el=>{
-    const [si,bi,ii] = el.dataset.delItem.split(':').map(Number);
-    el.onclick = ()=>{ syncModalData(); modal.data.sows[si].boqs[bi].items.splice(ii,1); render(); };
-  });
+  document.querySelectorAll('[data-add-boq]').forEach(el=> el.onclick=()=>{ syncModalData(); modal.data.sows[+el.dataset.addBoq].boqs.push({id:uid('boq'), name:'', items:[{id:uid('item'), product:'', qty:1, vendor:'', picIds:[], sphAwal:null, sphFinal:null}]}); render(); });
+  document.querySelectorAll('[data-add-item]').forEach(el=>{ const [si,bi] = el.dataset.addItem.split(':').map(Number); el.onclick = ()=>{ syncModalData(); modal.data.sows[si].boqs[bi].items.push({id:uid('item'), product:'', qty:1, vendor:'', picIds:[], sphAwal:null, sphFinal:null}); render(); }; });
+  
+  document.querySelectorAll('[data-del-sow]').forEach(el=> el.onclick=()=>{ syncModalData(); modal.data.sows.splice(+el.dataset.delSow,1); render(); });
+  document.querySelectorAll('[data-del-boq]').forEach(el=>{ const [si,bi] = el.dataset.delBoq.split(':').map(Number); el.onclick=()=>{ syncModalData(); modal.data.sows[si].boqs.splice(bi,1); render(); }; });
+  document.querySelectorAll('[data-del-item]').forEach(el=>{ const [si,bi,ii] = el.dataset.delItem.split(':').map(Number); el.onclick=()=>{ syncModalData(); modal.data.sows[si].boqs[bi].items.splice(ii,1); render(); }; });
 
   document.querySelectorAll('[data-pic]').forEach(el=>{
     const [si,bi,ii,name] = el.dataset.pic.split(':');
-    el.onclick = ()=>{
-      syncModalData();
-      const arr = modal.data.sows[+si].boqs[+bi].items[+ii].picIds;
-      const idx = arr.indexOf(name);
-      if(idx>=0) arr.splice(idx,1); else arr.push(name);
-      render();
-    };
+    el.onclick = ()=>{ syncModalData(); const arr = modal.data.sows[+si].boqs[+bi].items[+ii].picIds; const idx = arr.indexOf(name); if(idx>=0) arr.splice(idx,1); else arr.push(name); render(); };
   });
 
-  const saveBtn = document.getElementById('m-save');
-  if(saveBtn){
-    saveBtn.onclick = ()=>{
-      syncModalData(); 
-      const d = modal.data;
-      const idx = projects.findIndex(p=>p.id===d.id);
-      if(idx>=0) projects[idx]=d; else projects.push(d);
-      
-      let root = document.getElementById('modal-root');
-      if(root) root.innerHTML = '';
-      modal = null;
-      render();
-      saveAll();
-    };
-  }
+  document.getElementById('m-save').onclick = ()=>{
+    syncModalData(); const d = modal.data; const idx = projects.findIndex(p=>p.id===d.id);
+    if(idx>=0) projects[idx]=d; else projects.push(d);
+    document.getElementById('modal-root').innerHTML = ''; modal = null; render(); saveAll();
+  };
 }
 
 function val(id){ const el=document.getElementById(id); return el?el.value:''; }
@@ -850,23 +873,13 @@ function openUploadPembandingModal(projectId) {
                     <button class="btn-ghost" style="padding: 4px 8px;" onclick="closeUploadPembandingModal()">&times;</button>
                 </div>
                 <div class="modal-body">
-                    <div class="field">
-                        <label>Nama Vendor (Losing Bidder)</label>
-                        <input type="text" id="up-vendor-name" placeholder="Misal: PT Lintas Teknologi">
-                    </div>
-                    <div class="field">
-                        <label>Harga Penawaran SPH (Total)</label>
-                        <input type="number" id="up-vendor-price" placeholder="Misal: 550000000">
-                    </div>
-                    <div class="field">
-                        <label>Lampiran File (PDF/Excel/Image)</label>
-                        <input type="file" id="up-vendor-file" accept=".pdf, .xls, .xlsx, .jpg, .png" style="padding: 4px;">
-                        <div class="note">Sebagai bukti audit nilai efisiensi (Cost Avoidance).</div>
-                    </div>
+                    <div class="field"><label>Nama Vendor</label><input type="text" id="up-vendor-name"></div>
+                    <div class="field"><label>Harga Penawaran SPH</label><input type="number" id="up-vendor-price"></div>
+                    <div class="field"><label>Lampiran File</label><input type="file" id="up-vendor-file" accept=".pdf, .xls, .xlsx, .jpg, .png"></div>
                 </div>
                 <div class="modal-ft">
                     <button class="btn-ghost" onclick="closeUploadPembandingModal()">Batal</button>
-                    <button class="btn-primary" onclick="submitUploadPembanding('${projectId}')">Unggah & Simpan</button>
+                    <button class="btn-primary" onclick="submitUploadPembanding('${projectId}')">Simpan</button>
                 </div>
             </div>
         </div>
@@ -875,58 +888,29 @@ function openUploadPembandingModal(projectId) {
 }
 
 function closeUploadPembandingModal() {
-    const m = document.getElementById('upload-pembanding-modal');
-    if (m) m.remove();
+    const m = document.getElementById('upload-pembanding-modal'); if (m) m.remove();
 }
 
 async function submitUploadPembanding(projectId) {
     const name = document.getElementById('up-vendor-name').value;
     const price = document.getElementById('up-vendor-price').value;
-    const fileInput = document.getElementById('up-vendor-file');
+    const file = document.getElementById('up-vendor-file').files[0];
     
-    if (!name || !price || !fileInput.files[0]) {
-        alert("Semua kolom (Nama Vendor, Harga, dan File) wajib diisi!");
-        return;
-    }
+    if (!name || !price || !file) { alert("Semua kolom wajib diisi!"); return; }
 
-    const file = fileInput.files[0];
     const formData = new FormData();
-    formData.append('ticket_id', projectId);
-    formData.append('vendor_name', name);
-    formData.append('offered_price', price);
-    formData.append('file', file);
+    formData.append('ticket_id', projectId); formData.append('vendor_name', name);
+    formData.append('offered_price', price); formData.append('file', file);
 
     document.body.style.cursor = 'wait';
-    const btn = event.target;
-    const originalText = btn.innerText;
-    btn.innerText = "Mengunggah...";
-    btn.disabled = true;
-
     try {
-        // Simulasi UI (API backend belum dibuat)
-        const res = await fetch('/api/upload_comparison', {
-            method: 'POST',
-            body: formData
-        });
+        const res = await fetch('/api/upload_comparison', { method: 'POST', body: formData });
         const result = await res.json();
-        
-        if (res.ok && result.success) {
-            alert("Dokumen pembanding berhasil ditambahkan!");
-            closeUploadPembandingModal();
-            loadAll(); // Muat ulang data dashboard
-        } else {
-            alert(`Gagal: ${result.message}`);
-        }
+        if (res.ok && result.success) { alert("Dokumen berhasil ditambahkan!"); closeUploadPembandingModal(); loadAll(); } 
+        else alert(`Gagal: ${result.message}`);
     } catch (err) {
-        console.error("Upload error:", err);
-        alert("Simulasi UI: API backend belum dibuat, tapi secara UI data ditangkap dengan baik.");
-        closeUploadPembandingModal();
-    } finally {
-        document.body.style.cursor = 'default';
-        btn.innerText = originalText;
-        btn.disabled = false;
-    }
+        console.error("Upload error:", err); alert("Terjadi kesalahan sistem."); closeUploadPembandingModal();
+    } finally { document.body.style.cursor = 'default'; }
 }
 
-// Jalankan load data awal saat pertama kali script dimuat
 loadAll();
