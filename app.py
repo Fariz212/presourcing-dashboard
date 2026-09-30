@@ -159,11 +159,50 @@ def logout():
 def get_notifications():
     target = request.args.get('username')
     if not target: return jsonify({"success": False, "message": "Target user diperlukan"}), 400
-    with contextlib.closing(sqlite3.connect(DB_NAME)) as conn:
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM notifications WHERE target_user = ? OR target_user = 'broadcast' ORDER BY created_at DESC LIMIT 20", (target,))
-        return jsonify({"success": True, "data": [dict(r) for r in cursor.fetchall()]}), 200
+    
+    try:
+        with contextlib.closing(sqlite3.connect(DB_NAME)) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            
+            # ==========================================
+            # 🤖 AUTO-EWS (EARLY WARNING SYSTEM) TRIGGER
+            # ==========================================
+            # Jika yang sedang login adalah admin presourcing, periksa kesehatan project
+            if target == 'admin':
+                cursor.execute("SELECT id, name, target_rfs FROM projects WHERE status = 'ongoing' AND target_rfs IS NOT NULL AND target_rfs != ''")
+                ongoing_projects = cursor.fetchall()
+                
+                for p in ongoing_projects:
+                    try:
+                        # Hitung selisih hari ini dengan Target RFS
+                        rfs_date = datetime.strptime(p['target_rfs'], '%Y-%m-%d').date()
+                        today = datetime.now().date()
+                        days_left = (rfs_date - today).days
+                        
+                        msg = ""
+                        if days_left < 0:
+                            msg = f"🚨 OVERDUE: Project '{p['name']}' telah melewati batas Target RFS!"
+                        elif days_left <= 14:
+                            msg = f"⚠️ AT RISK: Project '{p['name']}' tersisa {days_left} hari menuju RFS."
+                        
+                        # Anti-Spam: Cek apakah notifikasi yang sama sudah dikirimkan HARI INI
+                        if msg:
+                            cursor.execute("SELECT COUNT(*) FROM notifications WHERE target_user = 'admin' AND message = ? AND date(created_at) = date('now', 'localtime')", (msg,))
+                            if cursor.fetchone()[0] == 0:
+                                cursor.execute("INSERT INTO notifications (target_user, message) VALUES ('admin', ?)", (msg,))
+                    except Exception as parse_err:
+                        pass # Abaikan jika format tanggal ada yang salah (invalid date)
+            
+            conn.commit()
+            # ==========================================
+            
+            # Ambil daftar notifikasi untuk ditampilkan di layar
+            cursor.execute("SELECT * FROM notifications WHERE target_user = ? OR target_user = 'broadcast' ORDER BY created_at DESC LIMIT 20", (target,))
+            return jsonify({"success": True, "data": [dict(r) for r in cursor.fetchall()]}), 200
+            
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
 
 @app.route('/api/notifications/<int:notif_id>/read', methods=['POST'])
 def mark_notification_read(notif_id):

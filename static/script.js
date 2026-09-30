@@ -17,12 +17,7 @@ function todayStr(){ return new Date().toISOString().slice(0,10); }
 // ---------- Fungsi Keamanan (XSS Protection) ----------
 function escAttr(s){ 
   if (s === null || s === undefined) return '';
-  return String(s)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
 }
 
 // ---------- seed data (Fallback) ----------
@@ -44,7 +39,7 @@ function seedData(){
       requestorName:'Farizky', requestorDept:'SA Digital',
       priority:'Urgent', status:'ongoing', leadId:'Fajar',
       sphMode:'project', projectSphAwal:30000000000, projectSphFinal:null,
-      createdAt:'2026-08-15', closedAt:null, targetRfs: todayStr(), // Dibuat mepet agar Overdue/At Risk
+      createdAt:'2026-08-15', closedAt:null, targetRfs: todayStr(), 
       pipelineStage:'2 - SPH Preparation', progressPct:40,
       comparison_docs: [],
       sows:[{ id:uid('sow'), name:'SoW Cloud', boqs:[{ id:uid('boq'), name:'BoQ AWS', items:[] }] }]
@@ -129,7 +124,7 @@ function valToM(val) {
     return ((val || 0) / 1000000000).toFixed(1); // Konversi ke Rp Miliar
 }
 
-// --- FUNGSI STATUS DINAMIS EWS (EARLY WARNING SYSTEM) ---
+// --- FUNGSI STATUS DINAMIS EWS ---
 function getDynamicStatus(proj) {
     if (proj.status === 'win' || proj.status === 'lose') return 'Completed';
     if (!proj.targetRfs) return 'Planned';
@@ -211,10 +206,9 @@ function tabBtn(id,label){
 }
 
 // --------------------------------------------------------
-// RENDER OVERVIEW: EXECUTIVE DASHBOARD (MOCKUP MANAJEMEN)
+// RENDER OVERVIEW: EXECUTIVE DASHBOARD (RESPONSIF & SCROLLABLE OVERVIEW)
 // --------------------------------------------------------
 function renderOverview(){
-  // Hitung KPI
   const totalProj = projects.length;
   let totalVal = 0;
   const sCount = { 'On Track':0, 'At Risk':0, 'Overdue':0, 'Completed':0, 'Planned':0 };
@@ -223,7 +217,6 @@ function renderOverview(){
   projects.forEach(p => {
       totalVal += (projectSph(p).awal || 0);
       sCount[getDynamicStatus(p)]++;
-      
       if(p.status === 'ongoing') {
           const stage = parseInt((p.pipelineStage || '1').charAt(0));
           if(!isNaN(stage) && stage >= 1 && stage <= 6) pCount[stage]++;
@@ -232,7 +225,6 @@ function renderOverview(){
 
   const getPct = (val) => totalProj ? Math.round((val/totalProj)*100) : 0;
   
-  // Suntik Chart.js jika belum ada
   if (!window.Chart && !document.getElementById('chartjs-script')) {
       const script = document.createElement('script');
       script.id = 'chartjs-script';
@@ -243,45 +235,70 @@ function renderOverview(){
       setTimeout(renderDashboardCharts, 100);
   }
 
-  // CSS Khusus Dashboard Baru
+  // CSS Responsif & Tabel dengan Scroll Terbatas (Max 5 baris / ~320px)
   const dashStyles = `
     <style>
-        .kpi-row-new { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom: 20px; }
-        .kpi-card { background: #fff; padding: 16px; border-radius: 8px; border: 1px solid var(--border-soft); box-shadow: 0 1px 3px rgba(0,0,0,0.05); display:flex; align-items:center; gap: 12px;}
-        .kpi-icon { width: 40px; height: 40px; border-radius: 50%; display:flex; align-items:center; justify-content:center; font-size: 20px; }
-        .dash-grid { display: grid; grid-template-columns: 2.5fr 1fr; gap: 16px; margin-bottom: 16px; }
-        .dash-grid-half { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
-        .dash-panel { background: #fff; border-radius: 8px; border: 1px solid var(--border-soft); overflow: hidden; }
-        .dash-panel-hd { background: #0056b3; color: white; padding: 10px 16px; font-weight: 600; font-size: 13px; }
-        .dash-panel-body { padding: 16px; }
+        /* KPI Cards responsif menggunakan auto-fit */
+        .kpi-row-new { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin-bottom: 20px; }
+        .kpi-card { background: #fff; padding: 14px 16px; border-radius: 6px; border: 1px solid #e2e8f0; display:flex; align-items:center; gap: 12px; position: relative; box-shadow: 0 1px 2px rgba(0,0,0,0.02);}
+        .kpi-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px; border-radius: 6px 6px 0 0; }
+        .kpi-card:nth-child(1)::before { background: #0ea5e9; }
+        .kpi-card:nth-child(2)::before { background: #3b82f6; }
+        .kpi-card:nth-child(3)::before { background: #22c55e; }
+        .kpi-card:nth-child(4)::before { background: #f59e0b; }
+        .kpi-card:nth-child(5)::before { background: #ef4444; }
+        .kpi-card:nth-child(6)::before { background: #1e293b; }
+
+        .kpi-icon { width: 38px; height: 38px; border-radius: 50%; display:flex; align-items:center; justify-content:center; font-size: 18px; }
         
+        /* Grid 3 Kolom yang responsif (otomatis turun ke bawah jika layar sempit) */
+        .dash-grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; margin-bottom: 16px; }
+        
+        .dash-panel { background: #fff; border-radius: 8px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.04); display:flex; flex-direction:column; }
+        .dash-panel-hd { background: #1E63C8; color: white; padding: 12px 16px; font-weight: 600; font-size: 13.5px; display: flex; align-items: center; gap: 8px; }
+        .dash-panel-hd.danger-hd { background: #DC3545; }
+        .dash-panel-body { padding: 16px; flex: 1; }
+        
+        /* TABEL DENGAN SCROLL VERTIKAL (Maksimal menampilkan ~5 baris agar tidak redundant) */
+        .scrollable-table-container {
+            max-height: 310px; 
+            overflow-y: auto; 
+            overflow-x: auto;
+            border-bottom: 1px solid #f1f5f9;
+        }
+        /* Sticky header tabel agar tetap terlihat saat di-scroll */
+        .dash-table thead th {
+            position: sticky;
+            top: 0;
+            background: #F8FAFC;
+            z-index: 2;
+        }
+
         .badge { padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 600; }
-        .badge-on-track { background: #28a745; color: white; }
-        .badge-at-risk { background: #ffc107; color: #333; }
-        .badge-overdue { background: #dc3545; color: white; }
-        .badge-completed { background: #17a2b8; color: white; }
+        .badge-on-track { background: #22C55E; color: white; }
+        .badge-at-risk { background: #F59E0B; color: white; }
+        .badge-overdue { background: #EF4444; color: white; }
+        .badge-completed { background: #3B82F6; color: white; }
         .badge-planned { background: #e2e8f0; color: #475569; }
 
         .prog-bar-bg { background: #e5e7eb; border-radius: 4px; height: 8px; width: 100%; margin-top: 4px; }
-        .prog-bar-fill { height: 100%; background: #007bff; border-radius: 4px; }
+        .prog-bar-fill { height: 100%; background: #3B82F6; border-radius: 4px; }
 
-        .pipeline-container { display: flex; gap: 4px; margin-top: 10px; }
-        .pipe-stage { flex: 1; color: white; padding: 10px 5px; text-align: center; font-size: 11px; clip-path: polygon(0% 0%, 90% 0%, 100% 50%, 90% 100%, 0% 100%, 10% 50%); margin-right: -10px; }
-        .pipe-stage:first-child { clip-path: polygon(0% 0%, 90% 0%, 100% 50%, 90% 100%, 0% 100%); }
-        .pipe-stage:last-child { clip-path: polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%, 10% 50%); margin-right: 0; }
+        .pipeline-container { display: flex; gap: 2px; margin-top: 5px; }
+        .pipe-stage { flex: 1; color: white; padding: 12px 5px; text-align: center; font-size: 11px; clip-path: polygon(0% 0%, 92% 0%, 100% 50%, 92% 100%, 0% 100%, 8% 50%); margin-right: -8px; }
+        .pipe-stage:first-child { clip-path: polygon(0% 0%, 92% 0%, 100% 50%, 92% 100%, 0% 100%); }
+        .pipe-stage:last-child { clip-path: polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%, 8% 50%); margin-right: 0; }
         
         table.dash-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-        table.dash-table th { background: #f8f9fa; padding: 8px; border-bottom: 2px solid #dee2e6; text-align: left; }
-        table.dash-table td { padding: 8px; border-bottom: 1px solid #e9ecef; }
+        table.dash-table th { padding: 10px 8px; border-bottom: 2px solid #e2e8f0; text-align: left; color: #64748b; font-weight: 600; font-size: 11px; text-transform: uppercase;}
+        table.dash-table td { padding: 10px 8px; border-bottom: 1px solid #f1f5f9; }
     </style>
   `;
 
-  // HTML Data Tabel EWS & Overview
   const sortedProjects = [...projects].sort((a,b) => new Date(a.targetRfs||'2099') - new Date(b.targetRfs||'2099'));
   
   let overviewRows = '';
   sortedProjects.forEach((p, idx) => {
-      const stat = getDynamicStatus(p);
       overviewRows += `
       <tr>
           <td>${idx+1}</td>
@@ -289,10 +306,10 @@ function renderOverview(){
           <td>${valToM(projectSph(p).awal)}</td>
           <td>${escAttr(p.leadId)}</td>
           <td>${p.targetRfs ? new Date(p.targetRfs).toLocaleDateString('id-ID', {day:'numeric', month:'short', year:'numeric'}) : '-'}</td>
-          <td>${badgeStatus(stat)}</td>
+          <td>${badgeStatus(getDynamicStatus(p))}</td>
           <td>
             <div style="display:flex; align-items:center; gap:8px;">
-                <div style="width:40px;">${p.progressPct||0}%</div>
+                <div style="width:35px; text-align:right;">${p.progressPct||0}%</div>
                 <div class="prog-bar-bg"><div class="prog-bar-fill" style="width:${p.progressPct||0}%;"></div></div>
             </div>
           </td>
@@ -301,23 +318,22 @@ function renderOverview(){
 
   let ewsRows = '';
   sortedProjects.filter(p => ['Overdue', 'At Risk'].includes(getDynamicStatus(p))).forEach(p => {
-      const stat = getDynamicStatus(p);
       ewsRows += `
       <tr>
           <td style="font-weight:500;">${escAttr(p.name)}</td>
           <td>${p.targetRfs ? new Date(p.targetRfs).toLocaleDateString('id-ID', {day:'numeric', month:'short', year:'numeric'}) : '-'}</td>
           <td>${p.progressPct||0}%</td>
-          <td>${badgeStatus(stat)}</td>
+          <td>${badgeStatus(getDynamicStatus(p))}</td>
       </tr>`;
   });
-  if(!ewsRows) ewsRows = `<tr><td colspan="4" style="text-align:center; color:var(--green); padding:20px;">Semua project aman, tidak ada Early Warning! 🎉</td></tr>`;
+  if(!ewsRows) ewsRows = `<tr><td colspan="4" style="text-align:center; color:var(--green); padding:20px;">Semua project aman! 🎉</td></tr>`;
 
   const pNames = ['Identification', 'SPH Prep', 'Vendor Select', 'Negotiation', 'Finalization', 'RFS'];
   let pipelineHtml = '<div class="pipeline-container">';
   pNames.forEach((name, i) => {
       const n = i+1;
       pipelineHtml += `
-          <div class="pipe-stage" style="z-index: ${6-i}; background: ${n<=3 ? '#007bff' : (n<=5 ? '#17a2b8' : '#28a745')};">
+          <div class="pipe-stage" style="z-index: ${6-i}; background: ${n<=3 ? '#3B82F6' : (n<=5 ? '#0EA5E9' : '#22C55E')};">
               <div style="font-size:14px; font-weight:bold; margin-bottom:2px;">${n}</div>
               <div style="line-height:1.1;">${name}</div>
               <div style="margin-top:6px; font-weight:bold;">${pCount[n]} Proj</div>
@@ -329,35 +345,42 @@ function renderOverview(){
   return dashStyles + `
     <!-- ROW 1: KPI CARDS -->
     <div class="kpi-row-new">
-        <div class="kpi-card"><div class="kpi-icon" style="background:#e0f2fe; color:#0284c7;">📊</div><div><div style="font-size:11px; color:#64748b;">Total Project</div><div style="font-size:20px; font-weight:bold;">${totalProj}</div></div></div>
-        <div class="kpi-card"><div class="kpi-icon" style="background:#e0e7ff; color:#4f46e5;">💰</div><div><div style="font-size:11px; color:#64748b;">Total Value</div><div style="font-size:18px; font-weight:bold; color:#0f172a;">Rp ${valToM(totalVal)} M</div></div></div>
-        <div class="kpi-card"><div class="kpi-icon" style="background:#dcfce7; color:#16a34a;">✅</div><div style="width:100%;"><div style="font-size:11px; color:#64748b;">On Track</div><div style="display:flex; justify-content:space-between; align-items:flex-end;"><div style="font-size:20px; font-weight:bold;">${sCount['On Track']}</div><div style="font-weight:bold; color:#16a34a;">${getPct(sCount['On Track'])}%</div></div></div></div>
-        <div class="kpi-card"><div class="kpi-icon" style="background:#fef9c3; color:#ca8a04;">⚠️</div><div style="width:100%;"><div style="font-size:11px; color:#64748b;">At Risk</div><div style="display:flex; justify-content:space-between; align-items:flex-end;"><div style="font-size:20px; font-weight:bold;">${sCount['At Risk']}</div><div style="font-weight:bold; color:#ca8a04;">${getPct(sCount['At Risk'])}%</div></div></div></div>
-        <div class="kpi-card"><div class="kpi-icon" style="background:#fee2e2; color:#dc2626;">⏳</div><div style="width:100%;"><div style="font-size:11px; color:#64748b;">Overdue</div><div style="display:flex; justify-content:space-between; align-items:flex-end;"><div style="font-size:20px; font-weight:bold;">${sCount['Overdue']}</div><div style="font-weight:bold; color:#dc2626;">${getPct(sCount['Overdue'])}%</div></div></div></div>
-        <div class="kpi-card"><div class="kpi-icon" style="background:#f1f5f9; color:#475569;">🏁</div><div style="width:100%;"><div style="font-size:11px; color:#64748b;">Completed</div><div style="display:flex; justify-content:space-between; align-items:flex-end;"><div style="font-size:20px; font-weight:bold;">${sCount['Completed']}</div><div style="font-weight:bold; color:#475569;">${getPct(sCount['Completed'])}%</div></div></div></div>
+        <div class="kpi-card"><div class="kpi-icon" style="background:#e0f2fe; color:#0284c7;">📊</div><div><div style="font-size:11px; color:#64748b;">Total Project</div><div style="font-size:18px; font-weight:bold;">${totalProj}</div></div></div>
+        <div class="kpi-card"><div class="kpi-icon" style="background:#e0e7ff; color:#4f46e5;">💰</div><div><div style="font-size:11px; color:#64748b;">Total Value</div><div style="font-size:16px; font-weight:bold; color:#0f172a;">Rp ${valToM(totalVal)} M</div></div></div>
+        <div class="kpi-card"><div class="kpi-icon" style="background:#dcfce7; color:#16a34a;">✅</div><div style="width:100%;"><div style="font-size:11px; color:#64748b;">On Track</div><div style="display:flex; justify-content:space-between; align-items:flex-end;"><div style="font-size:18px; font-weight:bold;">${sCount['On Track']}</div><div style="font-size:11px; font-weight:bold; color:#16a34a;">${getPct(sCount['On Track'])}%</div></div></div></div>
+        <div class="kpi-card"><div class="kpi-icon" style="background:#fef9c3; color:#ca8a04;">⚠️</div><div style="width:100%;"><div style="font-size:11px; color:#64748b;">At Risk</div><div style="display:flex; justify-content:space-between; align-items:flex-end;"><div style="font-size:18px; font-weight:bold;">${sCount['At Risk']}</div><div style="font-size:11px; font-weight:bold; color:#ca8a04;">${getPct(sCount['At Risk'])}%</div></div></div></div>
+        <div class="kpi-card"><div class="kpi-icon" style="background:#fee2e2; color:#dc2626;">⏳</div><div style="width:100%;"><div style="font-size:11px; color:#64748b;">Overdue</div><div style="display:flex; justify-content:space-between; align-items:flex-end;"><div style="font-size:18px; font-weight:bold;">${sCount['Overdue']}</div><div style="font-size:11px; font-weight:bold; color:#dc2626;">${getPct(sCount['Overdue'])}%</div></div></div></div>
+        <div class="kpi-card"><div class="kpi-icon" style="background:#f1f5f9; color:#475569;">🏁</div><div style="width:100%;"><div style="font-size:11px; color:#64748b;">Completed</div><div style="display:flex; justify-content:space-between; align-items:flex-end;"><div style="font-size:18px; font-weight:bold;">${sCount['Completed']}</div><div style="font-size:11px; font-weight:bold; color:#475569;">${getPct(sCount['Completed'])}%</div></div></div></div>
     </div>
 
-    <!-- ROW 2: OVERVIEW TABLE & STATUS CHART -->
-    <div class="dash-grid">
+    <!-- ROW 2: OVERVIEW TABLE (SCROLLABLE), STATUS CHART, LINE CHART -->
+    <div class="dash-grid-3">
         <div class="dash-panel">
             <div class="dash-panel-hd">📋 Project Presourcing Overview</div>
-            <div class="dash-panel-body" style="padding:0; overflow-x:auto;">
+            <!-- Dibungkus container dengan tinggi maksimal dan scroll vertikal -->
+            <div class="scrollable-table-container">
                 <table class="dash-table">
-                    <thead><tr><th>No</th><th>Project Name</th><th>Nilai (Rp M)</th><th>PIC Presource</th><th>Target RFS</th><th>Status</th><th>Progress</th></tr></thead>
+                    <thead><tr><th>No</th><th>Project Name</th><th>Nilai (Rp M)</th><th>PIC</th><th>Target RFS</th><th>Status</th><th>Progress</th></tr></thead>
                     <tbody>${overviewRows}</tbody>
                 </table>
             </div>
         </div>
-        <div class="dash-panel" style="display:flex; flex-direction:column;">
+        <div class="dash-panel">
             <div class="dash-panel-hd">🎯 Project Status</div>
-            <div class="dash-panel-body" style="flex:1; display:flex; align-items:center; justify-content:center;">
+            <div class="dash-panel-body" style="display:flex; align-items:center; justify-content:center;">
                 <canvas id="chartStatus" style="max-height:220px;"></canvas>
+            </div>
+        </div>
+        <div class="dash-panel">
+            <div class="dash-panel-hd">📈 Target RFS by Month</div>
+            <div class="dash-panel-body" style="display:flex; align-items:center; justify-content:center; padding:10px;">
+                <canvas id="chartRfsMonth" style="max-height:220px;"></canvas>
             </div>
         </div>
     </div>
 
-    <!-- ROW 3: PIPELINE & EARLY WARNING -->
-    <div class="dash-grid">
+    <!-- ROW 3: PIPELINE, BAR CHART, EWS TABLE -->
+    <div class="dash-grid-3">
         <div class="dash-panel">
             <div class="dash-panel-hd">🔄 Presourcing Progress Pipeline</div>
             <div class="dash-panel-body">
@@ -365,8 +388,14 @@ function renderOverview(){
             </div>
         </div>
         <div class="dash-panel">
-            <div class="dash-panel-hd" style="background:#dc3545;">⚠️ Early Warning (Need Attention)</div>
-            <div class="dash-panel-body" style="padding:0;">
+            <div class="dash-panel-hd">🏆 Top 5 Project Value</div>
+            <div class="dash-panel-body" style="display:flex; align-items:center; justify-content:center; padding:10px;">
+                <canvas id="chartTop5" style="max-height:220px;"></canvas>
+            </div>
+        </div>
+        <div class="dash-panel">
+            <div class="dash-panel-hd danger-hd">⚠ Early Warning (Need Attention)</div>
+            <div class="scrollable-table-container">
                 <table class="dash-table">
                     <thead><tr><th>Project Name</th><th>Target RFS</th><th>Progress</th><th>Status</th></tr></thead>
                     <tbody>${ewsRows}</tbody>
@@ -383,7 +412,7 @@ let dCharts = {};
 function renderDashboardCharts() {
     if (typeof Chart === 'undefined') return;
 
-    // Persiapan Data Chart Status
+    // 1. Persiapan Data Chart Status
     let sCount = { 'On Track':0, 'At Risk':0, 'Overdue':0, 'Completed':0, 'Planned':0 };
     projects.forEach(p => sCount[getDynamicStatus(p)]++);
 
@@ -396,19 +425,88 @@ function renderDashboardCharts() {
                 labels: ['On Track', 'At Risk', 'Overdue', 'Completed', 'Planned'],
                 datasets: [{
                     data: [sCount['On Track'], sCount['At Risk'], sCount['Overdue'], sCount['Completed'], sCount['Planned']],
-                    backgroundColor: ['#28a745', '#ffc107', '#dc3545', '#17a2b8', '#e2e8f0']
+                    backgroundColor: ['#22C55E', '#F59E0B', '#EF4444', '#3B82F6', '#e2e8f0']
                 }]
             },
             options: {
                 responsive: true, maintainAspectRatio: false,
-                plugins: { legend: { position: 'right', labels: { boxWidth: 12, font: {size: 11} } } }
+                plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: {size: 11} } } }
+            }
+        });
+    }
+
+    // 2. Persiapan Data RFS by Month (Mixed Line & Bar Chart)
+    const rfsData = {};
+    projects.forEach(p => {
+        if(!p.targetRfs) return;
+        const d = new Date(p.targetRfs);
+        const months = ["Jan","Feb","Mar","Apr","Mei","Jun","Jul","Ags","Sep","Okt","Nov","Des"];
+        const key = months[d.getMonth()] + " " + d.getFullYear();
+        const sortK = d.getFullYear() * 100 + d.getMonth();
+        
+        if(!rfsData[key]) rfsData[key] = { count: 0, val: 0, sortK: sortK };
+        rfsData[key].count += 1;
+        rfsData[key].val += (projectSph(p).awal || 0);
+    });
+    const rfsKeys = Object.keys(rfsData).sort((a,b) => rfsData[a].sortK - rfsData[b].sortK);
+
+    const ctxRfs = document.getElementById('chartRfsMonth');
+    if (ctxRfs) {
+        if(dCharts.rfsMonth) dCharts.rfsMonth.destroy();
+        dCharts.rfsMonth = new Chart(ctxRfs, {
+            type: 'bar',
+            data: {
+                labels: rfsKeys,
+                datasets: [
+                    { type: 'line', label: 'Nilai Project (Rp M)', data: rfsKeys.map(k=>(rfsData[k].val/1000000000).toFixed(1)), borderColor: '#0f172a', backgroundColor: '#0f172a', yAxisID: 'y1', tension: 0.3, borderWidth: 2 },
+                    { type: 'bar', label: 'Jumlah Project', data: rfsKeys.map(k=>rfsData[k].count), backgroundColor: '#93c5fd', yAxisID: 'y', borderRadius: 4 }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                scales: {
+                    y: { type: 'linear', position: 'left', ticks: { stepSize: 1, font: {size: 10} }, grid: {color: '#f1f5f9'} },
+                    y1: { type: 'linear', position: 'right', grid: { drawOnChartArea: false }, ticks: { font: {size: 10} } },
+                    x: { ticks: { font: {size: 10} }, grid: {display: false} }
+                },
+                plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: {size: 10} } } }
+            }
+        });
+    }
+
+    // 3. Persiapan Data Top 5 Project (Horizontal Bar Chart)
+    const top5 = [...projects]
+        .filter(p => p.status !== 'lose')
+        .map(p => ({ 
+            name: p.name.replace('Project ', '').substring(0, 18) + (p.name.length > 25 ? '...' : ''), 
+            val: ((projectSph(p).awal || 0) / 1000000000).toFixed(1) 
+        }))
+        .sort((a,b) => b.val - a.val)
+        .slice(0, 5);
+
+    const ctxTop5 = document.getElementById('chartTop5');
+    if (ctxTop5) {
+        if(dCharts.top5) dCharts.top5.destroy();
+        dCharts.top5 = new Chart(ctxTop5, {
+            type: 'bar',
+            data: {
+                labels: top5.map(t=>t.name),
+                datasets: [{ label: 'Nilai (Rp M)', data: top5.map(t=>t.val), backgroundColor: '#3B82F6', borderRadius: 4 }]
+            },
+            options: {
+                indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+                scales: {
+                    x: { ticks: { font: {size: 10} }, grid: {color: '#f1f5f9'} },
+                    y: { ticks: { font: {size: 10} }, grid: {display: false} }
+                },
+                plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => 'Rp ' + ctx.raw + ' M' } } }
             }
         });
     }
 }
 
 // --------------------------------------------------------
-// RENDER DETAIL PROJECTS (Sesuai Vanilla JS Best Practice)
+// RENDER DETAIL PROJECTS (Tabel Lengkap)
 // --------------------------------------------------------
 function renderProjects(){
   const filtered = projects.filter(p=>{
@@ -417,19 +515,16 @@ function renderProjects(){
     return true;
   });
 
-  // BEST PRACTICE: Bangun baris tabel (tr) secara linear, hindari nested backticks .map().join()
   let tbodyHtml = '';
-  
   if(filtered.length === 0){
     tbodyHtml = '<tr><td colspan="7"><div class="empty">Tidak ada project yang cocok.</div></td></tr>';
   } else {
     filtered.forEach(p => {
       const s = projectSph(p); 
       const eff = efficiencyPct(s.awal, s.final);
-      const pipelineText = escAttr(p.pipelineStage) || '-'; // Memperbaiki error \vert{}\vert{} menjadi ||
+      const pipelineText = escAttr(p.pipelineStage) || '-'; 
       const pct = p.progressPct || 0;
 
-      // Baris utama project
       tbodyHtml += `
         <tr class="proj-row" data-open="${p.id}">
           <td>${escAttr(p.name)}</td>
@@ -441,15 +536,12 @@ function renderProjects(){
           <td class="num mono">${durationDays(p)}h</td>
         </tr>
       `;
-
-      // Baris detail BoQ jika project sedang diklik/dibuka
       if (openProjectId === p.id) {
         tbodyHtml += `<tr><td colspan="7">${renderProjectDetail(p)}</td></tr>`;
       }
     });
   }
 
-  // Gabungkan semua komponen menjadi satu kesatuan
   return `
     <div class="panel">
       <div class="panel-hd">
@@ -486,10 +578,10 @@ function renderProjects(){
     </div>
   `;
 }
+
 function renderProjectDetail(p){
   const uniq = uniquePicsInProject(p);
   
-  // 1. Bangun UI Dokumen Pembanding
   const docsHtml = `
     <div style="margin: 12px 0; padding: 12px; background: #FFFFFF; border: 1px dashed var(--border); border-radius: 6px;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
@@ -511,11 +603,9 @@ function renderProjectDetail(p){
     </div>
   `;
 
-  // 2. Bangun HTML SoW, BoQ, dan Item secara linear
   let sowsHtml = '';
   (p.sows || []).forEach(sow => {
     sowsHtml += `<div class="sow-title">Scope of Work: ${escAttr(sow.name)}</div>`;
-    
     (sow.boqs || []).forEach(boq => {
       sowsHtml += `
         <div class="boq-title">Bill of Quantity: ${escAttr(boq.name)}</div>
@@ -523,19 +613,14 @@ function renderProjectDetail(p){
           <div>Item</div><div>Qty</div><div>UoM</div><div>Vendor</div><div class="num">SPH Awal</div><div class="num">SPH Final</div><div class="num">Efficiency</div><div>PIC</div>
         </div>
       `;
-      
       let itemsHtml = '';
       (boq.items || []).forEach(it => {
         const eff = p.sphMode === 'item' ? efficiencyPct(it.sphAwal, it.sphFinal) : null;
         const notesHtml = it.notes ? `<div style="font-size:11px; color:var(--text-muted); margin-top:3px;">📝 ${escAttr(it.notes)}</div>` : '';
         const picsHtml = (it.picIds || []).map(x => `<span class="pic-chip">${escAttr(x)}</span>`).join('');
-        
         itemsHtml += `
           <div style="display:grid; grid-template-columns: 2fr 0.4fr 0.5fr 1fr 1fr 1fr 0.8fr 1.5fr; gap:8px; padding:7px 0; font-size:12.5px; border-bottom:1px solid var(--border-soft); align-items:start;">
-            <div>
-              <div style="font-weight:500;">${escAttr(it.product) || '—'}</div>
-              ${notesHtml}
-            </div>
+            <div><div style="font-weight:500;">${escAttr(it.product) || '—'}</div>${notesHtml}</div>
             <div style="color:var(--text-muted);">${it.qty || '-'}</div>
             <div style="color:var(--text-muted);">${escAttr(it.uom) || '-'}</div>
             <div style="color:var(--text-muted);">${escAttr(it.vendor) || '-'}</div>
@@ -561,13 +646,8 @@ function renderProjectDetail(p){
           <button class="mini-btn danger" data-delete-project="${p.id}">Hapus</button>
         </div>
       </div>
-      
-      <!-- INJEKSI DOKUMEN PEMBANDING -->
       ${docsHtml}
-      
-      <!-- INJEKSI TABEL SOW, BOQ, DAN ITEM -->
       ${sowsHtml}
-      
       ${p.sphMode==='project' ? `<div class="note">SPH dicatat di level total project (tidak dipecah per item).</div>` : ''}
     </div>
   `;
@@ -581,7 +661,7 @@ function renderTeam(){
     const avgEff = s.effWeight>0 ? (s.effSum/s.effWeight) : null;
     return {name:m, ...s, winRate, avgEff};
   }).sort((a,b)=>b.supportLoad-a.supportLoad);
-  const maxLoad = Math.max(1, ...rows.map(r=>r.supportLoad));
+  
   return `
     <div class="panel">
       <div class="panel-hd">
@@ -620,25 +700,19 @@ function wireEvents(){
   const btnTeam = document.getElementById('btn-manage-team'); if(btnTeam) btnTeam.onclick = ()=> openTeamModal();
 }
 
-function downloadProjectReport(projectId) {
-    window.location.href = `/api/download_report?project_id=${projectId}`;
-}
+function downloadProjectReport(projectId) { window.location.href = `/api/download_report?project_id=${projectId}`; }
 
 function triggerRevisiBoq(projectId) {
     const fileInput = document.createElement('input');
     fileInput.type = 'file'; fileInput.accept = '.xlsx, .xls'; fileInput.style.display = 'none'; 
     document.body.appendChild(fileInput);
-    
     fileInput.onchange = async (e) => {
         const file = e.target.files[0];
         document.body.removeChild(fileInput); 
         if (!file) return;
         if (!confirm(`Unggah revisi BoQ untuk project ini?`)) return;
-
         const formData = new FormData();
-        formData.append('file', file);
-        formData.append('ticket_id', projectId);
-
+        formData.append('file', file); formData.append('ticket_id', projectId);
         document.body.style.cursor = 'wait';
         try {
             const res = await fetch('/api/revisi_boq', { method: 'POST', body: formData });
@@ -646,7 +720,7 @@ function triggerRevisiBoq(projectId) {
             if (res.ok && result.success) { alert(result.message); loadAll(); } 
             else alert(`Gagal merevisi BoQ: ${result.message}`);
         } catch (error) {
-            console.error("Error revisi BoQ:", error); alert('Terjadi kesalahan.');
+            alert('Terjadi kesalahan saat mengunggah file.');
         } finally { document.body.style.cursor = 'default'; }
     };
     fileInput.click();
@@ -658,8 +732,7 @@ function blankProject(){
     id: uid('proj'), name:'', requestorName:'', requestorDept:'',
     priority:'Medium', status:'ongoing', leadId: team[0]||'',
     sphMode:'item', projectSphAwal:null, projectSphFinal:null,
-    createdAt: todayStr(), closedAt:null,
-    targetRfs: '', pipelineStage: '1 - Project Identification', progressPct: 0,
+    createdAt: todayStr(), closedAt:null, targetRfs: '', pipelineStage: '1 - Project Identification', progressPct: 0,
     comparison_docs: [],
     sows:[{ id:uid('sow'), name:'', boqs:[{ id:uid('boq'), name:'', items:[{ id:uid('item'), product:'', qty:1, vendor:'', notes:'', picIds:[], sphAwal:null, sphFinal:null }] }] }]
   };
@@ -686,20 +759,19 @@ function renderModal(){
 
 function projectModalHtml(d, isNew){
   return `
-  <div class="overlay" id="ov">
+  <div class="overlay" id="ov" style="z-index: 100;">
     <div class="modal">
       <div class="modal-hd">
         <h3>${isNew?'Project baru':'Edit project'}</h3>
         <button class="mini-btn" id="m-close" type="button">Tutup</button>
       </div>
       <div class="modal-body">
-        <div class="field"><label>Nama project</label><input id="m-name" value="${escAttr(d.name)}" placeholder="Project Pertamina — ..."></div>
+        <div class="field"><label>Nama project</label><input id="m-name" value="${escAttr(d.name)}"></div>
         <div class="grid2">
           <div class="field"><label>Nama pemohon (SA)</label><input id="m-req-name" value="${escAttr(d.requestorName)}"></div>
           <div class="field"><label>Departemen</label><input id="m-req-dept" value="${escAttr(d.requestorDept)}"></div>
         </div>
         
-        <!-- KOLOM BARU UNTUK EWS -->
         <div class="grid3" style="background: #f8f9fa; padding: 12px; border-radius: 6px; margin-bottom: 12px; border: 1px dashed #ced4da;">
            <div class="field" style="margin:0;"><label>Target RFS</label><input type="date" id="m-target-rfs" value="${escAttr(d.targetRfs)}"></div>
            <div class="field" style="margin:0;"><label>Tahap Pipeline</label>
@@ -743,7 +815,6 @@ function projectModalHtml(d, isNew){
             <div class="field"><label>SPH Final (total)</label><input type="number" id="m-proj-final" value="${d.projectSphFinal??''}"></div>
           </div>
         </div>
-
         <div id="sows-container">${d.sows.map((sow,si)=>sowBlockHtml(sow,si)).join('')}</div>
         <button class="mini-btn" id="m-add-sow" type="button">+ Tambah SoW</button>
       </div>
@@ -787,7 +858,7 @@ function itemBlockHtml(it, si, bi, ii){
   </div>`;
 }
 function teamModalHtml(d){
-  return `<div class="overlay" id="ov"><div class="modal" style="max-width:480px;"><div class="modal-hd"><h3>Kelola tim</h3><button class="mini-btn" id="m-close">Tutup</button></div>
+  return `<div class="overlay" id="ov" style="z-index: 100;"><div class="modal" style="max-width:480px;"><div class="modal-hd"><h3>Kelola tim</h3><button class="mini-btn" id="m-close">Tutup</button></div>
     <div class="modal-body"><textarea id="m-team-names" rows="4">${escAttr(d.names)}</textarea></div>
     <div class="modal-ft"><button class="btn-ghost" id="m-cancel">Batal</button><button class="btn-primary" id="m-save-team">Simpan</button></div>
   </div></div>`;
@@ -800,18 +871,12 @@ function syncModalData() {
   const d = modal.data;
   d.name = val('m-name'); d.requestorName = val('m-req-name'); d.requestorDept = val('m-req-dept');
   d.priority = val('m-priority'); d.status = val('m-status'); d.leadId = val('m-lead');
-  
-  // Tangkap nilai EWS
-  d.targetRfs = val('m-target-rfs');
-  d.pipelineStage = val('m-pipeline-stage');
-  d.progressPct = numOrNull(val('m-progress')) || 0;
-
+  d.targetRfs = val('m-target-rfs'); d.pipelineStage = val('m-pipeline-stage'); d.progressPct = numOrNull(val('m-progress')) || 0;
   d.sphMode = val('m-sphmode');
   if(d.sphMode==='project'){
     d.projectSphAwal = numOrNull(document.getElementById('m-proj-awal').value);
     d.projectSphFinal = numOrNull(document.getElementById('m-proj-final').value);
   }
-  
   document.querySelectorAll('.sow-name').forEach(el=> d.sows[+el.dataset.si].name = el.value);
   document.querySelectorAll('.boq-name').forEach(el=> d.sows[+el.dataset.si].boqs[+el.dataset.bi].name = el.value);
   document.querySelectorAll('.it-qty').forEach(el=>{ const [si,bi,ii]=el.dataset.path.split(':').map(Number); d.sows[si].boqs[bi].items[ii].qty = numOrNull(el.value); });
@@ -834,7 +899,6 @@ function wireModalEvents(){
     if(sBtn) sBtn.onclick = ()=>{ team = val('m-team-names').split(',').map(s=>s.trim()).filter(Boolean); modal=null; render(); saveAll(); };
     return;
   }
-
   const sphmode = document.getElementById('m-sphmode');
   if(sphmode) sphmode.onchange = ()=>{ syncModalData(); modal.data.sphMode = sphmode.value; render(); };
 
@@ -843,11 +907,9 @@ function wireModalEvents(){
   };
   document.querySelectorAll('[data-add-boq]').forEach(el=> el.onclick=()=>{ syncModalData(); modal.data.sows[+el.dataset.addBoq].boqs.push({id:uid('boq'), name:'', items:[{id:uid('item'), product:'', qty:1, vendor:'', picIds:[], sphAwal:null, sphFinal:null}]}); render(); });
   document.querySelectorAll('[data-add-item]').forEach(el=>{ const [si,bi] = el.dataset.addItem.split(':').map(Number); el.onclick = ()=>{ syncModalData(); modal.data.sows[si].boqs[bi].items.push({id:uid('item'), product:'', qty:1, vendor:'', picIds:[], sphAwal:null, sphFinal:null}); render(); }; });
-  
   document.querySelectorAll('[data-del-sow]').forEach(el=> el.onclick=()=>{ syncModalData(); modal.data.sows.splice(+el.dataset.delSow,1); render(); });
   document.querySelectorAll('[data-del-boq]').forEach(el=>{ const [si,bi] = el.dataset.delBoq.split(':').map(Number); el.onclick=()=>{ syncModalData(); modal.data.sows[si].boqs.splice(bi,1); render(); }; });
   document.querySelectorAll('[data-del-item]').forEach(el=>{ const [si,bi,ii] = el.dataset.delItem.split(':').map(Number); el.onclick=()=>{ syncModalData(); modal.data.sows[si].boqs[bi].items.splice(ii,1); render(); }; });
-
   document.querySelectorAll('[data-pic]').forEach(el=>{
     const [si,bi,ii,name] = el.dataset.pic.split(':');
     el.onclick = ()=>{ syncModalData(); const arr = modal.data.sows[+si].boqs[+bi].items[+ii].picIds; const idx = arr.indexOf(name); if(idx>=0) arr.splice(idx,1); else arr.push(name); render(); };
@@ -886,22 +948,15 @@ function openUploadPembandingModal(projectId) {
     `;
     document.body.insertAdjacentHTML('beforeend', modalHtml);
 }
-
-function closeUploadPembandingModal() {
-    const m = document.getElementById('upload-pembanding-modal'); if (m) m.remove();
-}
-
+function closeUploadPembandingModal() { const m = document.getElementById('upload-pembanding-modal'); if (m) m.remove(); }
 async function submitUploadPembanding(projectId) {
     const name = document.getElementById('up-vendor-name').value;
     const price = document.getElementById('up-vendor-price').value;
     const file = document.getElementById('up-vendor-file').files[0];
-    
     if (!name || !price || !file) { alert("Semua kolom wajib diisi!"); return; }
-
     const formData = new FormData();
     formData.append('ticket_id', projectId); formData.append('vendor_name', name);
     formData.append('offered_price', price); formData.append('file', file);
-
     document.body.style.cursor = 'wait';
     try {
         const res = await fetch('/api/upload_comparison', { method: 'POST', body: formData });
@@ -909,7 +964,7 @@ async function submitUploadPembanding(projectId) {
         if (res.ok && result.success) { alert("Dokumen berhasil ditambahkan!"); closeUploadPembandingModal(); loadAll(); } 
         else alert(`Gagal: ${result.message}`);
     } catch (err) {
-        console.error("Upload error:", err); alert("Terjadi kesalahan sistem."); closeUploadPembandingModal();
+        alert("Terjadi kesalahan sistem."); closeUploadPembandingModal();
     } finally { document.body.style.cursor = 'default'; }
 }
 
