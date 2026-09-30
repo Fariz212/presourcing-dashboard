@@ -29,390 +29,64 @@
   --slate:#475569;
   --slate-soft:rgba(71,85,105,.1);
 }
+
 *{box-sizing:border-box;}
+
 body{
   margin:0; background:var(--ink); color:var(--text);
   font-family:'Space Grotesk',sans-serif; font-size:14px;
   -webkit-font-smoothing:antialiased;
 }
+
 .mono{font-family:'JetBrains Mono',monospace; font-variant-numeric:tabular-nums;}
 .app{max-width:1440px; width:calc(100% - 48px); margin:0 auto; padding:24px 0 48px;}
-
-/* --- NAVBAR STYLES --- */
-.navbar { display: flex; justify-content: space-between; align-items: center; padding: 16px 32px; background: var(--panel); border-bottom: 1px solid var(--border); box-shadow: 0 1px 3px rgba(0,0,0,0.02); position: sticky; top: 0; z-index: 40;}
-.navbar .brand h2 { margin: 0; font-size: 18px; color: #0F172A; letter-spacing: -0.02em; line-height: 1.2; }
-.navbar .brand span { font-size: 12px; color: var(--text-muted); font-weight: 500; }
-.navbar .user-info { display: flex; align-items: center; gap: 16px; font-size: 13px; }
-.app-nav {
-  display:flex;
-  align-items:center;
-  gap:4px;
-  margin-left:40px;
-  margin-right:auto;
-}
-
-.app-nav-item {
-  border:0;
-  background:transparent;
-  color:#64748B;
-  font-family:inherit;
-  font-size:12.5px;
-  font-weight:600;
-  padding:8px 13px;
-  border-radius:6px;
-  cursor:pointer;
-  transition:all .15s ease;
-}
-
-.app-nav-item:hover {
-  color:#1E293B;
-  background:#F1F5F9;
-}
-
-.app-nav-item.active {
-  color:#2563EB;
-  background:#EFF6FF;
-}
-
-.nav-user {
-  display:flex;
-  flex-direction:column;
-  align-items:flex-end;
-  line-height:1.15;
-  min-width:110px;
-}
-
-.nav-user-name {
-  font-size:12px;
-  font-weight:700;
-  color:#1E293B;
-}
-
-.nav-user-role {
-  margin-top:3px;
-  font-size:10px;
-  color:#94A3B8;
-}
-
-@media(max-width:900px) {
-  .navbar {
-    flex-wrap:wrap;
-    gap:12px;
-    padding:12px 18px;
-  }
-
-  .app-nav {
-    order:3;
-    width:100%;
-    margin:0;
-    border-top:1px solid #E2E8F0;
-    padding-top:8px;
-  }
-}
-
-@media(max-width:600px) {
-  .nav-user {
-    display:none;
-  }
-
-  .navbar .user-info {
-    gap:7px;
-  }
-}
-
-.page-header-clean {
-  display:flex;
-  align-items:flex-end;
-  justify-content:space-between;
-  gap:20px;
-  padding:6px 2px 18px;
-  margin-bottom:4px;
-  border-bottom:1px solid #E2E8F0;
-}
-
-.page-eyebrow {
-  font-size:9.5px;
-  font-weight:700;
-  color:#2563EB;
-  letter-spacing:.08em;
-  margin-bottom:4px;
-}
-
-.page-header-clean h1 {
-  margin:0;
-  font-size:23px;
-  font-weight:700;
-  line-height:1.2;
-  color:#0F172A;
-  letter-spacing:-.02em;
-}
-
-.page-sub {
-  margin-top:5px;
-  color:#64748B;
-  font-size:11.5px;
-}
-
-.page-meta {
-  display:flex;
-  align-items:center;
-  gap:7px;
-  font-size:10.5px;
-  color:#94A3B8;
-  white-space:nowrap;
-}
-
-.page-meta strong {
-  color:#475569;
-  font-weight:600;
-}
-
-.page-status {
-  margin-left:5px;
-  padding:4px 8px;
-  border-radius:5px;
-  font-size:10px;
-  font-weight:600;
-}
-
-.page-status.online {
-  color:#15803D;
-  background:#F0FDF4;
-}
-
-.page-status.offline {
-  color:#B91C1C;
-  background:#FEF2F2;
-}
-
-@media(max-width:700px) {
-  .page-header-clean {
-    align-items:flex-start;
-    flex-direction:column;
-  }
-
-  .page-meta {
-    white-space:normal;
-  }
-}
 
 /* ======================================================
    ENTERPRISE BLUE NAVBAR
    ====================================================== */
-
 .navbar {
-  background: linear-gradient(
-    110deg,
-    #0B4F91 0%,
-    #1769C2 55%,
-    #2382D9 100%
-  );
-
+  display: flex; justify-content: space-between; align-items: center;
+  background: linear-gradient(110deg, #0B4F91 0%, #1769C2 55%, #2382D9 100%);
   border-bottom: 1px solid rgba(255,255,255,.15);
   box-shadow: 0 4px 14px rgba(15,23,42,.12);
-
-  padding: 12px 32px;
-
-  min-height: 68px;
+  padding: 12px 32px; min-height: 68px;
+  position: sticky; top: 0; z-index: 40;
 }
-
-/* BRAND */
-
-.navbar .brand h2 {
-  color:#FFFFFF !important;
-}
-
-.navbar .brand span {
-  color:rgba(255,255,255,.72) !important;
-}
+.navbar .brand h2 { margin: 0; font-size: 18px; color: #FFFFFF !important; letter-spacing: -0.02em; line-height: 1.2; }
+.navbar .brand span { font-size: 12px; color: rgba(255,255,255,.72) !important; font-weight: 500; }
+.navbar .user-info { display: flex; align-items: center; gap: 16px; font-size: 13px; }
 
 /* MAIN NAV */
-
-.app-nav {
-  display:flex;
-  align-items:center;
-  gap:4px;
-  margin-left:40px;
-  margin-right:auto;
-}
-
-.app-nav-item {
-  border:1px solid transparent;
-  background:transparent;
-
-  color:rgba(255,255,255,.78);
-
-  font-family:inherit;
-  font-size:12.5px;
-  font-weight:600;
-
-  padding:8px 14px;
-
-  border-radius:7px;
-
-  cursor:pointer;
-
-  transition:
-    background .15s ease,
-    color .15s ease,
-    border-color .15s ease;
-}
-
-.app-nav-item:hover {
-  color:#FFFFFF;
-  background:rgba(255,255,255,.10);
-}
-
-.app-nav-item.active {
-  background:#FFFFFF;
-  border-color:#FFFFFF;
-  color:#1458A6;
-
-  box-shadow:0 2px 5px rgba(15,23,42,.10);
-}
+.app-nav { display:flex; align-items:center; gap:4px; margin-left:40px; margin-right:auto; }
+.app-nav-item { border:1px solid transparent; background:transparent; color:rgba(255,255,255,.78); font-family:inherit; font-size:12.5px; font-weight:600; padding:8px 14px; border-radius:7px; cursor:pointer; transition: background .15s ease, color .15s ease, border-color .15s ease; }
+.app-nav-item:hover { color:#FFFFFF; background:rgba(255,255,255,.10); }
+.app-nav-item.active { background:#FFFFFF; border-color:#FFFFFF; color:#1458A6; box-shadow:0 2px 5px rgba(15,23,42,.10); }
 
 /* USER */
+.nav-user { display:flex; flex-direction:column; align-items:flex-end; line-height:1.15; min-width:110px; }
+.nav-user-name { font-size:12px; font-weight:700; color:#FFFFFF !important; }
+.nav-user-role { margin-top:3px; font-size:10px; color:rgba(255,255,255,.68) !important; }
 
-.nav-user-name {
-  color:#FFFFFF !important;
-}
-
-.nav-user-role {
-  color:rgba(255,255,255,.68) !important;
-}
-
-/* INBOX */
-
-.btn-nav-outline {
-  background:rgba(255,255,255,.10) !important;
-
-  border:1px solid rgba(255,255,255,.28) !important;
-
-  color:#FFFFFF !important;
-}
-
-.btn-nav-outline:hover {
-  background:rgba(255,255,255,.18) !important;
-  border-color:rgba(255,255,255,.45) !important;
-}
-
-.simple-page-header{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-
-  padding:8px 2px 12px;
-
-  margin-bottom:8px;
-
-  border-bottom:1px solid #E2E8F0;
-}
-
-.simple-page-title{
-  font-size:18px;
-  line-height:1.2;
-
-  font-weight:700;
-
-  color:#0F172A;
-}
-
-.simple-page-sub{
-  margin-top:4px;
-
-  font-size:10.5px;
-
-  color:#64748B;
-}
-
-/* NOTIFICATION */
-
-.notif-btn {
-  color:#FFFFFF !important;
-}
-
-.notif-btn:hover {
-  background:rgba(255,255,255,.12) !important;
-}
-
-/* LOGOUT */
-
-.btn-danger-outline {
-  background:transparent !important;
-
-  border-color:rgba(255,255,255,.55) !important;
-
-  color:#FFFFFF !important;
-}
-
-.btn-danger-outline:hover {
-  background:rgba(220,38,38,.18) !important;
-  border-color:#FCA5A5 !important;
-}
-
-/* MOBILE */
+/* INBOX & NAVBAR BUTTONS */
+.btn-nav-outline { background:rgba(255,255,255,.10) !important; border:1px solid rgba(255,255,255,.28) !important; color:#FFFFFF !important; padding: 7px 12px; border-radius: 6px; cursor: pointer; font-weight: 500; font-family: inherit; font-size: 12.5px; transition: all 0.15s ease; display: flex; align-items: center; gap: 6px; }
+.btn-nav-outline:hover { background:rgba(255,255,255,.18) !important; border-color:rgba(255,255,255,.45) !important; }
+.btn-danger-outline { background:transparent !important; border:1px solid rgba(255,255,255,.55) !important; color:#FFFFFF !important; padding: 7px 14px; border-radius: 6px; cursor: pointer; font-weight: 600; font-family: inherit; font-size: 12.5px; transition: all 0.15s ease; }
+.btn-danger-outline:hover { background:rgba(220,38,38,.18) !important; border-color:#FCA5A5 !important; }
 
 @media(max-width:900px) {
-
-  .navbar {
-    padding:12px 18px;
-  }
-
-  .app-nav {
-    width:auto;
-    margin-left:20px;
-  }
-
-  
+  .navbar { flex-wrap:wrap; gap:12px; padding:12px 18px; }
+  .app-nav { order:3; width:100%; margin:0; border-top:1px solid #E2E8F0; padding-top:8px; }
 }
-/* --- Tweak Navbar Buttons --- */
-.btn-nav-outline { background: transparent; border: 1px solid var(--border); color: var(--text); padding: 7px 12px; border-radius: 6px; cursor: pointer; font-weight: 500; font-family: inherit; font-size: 12.5px; transition: all 0.15s ease; display: flex; align-items: center; gap: 6px; }
-.btn-nav-outline:hover { background: var(--panel-2); border-color: var(--text-muted); }
-.btn-danger-outline { background: transparent; border: 1px solid var(--red); color: var(--red); padding: 7px 14px; border-radius: 6px; cursor: pointer; font-weight: 600; font-family: inherit; font-size: 12.5px; transition: all 0.15s ease; }
-.btn-danger-outline:hover { background: var(--red-soft); }
+@media(max-width:600px) {
+  .nav-user { display:none; }
+  .navbar .user-info { gap:7px; }
+}
 
-/* header */
-.hdr{display:flex; align-items:center; justify-content:space-between; background:linear-gradient(120deg,#0B4F91 0%,#1769C2 58%,#2382D9 100%); color:#fff; border:0; border-radius:12px; padding:22px 26px; margin-bottom:18px; flex-wrap:wrap; gap:18px; box-shadow:0 8px 24px rgba(15,23,42,.10);}
-.hdr h1{font-size:25px; font-weight:700; margin:0 0 5px; letter-spacing:-.02em; color:#fff;}
-.hdr .sub{color:rgba(255,255,255,.82); font-size:12.5px;}
-.tabs{display:flex; gap:6px; flex-wrap:wrap;}
-.tab{padding:8px 14px; border:1px solid rgba(255,255,255,.28); background:rgba(255,255,255,.10); color:rgba(255,255,255,.88); cursor:pointer; font-size:13px; font-weight:500; font-family:inherit; border-radius:6px; transition:all .15s ease;}
-.tab.active{background:#fff; border-color:#fff; color:#1458A6; font-weight:700;}
-.tab:hover:not(.active){color:#fff; background:rgba(255,255,255,.18);}
-
+/* GLOBAL BUTTONS & TAGS */
 .btn-primary{padding:9px 18px; background:var(--primary); border:none; color:#FFFFFF; font-weight:600; cursor:pointer; font-family:inherit; font-size:13px; border-radius:6px; transition:background .15s ease;}
 .btn-primary:hover{background:var(--primary-hover);}
 .btn-ghost{padding:8px 14px; background:transparent; border:1px solid var(--border); color:var(--text-muted); cursor:pointer; font-family:inherit; font-size:12.5px; border-radius:6px;}
 .btn-ghost:hover{border-color:var(--text-muted); color:var(--text); background:var(--panel-2);}
-
-/* kpi row */
-.kpirow{display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:22px;}
-.kpi{background:var(--panel); padding:18px 20px; border:1px solid var(--border); border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,.02);}
-.kpi .label{color:var(--text-muted); font-size:12px; font-weight:500; margin-bottom:6px;}
-.kpi .val{font-family:'JetBrains Mono',monospace; font-size:26px; font-weight:700; color:#0F172A; font-variant-numeric:tabular-nums;}
-.kpi .unit{font-size:13px; color:var(--text-muted); margin-left:3px; font-weight:normal;}
-
-/* panel */
-.panel{border:1px solid var(--border); background:var(--panel); margin-bottom:22px; border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,.02); overflow:hidden;}
-.panel-hd{display:flex; justify-content:space-between; align-items:center; padding:14px 18px; border-bottom:1px solid var(--border-soft); background:#FAFAFA; flex-wrap:wrap; gap:10px;}
-.panel-hd h2{font-size:14px; margin:0; font-weight:600; color:#0F172A;}
-.panel-body{padding:16px 18px;}
-
-/* filters */
-.filters{display:flex; gap:8px; flex-wrap:wrap;}
-select, input, textarea{
-  background:#FFFFFF; border:1px solid var(--border); color:var(--text);
-  padding:7px 10px; font-family:inherit; font-size:12.5px; border-radius:6px;
-}
-select:focus, input:focus, textarea:focus{outline:2px solid var(--primary-soft); border-color:var(--primary);}
-
-/* table */
-table{width:100%; border-collapse:collapse;}
-th{text-align:left; font-size:11.5px; color:var(--text-muted); font-weight:600; padding:10px 12px; border-bottom:1px solid var(--border); background:#FAFAFA; text-transform:uppercase; letter-spacing:.03em;}
-td{padding:11px 12px; border-bottom:1px solid var(--border-soft); font-size:13px; vertical-align:middle;}
-tr.proj-row{cursor:pointer; transition:background .1s ease;}
-tr.proj-row:hover{background:var(--panel-2);}
-.num{font-family:'JetBrains Mono',monospace; text-align:right; font-variant-numeric:tabular-nums;}
 
 .tag{display:inline-block; padding:3px 9px; font-size:11px; font-weight:500; border-radius:4px; line-height:1.4;}
 .tag-medium{color:var(--slate); border:1px solid var(--border); background:var(--slate-soft);}
@@ -422,21 +96,13 @@ tr.proj-row:hover{background:var(--panel-2);}
 .tag-lose{color:var(--red); border:1px solid var(--border); background:var(--red-soft);}
 .tag-ongoing{color:var(--primary); border:1px solid var(--border); background:var(--primary-soft);}
 
+/* --- PROJECT DETAIL BLOCK (Tabel) --- */
 .detail-block{background:#FAFAFA; border:1px solid var(--border); border-radius:6px; margin:8px 0 14px; padding:14px 16px;}
 .sow-title{font-size:13px; color:var(--primary); margin:12px 0 6px; font-weight:700;}
 .boq-title{font-size:12px; color:var(--text-muted); margin:8px 0 4px; font-weight:600;}
-.item-row{display:grid; grid-template-columns:1.6fr .9fr .9fr .8fr 1.2fr; gap:8px; padding:6px 0; font-size:12.5px; border-bottom:1px solid var(--border-soft); align-items:center;}
-.item-row.hd{color:var(--text-dim); font-size:10.5px; border-bottom:1px solid var(--border);}
 .pic-chip{display:inline-block; background:#FFFFFF; border:1px solid var(--border); padding:2px 8px; font-size:11px; border-radius:4px; margin:1px 3px 1px 0; color:var(--text); font-weight:500;}
 
-/* leaderboard bars */
-.lb-row{display:grid; grid-template-columns:120px 1fr 70px; gap:12px; align-items:center; padding:8px 0; border-bottom:1px solid var(--border-soft);}
-.lb-name{font-size:13px; font-weight:500;}
-.lb-bar-track{background:var(--border-soft); height:8px; position:relative; border-radius:4px; overflow:hidden;}
-.lb-bar-fill{position:absolute; left:0; top:0; bottom:0; background:var(--primary); border-radius:4px;}
-.lb-val{font-family:'JetBrains Mono',monospace; text-align:right; font-size:12px; color:var(--text-muted); font-weight:600;}
-
-/* modal / form */
+/* --- MODAL / FORM --- */
 .overlay{position:fixed; inset:0; background:rgba(15,23,42,.4); backdrop-filter:blur(2px); display:flex; align-items:flex-start; justify-content:center; padding:40px 20px; overflow:auto; z-index:50;}
 .modal{background:var(--panel); border:1px solid var(--border); width:100%; max-width:760px; max-height:90vh; overflow:auto; border-radius:10px; box-shadow:0 20px 25px -5px rgba(0,0,0,.1), 0 10px 10px -5px rgba(0,0,0,.04);}
 .modal-hd{display:flex; justify-content:space-between; align-items:center; padding:16px 20px; border-bottom:1px solid var(--border-soft); position:sticky; top:0; background:var(--panel); z-index:2;}
@@ -444,7 +110,8 @@ tr.proj-row:hover{background:var(--panel-2);}
 .modal-body{padding:20px;}
 .field{margin-bottom:14px;}
 .field label{display:block; font-size:12px; font-weight:600; color:var(--text-muted); margin-bottom:5px;}
-.field input, .field select, .field textarea{width:100%;}
+.field input, .field select, .field textarea{width:100%; background:#FFFFFF; border:1px solid var(--border); color:var(--text); padding:7px 10px; font-family:inherit; font-size:12.5px; border-radius:6px;}
+.field input:focus, .field select:focus, .field textarea:focus{outline:2px solid var(--primary-soft); border-color:var(--primary);}
 .grid2{display:grid; grid-template-columns:1fr 1fr; gap:14px;}
 .grid3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px;}
 .sow-block{border:1px solid var(--border); padding:14px; margin-bottom:14px; background:#FAFAFA; border-radius:6px;}
@@ -462,8 +129,8 @@ tr.proj-row:hover{background:var(--panel-2);}
 
 /* --- NOTIFICATION BELL --- */
 .notif-wrapper { position: relative; display: inline-block; }
-.notif-btn { background: transparent; border: none; cursor: pointer; color: var(--text-muted); position: relative; padding: 6px; border-radius: 50%; transition: background 0.2s; display: flex; align-items: center; justify-content: center; }
-.notif-btn:hover { background: var(--panel-2, #F1F5F9); color: var(--text); }
+.notif-btn { background: transparent; border: none; cursor: pointer; color: #FFFFFF !important; position: relative; padding: 6px; border-radius: 50%; transition: background 0.2s; display: flex; align-items: center; justify-content: center; }
+.notif-btn:hover { background: rgba(255,255,255,.12) !important; }
 .notif-badge { position: absolute; top: 0; right: 0; background: var(--red, #DC2626); color: white; font-size: 10px; font-weight: bold; padding: 2px 5px; border-radius: 10px; border: 2px solid var(--panel, #fff); line-height: 1; display: none; }
 .notif-dropdown { position: absolute; top: 130%; right: -10px; width: 320px; background: var(--panel, #fff); border: 1px solid var(--border, #e2e8f0); border-radius: 8px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); display: none; z-index: 100; overflow: hidden; text-align: left; }
 .notif-dropdown.active { display: block; }
@@ -476,308 +143,81 @@ tr.proj-row:hover{background:var(--panel-2);}
 .notif-time { font-size: 11px; color: var(--text-muted, #64748b); margin-top: 4px; }
 
 /* =========================================================
-   UNIFIED STYLING — PROJECTS & TEAM
-   Menyamakan legacy .panel dengan Executive Dashboard
+   UNIFIED STYLING - PROJECTS & TEAM (Menyamakan UI Legacy dengan Executive)
    ========================================================= */
-
-.page-shell > .panel {
-  margin-bottom: 0;
-  border: 1px solid #DCE4EE;
-  border-radius: 8px;
-  background: #FFFFFF;
-  box-shadow: 0 1px 3px rgba(15,23,42,.04);
-  overflow: hidden;
-}
-
-/* Header panel */
-.page-shell > .panel > .panel-hd {
-  min-height: 46px;
-  padding: 9px 14px;
-
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-
-  background: linear-gradient(
-    90deg,
-    #0F5CA8 0%,
-    #1672C8 100%
-  );
-
-  border-bottom: 0;
-  color: #FFFFFF;
-}
-
-/* Judul */
-.page-shell > .panel > .panel-hd h2 {
-  margin: 0;
-  font-size: 12px;
-  line-height: 1.2;
-  font-weight: 700;
-  color: #FFFFFF;
-}
-
-/* Filter area */
-.page-shell > .panel > .panel-hd .filters {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.page-shell > .panel > .panel-hd select {
-  height: 30px;
-  padding: 5px 9px;
-
-  background: #FFFFFF;
-  border: 1px solid #CBD5E1;
-  border-radius: 5px;
-
-  color: #334155;
-  font-size: 10.5px;
-}
-
-/* Button project baru */
-.page-shell > .panel > .panel-hd .btn-primary {
-  height: 30px;
-  padding: 0 12px;
-
-  border: 1px solid rgba(255,255,255,.35);
-  border-radius: 5px;
-
-  background: #FFFFFF;
-  color: #1458A6;
-
-  font-size: 10.5px;
-  font-weight: 700;
-
-  box-shadow: none;
-}
-
-.page-shell > .panel > .panel-hd .btn-primary:hover {
-  background: #EFF6FF;
-}
-
-/* Body */
-.page-shell > .panel > .panel-body {
-  padding: 0;
-  background: #FFFFFF;
-}
-
-/* Table */
-.page-shell > .panel table {
-  width: 100%;
-  border-collapse: collapse;
-  table-layout: auto;
-}
-
-.page-shell > .panel table th {
-  padding: 8px 10px;
-
-  background: #F4F7FB;
-  color: #64748B;
-
-  border-bottom: 1px solid #DCE4EE;
-
-  font-size: 9px;
-  font-weight: 700;
-
-  text-transform: uppercase;
-  letter-spacing: .025em;
-
-  white-space: nowrap;
-}
-
-.page-shell > .panel table td {
-  padding: 9px 10px;
-
-  border-bottom: 1px solid #EEF2F6;
-
-  color: #334155;
-
-  font-size: 10.5px;
-  line-height: 1.25;
-
-  vertical-align: middle;
-}
-
-/* Project row */
-.page-shell > .panel table tr.proj-row {
-  cursor: pointer;
-  transition: background .12s ease;
-}
-
-.page-shell > .panel table tr.proj-row:hover {
-  background: #F8FBFF;
-}
-
-/* Project name */
-.page-shell > .panel table tr.proj-row td:first-child {
-  font-weight: 600;
-  color: #0F172A;
-}
-
-/* Numeric */
-.page-shell > .panel table .num {
-  font-size: 10px;
-  white-space: nowrap;
-}
-
-/* Status badge */
-.page-shell > .panel table .badge {
-  font-size: 9px;
-  padding: 3px 7px;
-}
-
-/* Detail row */
-.page-shell > .panel table tr:not(.proj-row) td[colspan] {
-  padding: 0;
-}
-
-/* Detail block */
-.page-shell .detail-block {
-  margin: 0;
-  padding: 12px 14px;
-
-  background: #F8FAFC;
-
-  border: 0;
-  border-top: 1px solid #DCE4EE;
-}
-
-/* Team table */
-.page-shell .panel-body table tbody tr {
-  transition: background .12s ease;
-}
-
-.page-shell .panel-body table tbody tr:hover {
-  background: #F8FAFC;
-}
-
-/* Responsive */
+.page-shell > .panel { margin-bottom: 0; border: 1px solid #DCE4EE; border-radius: 8px; background: #FFFFFF; box-shadow: 0 1px 3px rgba(15,23,42,.04); overflow: hidden; }
+.page-shell > .panel > .panel-hd { min-height: 46px; padding: 9px 14px; display: flex; align-items: center; justify-content: space-between; background: linear-gradient(90deg, #0F5CA8 0%, #1672C8 100%); border-bottom: 0; color: #FFFFFF; }
+.page-shell > .panel > .panel-hd h2 { margin: 0; font-size: 12px; line-height: 1.2; font-weight: 700; color: #FFFFFF; }
+.page-shell > .panel > .panel-hd .filters { display: flex; align-items: center; gap: 6px; }
+.page-shell > .panel > .panel-hd select { height: 30px; padding: 5px 9px; background: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 5px; color: #334155; font-size: 10.5px; }
+.page-shell > .panel > .panel-hd .btn-primary { height: 30px; padding: 0 12px; border: 1px solid rgba(255,255,255,.35); border-radius: 5px; background: #FFFFFF; color: #1458A6; font-size: 10.5px; font-weight: 700; box-shadow: none; }
+.page-shell > .panel > .panel-hd .btn-primary:hover { background: #EFF6FF; }
+.page-shell > .panel > .panel-body { padding: 0; background: #FFFFFF; }
+.page-shell > .panel table { width: 100%; border-collapse: collapse; table-layout: auto; }
+.page-shell > .panel table th { padding: 8px 10px; background: #F4F7FB; color: #64748B; border-bottom: 1px solid #DCE4EE; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .025em; white-space: nowrap; }
+.page-shell > .panel table td { padding: 9px 10px; border-bottom: 1px solid #EEF2F6; color: #334155; font-size: 10.5px; line-height: 1.25; vertical-align: middle; }
+.page-shell > .panel table tr.proj-row { cursor: pointer; transition: background .12s ease; }
+.page-shell > .panel table tr.proj-row:hover { background: #F8FBFF; }
+.page-shell > .panel table tr.proj-row td:first-child { font-weight: 600; color: #0F172A; }
+.page-shell > .panel table .num { font-size: 10px; white-space: nowrap; }
+.page-shell > .panel table .badge { font-size: 9px; padding: 3px 7px; }
+.page-shell > .panel table tr:not(.proj-row) td[colspan] { padding: 0; }
+.page-shell .detail-block { margin: 0; padding: 12px 14px; background: #F8FAFC; border: 0; border-top: 1px solid #DCE4EE; }
+.page-shell .panel-body table tbody tr { transition: background .12s ease; }
+.page-shell .panel-body table tbody tr:hover { background: #F8FAFC; }
 @media(max-width:900px) {
-
-  .page-shell > .panel > .panel-hd {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .page-shell > .panel > .panel-hd > div {
-    width: 100%;
-  }
-
-  .page-shell > .panel > .panel-hd .filters {
-    width: 100%;
-    flex-wrap: wrap;
-  }
-
+  .page-shell > .panel > .panel-hd { align-items: flex-start; flex-direction: column; }
+  .page-shell > .panel > .panel-hd > div { width: 100%; }
+  .page-shell > .panel > .panel-hd .filters { width: 100%; flex-wrap: wrap; }
 }
 </style>
 </head>
 <body>
 
 <nav class="navbar">
-
   <div class="brand">
     <h2>Presourcing</h2>
     <span>Presource Portal</span>
   </div>
 
   <div class="app-nav">
-
-    <button
-      class="app-nav-item active"
-      data-tab="overview"
-      onclick="switchDashboardTab('overview')">
-      Overview
-    </button>
-
-    <button
-      class="app-nav-item"
-      data-tab="projects"
-      onclick="switchDashboardTab('projects')">
-      Projects
-    </button>
-
-    <button
-      class="app-nav-item"
-      data-tab="team"
-      onclick="switchDashboardTab('team')">
-      Team
-    </button>
-
+    <button class="app-nav-item active" data-tab="overview" onclick="switchDashboardTab('overview')">Overview</button>
+    <button class="app-nav-item" data-tab="projects" onclick="switchDashboardTab('projects')">Projects</button>
+    <button class="app-nav-item" data-tab="team" onclick="switchDashboardTab('team')">Team</button>
   </div>
 
   <div class="user-info">
-
     <div class="nav-user">
       <div class="nav-user-name" id="display-name">Loading...</div>
       <div class="nav-user-role" id="display-dept">...</div>
     </div>
-
-    <button
-      class="btn-nav-outline"
-      onclick="openGlobalInboxModal()">
+    
+    <button class="btn-nav-outline" onclick="openGlobalInboxModal()">
       📬 Inbox
     </button>
-
+    
     <div class="notif-wrapper">
-      <button
-        class="notif-btn"
-        onclick="toggleNotif(event)">
-
-        <svg width="20" height="20"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round">
-
+      <button class="notif-btn" onclick="toggleNotif(event)">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
           <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
-
         </svg>
-
         <span class="notif-badge" id="notif-count">0</span>
-
       </button>
-
-      <div
-        class="notif-dropdown"
-        id="notif-dropdown">
-
-        <div class="notif-header">
-          Notifikasi
+      
+      <div class="notif-dropdown" id="notif-dropdown">
+        <div class="notif-header">Notifikasi</div>
+        <div class="notif-body" id="notif-list">
+          <div style="padding: 20px; text-align: center; color: var(--text-muted); font-size: 12px;">Memuat...</div>
         </div>
-
-        <div
-          class="notif-body"
-          id="notif-list">
-
-          <div style="
-            padding:20px;
-            text-align:center;
-            color:var(--text-muted);
-            font-size:12px;">
-            Memuat...
-          </div>
-
-        </div>
-
       </div>
     </div>
-
-    <button
-      class="btn-danger-outline"
-      onclick="handleLogout()">
-      Keluar
-    </button>
-
+    
+    <button class="btn-danger-outline" onclick="handleLogout()">Keluar</button>
   </div>
-
 </nav>
 
-<!-- MODAL INBOX REQUEST (Dulu ada di luar, sekarang disembunyikan sebagai modal) -->
+<!-- MODAL INBOX REQUEST -->
 <div class="overlay" id="global-inbox-modal" style="display: none; z-index: 99;">
   <div class="modal" style="max-width: 900px;">
     <div class="modal-hd">
@@ -812,30 +252,23 @@ tr.proj-row:hover{background:var(--panel-2);}
 </div>
 
 <!-- WADAH DASHBOARD UTAMA (Diinjeksi oleh script.js) -->
-<div class="app" id="app" style="padding-top: 20px;"></div>
+<div class="app" id="app"></div>
 
 <!-- Memanggil JavaScript Utama -->
 <script src="{{ url_for('static', filename='script.js') }}"></script>
 
 <!-- Skrip Khusus Inbox & Notifikasi -->
 <script>
-  // Fungsi Kendali Modal Inbox
   function openGlobalInboxModal() {
       const modal = document.getElementById('global-inbox-modal');
-      if (modal) {
-          modal.style.display = 'flex';
-          fetchInbox(); // Pastikan data paling baru setiap kali dibuka
-      }
+      if (modal) { modal.style.display = 'flex'; fetchInbox(); }
   }
 
   function closeGlobalInboxModal() {
       const modal = document.getElementById('global-inbox-modal');
-      if (modal) {
-          modal.style.display = 'none';
-      }
+      if (modal) modal.style.display = 'none';
   }
 
-  // Tutup Modal Inbox jika klik area overlay gelap
   document.getElementById('global-inbox-modal').addEventListener('click', function(e) {
       if (e.target === this) closeGlobalInboxModal();
   });
@@ -844,31 +277,22 @@ tr.proj-row:hover{background:var(--panel-2);}
       try {
           const res = await fetch('/api/requests?role=admin'); 
           const result = await res.json();
-          
-          if (result.success) {
-              renderInbox(result.data);
-          }
-      } catch (error) {
-          console.error("Gagal menarik data inbox:", error);
-      }
+          if (result.success) renderInbox(result.data);
+      } catch (error) { console.error("Gagal menarik data inbox:", error); }
   }
 
   function renderInbox(data) {
       const tbody = document.getElementById('inbox-body');
       tbody.innerHTML = ''; 
-
       const newRequests = data.filter(req => req.status === 'unassigned');
 
       if (newRequests.length === 0) {
           tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 40px 20px;">Tidak ada request baru. Inbox bersih! 🎉</td></tr>`;
           return;
       }
-
       window.cachedRequests = data;
-
       newRequests.forEach(req => {
           const tr = document.createElement('tr');
-          
           const requesterDisplay = req.full_name || req.requester_username;
           const deptDisplay = req.department || 'Presales Team';
 
@@ -885,24 +309,18 @@ tr.proj-row:hover{background:var(--panel-2);}
               <td style="padding: 12px 16px; color: var(--red); font-weight: 600;">${req.sla_date}</td>
               <td style="padding: 12px 16px;"><span class="tag tag-high" style="font-weight: 700;">New Request</span></td>
               <td style="padding: 12px 16px;">
-                  <button class="btn-primary" style="padding: 6px 12px; font-size: 12px;" onclick="openReviewModal('${req.ticket_id}')">
-                      Review & Assign
-                  </button>
+                  <button class="btn-primary" style="padding: 6px 12px; font-size: 12px;" onclick="openReviewModal('${req.ticket_id}')">Review & Assign</button>
               </td>
           `;
           tbody.appendChild(tr);
       });
   }
 
-  // Load awal Inbox di *background* untuk counter dll jika diperlukan kelak
-  document.addEventListener('DOMContentLoaded', () => {
-      fetchInbox();
-  });
+  document.addEventListener('DOMContentLoaded', () => { fetchInbox(); });
 
   async function openReviewModal(ticketId) {
       const list = window.cachedRequests || [];
       const ticket = list.find(r => r.ticket_id === ticketId);
-      
       const teamList = (typeof team !== 'undefined' && Array.isArray(team)) ? team : ["Decki Okmal Pratama", "Ahmad Fauzi", "Siti Rahma", "Budi Santoso"];
 
       const modalHtml = `
@@ -920,12 +338,10 @@ tr.proj-row:hover{background:var(--panel-2);}
                           <p style="margin: 0 0 6px 0;"><b>Target SLA:</b> ${ticket ? ticket.sla_date : '-'}</p>
                           <p style="margin: 0;"><b>Catatan SA:</b> ${ticket && ticket.notes ? ticket.notes : '-'}</p>
                       </div>
-
                       <h4 style="margin: 16px 0 8px 0; font-size: 13px; font-weight: 600;">Daftar Item BoQ dari SA:</h4>
                       <div id="modal-boq-items-container" style="border: 1px solid var(--border); border-radius: 6px; padding: 10px; font-size: 12.5px; background: #FFFFFF; max-height: 250px; overflow-y: auto;">
                           Memuat rincian item BoQ...
                       </div>
-
                       <div class="field" style="margin-top: 20px;">
                           <label>Tugaskan ke PIC Presourcing:</label>
                           <select id="assign-pic-select">
@@ -954,78 +370,40 @@ tr.proj-row:hover{background:var(--panel-2);}
           if (result.success && result.data.length > 0) {
               let html = `
                   <table style="width: 100%; border-collapse: collapse;">
-                      <thead>
-                          <tr style="border-bottom: 1px solid var(--border); color: var(--text-muted); font-size: 11px;">
-                              <th style="padding: 6px; text-align: left;">No</th>
-                              <th style="padding: 6px; text-align: left;">Deskripsi Item</th>
-                              <th style="padding: 6px; text-align: right;">Qty</th>
-                              <th style="padding: 6px; text-align: left;">Brand</th>
-                          </tr>
-                      </thead>
+                      <thead><tr style="border-bottom: 1px solid var(--border); color: var(--text-muted); font-size: 11px;"><th style="padding: 6px; text-align: left;">No</th><th style="padding: 6px; text-align: left;">Deskripsi Item</th><th style="padding: 6px; text-align: right;">Qty</th><th style="padding: 6px; text-align: left;">Brand</th></tr></thead>
                       <tbody>
               `;
               result.data.forEach((it, idx) => {
-                  html += `
-                      <tr style="border-bottom: 1px solid var(--border-soft);">
-                          <td style="padding: 6px;">${it.item_no || (idx + 1)}</td>
-                          <td style="padding: 6px; font-weight: 500;">${it.description}</td>
-                          <td style="padding: 6px; text-align: right;" class="mono">${it.quantity}</td>
-                          <td style="padding: 6px;">${it.preferred_brand || '-'}</td>
-                      </tr>
-                  `;
+                  html += `<tr style="border-bottom: 1px solid var(--border-soft);"><td style="padding: 6px;">${it.item_no || (idx + 1)}</td><td style="padding: 6px; font-weight: 500;">${it.description}</td><td style="padding: 6px; text-align: right;" class="mono">${it.quantity}</td><td style="padding: 6px;">${it.preferred_brand || '-'}</td></tr>`;
               });
               html += `</tbody></table>`;
               container.innerHTML = html;
-          } else {
-              container.innerHTML = `<p style="text-align: center; color: var(--text-muted); padding: 10px;">Tidak ada item BoQ tercatat.</p>`;
-          }
+          } else { container.innerHTML = `<p style="text-align: center; color: var(--text-muted); padding: 10px;">Tidak ada item BoQ tercatat.</p>`; }
       } catch (err) {
           console.error("Gagal mengambil item BoQ:", err);
           document.getElementById('modal-boq-items-container').innerHTML = `<p style="color: var(--red);">Gagal memuat item dari server.</p>`;
       }
   }
 
-  function closeReviewModal() {
-      const modal = document.getElementById('review-modal');
-      if (modal) modal.remove();
-  }
+  function closeReviewModal() { const modal = document.getElementById('review-modal'); if (modal) modal.remove(); }
 
   async function submitAssign(ticketId) {
       const picSelect = document.getElementById('assign-pic-select');
       const picUsername = picSelect ? picSelect.value : '';
       
-      if (!picUsername) {
-          alert("Silakan pilih salah satu anggota tim PIC terlebih dahulu!");
-          return;
-      }
+      if (!picUsername) { alert("Silakan pilih salah satu anggota tim PIC terlebih dahulu!"); return; }
 
       try {
-          const response = await fetch('/api/requests/assign', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ ticket_id: ticketId, pic_username: picUsername })
-          });
+          const response = await fetch('/api/requests/assign', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ticket_id: ticketId, pic_username: picUsername }) });
           const result = await response.json();
 
           if (response.ok && result.success) {
               alert(`Sukses! Tiket ${ticketId} berhasil ditugaskan ke ${picUsername}.`);
               closeReviewModal();
-              
               fetchInbox(); 
-              
-              // Coba render ulang dashboard utama agar langsung terlihat
-              if (typeof loadAll === 'function') {
-                  loadAll();
-              } else {
-                  location.reload(); 
-              }
-          } else {
-              alert(`Gagal assign: ${result.message}`);
-          }
-      } catch (error) {
-          console.error("Error assigning ticket:", error);
-          alert("Terjadi kesalahan jaringan saat menyimpan penugasan.");
-      }
+              if (typeof loadAll === 'function') { loadAll(); } else { location.reload(); }
+          } else { alert(`Gagal assign: ${result.message}`); }
+      } catch (error) { console.error("Error assigning ticket:", error); alert("Terjadi kesalahan jaringan saat menyimpan penugasan."); }
   }
 
 // --- SISTEM NOTIFIKASI ---
@@ -1052,30 +430,22 @@ async function fetchNotifications() {
     const userStr = localStorage.getItem('user');
     if (!userStr) return;
     const user = JSON.parse(userStr);
-    
     const targetId = user.role === 'admin' ? 'admin' : user.username;
 
     try {
         const res = await fetch(`/api/notifications?username=${targetId}`);
         const result = await res.json();
         if (result.success) renderNotifications(result.data);
-    } catch (err) {
-        console.error("Gagal menarik notifikasi", err);
-    }
+    } catch (err) { console.error("Gagal menarik notifikasi", err); }
 }
 
 function renderNotifications(data) {
     const list = document.getElementById('notif-list');
     const badge = document.getElementById('notif-count');
-    
     const unreadCount = data.filter(n => !n.is_read).length;
     
-    if (unreadCount > 0) {
-        badge.style.display = 'block';
-        badge.innerText = unreadCount > 99 ? '99+' : unreadCount;
-    } else {
-        badge.style.display = 'none';
-    }
+    if (unreadCount > 0) { badge.style.display = 'block'; badge.innerText = unreadCount > 99 ? '99+' : unreadCount; } 
+    else { badge.style.display = 'none'; }
 
     if (data.length === 0) {
         list.innerHTML = `<div style="padding: 24px 20px; text-align: center; color: var(--text-muted); font-size: 12px;">Belum ada notifikasi baru 🎉</div>`;
@@ -1091,12 +461,8 @@ function renderNotifications(data) {
 }
 
 async function markNotifRead(notifId) {
-    try {
-        await fetch(`/api/notifications/${notifId}/read`, { method: 'POST' });
-        fetchNotifications(); 
-    } catch (err) {
-        console.error("Gagal menandai notifikasi", err);
-    }
+    try { await fetch(`/api/notifications/${notifId}/read`, { method: 'POST' }); fetchNotifications(); } 
+    catch (err) { console.error("Gagal menandai notifikasi", err); }
 }
 
 setTimeout(fetchNotifications, 1000);
@@ -1105,7 +471,6 @@ setInterval(fetchNotifications, 30000);
 
 <!-- Skrip Profil & Logout -->
 <script>
-    // 1. Tampilkan Data Profil di Navbar
     const activeUser = JSON.parse(localStorage.getItem('user'));
     if (activeUser) {
         const nameEl = document.getElementById('display-name');
@@ -1114,16 +479,10 @@ setInterval(fetchNotifications, 30000);
         if(deptEl) deptEl.innerText = activeUser.role === 'admin' ? 'Administrator' : activeUser.department;
     }
 
-    // 2. Fungsi Logout
     async function handleLogout() {
-        try {
-            await fetch('/api/logout', { method: 'POST' });
-        } catch (err) {
-            console.error("Gagal menghubungi server:", err);
-        } finally {
-            localStorage.removeItem('user');
-            window.location.href = '/login';
-        }
+        try { await fetch('/api/logout', { method: 'POST' }); } 
+        catch (err) { console.error("Gagal menghubungi server:", err); } 
+        finally { localStorage.removeItem('user'); window.location.href = '/login'; }
     }
 </script>
 

@@ -174,2242 +174,467 @@ function computePicStats(){
 function fmtIdr(n){ return n==null ? '—' : 'Rp ' + Math.round(n).toLocaleString('id-ID'); }
 function fmtPct(n){ return n==null ? '—' : n.toFixed(1)+'%'; }
 
-function render(){
-  const app = document.getElementById('app');
-
-  let headerHtml = '';
-
-  // =====================================================
-  // OVERVIEW HEADER
-  // =====================================================
-
-  if(activeTab === 'overview'){
-
-    const now = new Date();
-
-    const dateText = now.toLocaleDateString('id-ID', {
-      day: '2-digit',
-      month: 'long',
-      year: 'numeric'
-    });
-
-    headerHtml = `
-      <div class="page-hero">
-
-        <div class="page-hero-main">
-
-          <div class="page-hero-title">
-            Presourcing Project Dashboard
-          </div>
-
-          <div class="page-hero-sub">
-            Pipeline, Progress, and Target RFS
-          </div>
-
-        </div>
-
-        <div class="page-hero-side">
-
-          <div class="objective-box">
-
-            <div class="objective-icon">
-              ◎
-            </div>
-
-            <div>
-
-              <div class="objective-label">
-                Objective
-              </div>
-
-              <div class="objective-text">
-                Ensure project readiness &amp;
-                competitive sourcing through effective
-                presourcing
-              </div>
-
-            </div>
-
-          </div>
-
-          <div class="data-date">
-
-            <span>
-              Data per:
-            </span>
-
-            <strong>
-              ${dateText}
-            </strong>
-
-          </div>
-
-        </div>
-
-      </div>
-    `;
-  }
-
-
-  // =====================================================
-  // PROJECTS HEADER
-  // =====================================================
-
-  else if(activeTab === 'projects'){
-
-    headerHtml = `
-      <div class="page-hero">
-
-        <div>
-
-          <div class="page-hero-title">
-            Project &amp; BoQ Management
-          </div>
-
-          <div class="page-hero-sub">
-            Detail project, BoQ, SPH, dan progress
-          </div>
-
-        </div>
-
-      </div>
-    `;
-  }
-
-
-  // =====================================================
-  // TEAM HEADER
-  // =====================================================
-
-  else if(activeTab === 'team'){
-
-    headerHtml = `
-      <div class="page-hero">
-
-        <div>
-
-          <div class="page-hero-title">
-            Team &amp; Workload
-          </div>
-
-          <div class="page-hero-sub">
-            Distribusi project dan beban kerja tim
-          </div>
-
-        </div>
-
-      </div>
-    `;
-  }
-
-
-  // =====================================================
-  // GLOBAL PAGE WRAPPER
-  // =====================================================
-
-  app.innerHTML = `
-    <div class="page-shell">
-
-      ${headerHtml}
-
-      <div id="tabcontent"></div>
-
-    </div>
-  `;
-
-
-  const content =
-    document.getElementById('tabcontent');
-
-
-  if(activeTab === 'overview'){
-    content.innerHTML =
-      renderOverview();
-  }
-
-  else if(activeTab === 'projects'){
-    content.innerHTML =
-      renderProjects();
-  }
-
-  else if(activeTab === 'team'){
-    content.innerHTML =
-      renderTeam();
-  }
-
-
-  wireEvents();
-
-
-  if(modal){
-    renderModal();
-  }
-
-
-  document
-    .querySelectorAll('.app-nav-item')
-    .forEach(el => {
-
-      el.classList.toggle(
-        'active',
-        el.dataset.tab === activeTab
-      );
-
-    });
-}
-function tabBtn(id,label){
-  return `<div class="tab ${activeTab===id?'active':''}" data-tab="${id}">${label}</div>`;
-}
-
+// ---------- Navigation Logic ----------
 function switchDashboardTab(id) {
   activeTab = id;
   openProjectId = null;
-
   document.querySelectorAll('.app-nav-item').forEach(el => {
-    el.classList.toggle(
-      'active',
-      el.dataset.tab === id
-    );
+    el.classList.toggle('active', el.dataset.tab === id);
   });
-
   render();
 }
+
+function render(){
+  const app = document.getElementById('app');
+  let headerHtml = '';
+
+  // HEADER LOGIC
+  if(activeTab === 'overview'){
+    const now = new Date();
+    const dateText = now.toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' });
+    headerHtml = `
+      <div class="page-hero">
+        <div class="page-hero-main">
+          <div class="page-hero-title">Presourcing Project Dashboard</div>
+          <div class="page-hero-sub">Pipeline, Progress, and Target RFS</div>
+        </div>
+        <div class="page-hero-side">
+          <div class="objective-box">
+            <div class="objective-icon">◎</div>
+            <div>
+              <div class="objective-label">Objective</div>
+              <div class="objective-text">Ensure project readiness &amp; competitive sourcing through effective presourcing</div>
+            </div>
+          </div>
+          <div class="data-date">
+            <span>Data per:</span>
+            <strong>${dateText}</strong>
+          </div>
+        </div>
+      </div>
+    `;
+  } else if(activeTab === 'projects'){
+    headerHtml = `
+      <div class="page-hero">
+        <div>
+          <div class="page-hero-title">Project &amp; BoQ Management</div>
+          <div class="page-hero-sub">Detail project, BoQ, SPH, dan progress</div>
+        </div>
+      </div>
+    `;
+  } else if(activeTab === 'team'){
+    headerHtml = `
+      <div class="page-hero">
+        <div>
+          <div class="page-hero-title">Team &amp; Workload</div>
+          <div class="page-hero-sub">Distribusi project dan beban kerja tim</div>
+        </div>
+      </div>
+    `;
+  }
+
+  app.innerHTML = `
+    <div class="page-shell">
+      ${headerHtml}
+      <div id="tabcontent"></div>
+    </div>
+  `;
+
+  const content = document.getElementById('tabcontent');
+  if(activeTab === 'overview') content.innerHTML = renderOverview();
+  else if(activeTab === 'projects') content.innerHTML = renderProjects();
+  else if(activeTab === 'team') content.innerHTML = renderTeam();
+
+  wireEvents();
+  if(modal) renderModal();
+
+  // Set active nav state on first render
+  document.querySelectorAll('.app-nav-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.tab === activeTab);
+  });
+}
+
 // --------------------------------------------------------
-// RENDER OVERVIEW: EXECUTIVE DASHBOARD (PIXEL-PERFECT MOCKUP ALIGNMENT)
+// RENDER OVERVIEW: EXECUTIVE DASHBOARD
 // --------------------------------------------------------
 function renderOverview(){
-
   const totalProj = projects.length;
-
   let totalVal = 0;
+  const sCount = { 'On Track': 0, 'At Risk': 0, 'Overdue': 0, 'Completed': 0, 'Planned': 0 };
+  const pCount = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
 
-  const sCount = {
-    'On Track': 0,
-    'At Risk': 0,
-    'Overdue': 0,
-    'Completed': 0,
-    'Planned': 0
-  };
+  projects.forEach(p => {
+    totalVal += (projectSph(p).awal || 0);
+    const status = getDynamicStatus(p);
+    if(sCount[status] !== undefined) sCount[status]++;
 
- const pCount = {
-  1: 0,
-  2: 0,
-  3: 0,
-  4: 0,
-  5: 0,
-  6: 0
-};
-
-projects.forEach(p => {
-
-  totalVal += (
-    projectSph(p).awal || 0
-  );
-
-  const status =
-    getDynamicStatus(p);
-
-  if(
-    sCount[status] !== undefined
-  ){
-    sCount[status]++;
-  }
-
-
-  let stage =
-    parseInt(
-      String(
-        p.pipelineStage || ''
-      ).charAt(0)
-    );
-
-
-  if(
-    !isNaN(stage) &&
-    stage >= 1 &&
-    stage <= 6
-  ){
-
-    // Project dihitung telah mencapai
-    // seluruh stage sebelum/current stage.
-    for(
-      let s = 1;
-      s <= stage;
-      s++
-    ){
-
-      pCount[s]++;
-
+    let stage = parseInt(String(p.pipelineStage || '').charAt(0));
+    if(!isNaN(stage) && stage >= 1 && stage <= 6){
+      for(let s = 1; s <= stage; s++){
+        pCount[s]++;
+      }
     }
+  });
 
-  }
+  const efficiencies = projects.map(p => efficiencyPct(projectSph(p).awal, projectSph(p).final)).filter(v => v != null && isFinite(v));
+  const avgEfficiency = efficiencies.length ? efficiencies.reduce((a,b) => a+b, 0) / efficiencies.length : null;
+  const getPct = val => totalProj ? Math.round((val / totalProj) * 100) : 0;
+  const activeProjects = projects.filter(p => p.status === 'ongoing').length;
+  const atRisk = sCount['At Risk'];
+  const overdue = sCount['Overdue'];
 
-});
-
-  const efficiencies = projects
-    .map(p =>
-      efficiencyPct(
-        projectSph(p).awal,
-        projectSph(p).final
-      )
-    )
-    .filter(v =>
-      v != null &&
-      isFinite(v)
-    );
-
-  const avgEfficiency =
-    efficiencies.length
-      ? efficiencies.reduce((a,b) => a+b, 0)
-        / efficiencies.length
-      : null;
-
-  const getPct = val =>
-    totalProj
-      ? Math.round((val / totalProj) * 100)
-      : 0;
-
-  const activeProjects =
-    projects.filter(
-      p => p.status === 'ongoing'
-    ).length;
-
-  const atRisk =
-    sCount['At Risk'];
-
-  const overdue =
-    sCount['Overdue'];
-
-  const completed =
-    sCount['Completed'];
-
-  const planned =
-    sCount['Planned'];
-
-  // ------------------------------------------------------
-  // LOAD CHART.JS
-  // ------------------------------------------------------
-
-  if(
-    !window.Chart &&
-    !document.getElementById('chartjs-script')
-  ){
-
-    const script =
-      document.createElement('script');
-
-    script.id =
-      'chartjs-script';
-
-    script.src =
-      'https://cdn.jsdelivr.net/npm/chart.js';
-
-    script.onload = () =>
-      setTimeout(
-        renderDashboardCharts,
-        100
-      );
-
-    document.head.appendChild(
-      script
-    );
-
+  if(!window.Chart && !document.getElementById('chartjs-script')){
+    const script = document.createElement('script');
+    script.id = 'chartjs-script';
+    script.src = 'https://cdn.jsdelivr.net/npm/chart.js';
+    script.onload = () => setTimeout(renderDashboardCharts, 100);
+    document.head.appendChild(script);
   } else {
-
-    setTimeout(
-      renderDashboardCharts,
-      80
-    );
-
+    setTimeout(renderDashboardCharts, 80);
   }
-
-  // ------------------------------------------------------
-  // STYLES
-  // ------------------------------------------------------
 
   const dashStyles = `
   <style>
-
-    .page-shell{
-      width:100%;
-      max-width:1420px;
-      margin:0 auto;
-    }
-
-    /* =========================
-       HERO
-    ========================= */
-
-    .page-hero{
-      min-height:76px;
-
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-
-      gap:20px;
-
-      padding:12px 18px;
-
-      margin-bottom:12px;
-
-      border-radius:10px;
-
-      color:#fff;
-
-      background:
-        linear-gradient(
-          115deg,
-          #0B4F91 0%,
-          #1769C2 58%,
-          #2583DA 100%
-        );
-
-      box-shadow:
-        0 4px 12px rgba(15,23,42,.12);
-
-      position:relative;
-      overflow:hidden;
-    }
-
-    .page-hero::after{
-      content:'';
-
-      position:absolute;
-
-      width:260px;
-      height:160px;
-
-      right:-70px;
-      top:-90px;
-
-      background:
-        rgba(255,255,255,.07);
-
-      transform:
-        rotate(28deg);
-
-      pointer-events:none;
-    }
-
-    .page-hero-main{
-      position:relative;
-      z-index:1;
-      min-width:0;
-    }
-
-    .page-hero-title{
-      font-size:22px;
-      line-height:1.1;
-
-      font-weight:700;
-
-      letter-spacing:.01em;
-    }
-
-    .page-hero-sub{
-      margin-top:5px;
-
-      font-size:11px;
-
-      color:
-        rgba(255,255,255,.78);
-    }
-
-    .page-hero-side{
-      display:flex;
-      align-items:center;
-      gap:10px;
-
-      position:relative;
-      z-index:1;
-    }
-
-    .objective-box{
-      display:flex;
-      align-items:center;
-
-      gap:8px;
-
-      padding:
-        7px 11px;
-
-      min-width:230px;
-
-      border:
-        1px solid
-        rgba(255,255,255,.25);
-
-      border-radius:7px;
-
-      background:
-        rgba(255,255,255,.08);
-    }
-
-    .objective-icon{
-      width:28px;
-      height:28px;
-
-      display:flex;
-      align-items:center;
-      justify-content:center;
-
-      border-radius:50%;
-
-      border:
-        2px solid
-        rgba(255,255,255,.85);
-
-      font-size:15px;
-      font-weight:700;
-    }
-
-    .objective-label{
-      font-size:9px;
-
-      font-weight:700;
-
-      color:
-        rgba(255,255,255,.92);
-
-      text-transform:uppercase;
-
-      letter-spacing:.05em;
-    }
-
-    .objective-text{
-      margin-top:2px;
-
-      font-size:9.5px;
-
-      line-height:1.25;
-
-      color:
-        rgba(255,255,255,.78);
-
-      max-width:210px;
-    }
-
-    .data-date{
-      display:flex;
-
-      flex-direction:column;
-
-      gap:2px;
-
-      padding:
-        7px 11px;
-
-      border:
-        1px solid
-        rgba(255,255,255,.20);
-
-      border-radius:7px;
-
-      min-width:110px;
-    }
-
-    .data-date span{
-      font-size:8.5px;
-
-      color:
-        rgba(255,255,255,.65);
-    }
-
-    .data-date strong{
-      font-size:9.5px;
-
-      color:#fff;
-    }
-
-    /* =========================
-       KPI
-    ========================= */
-
-    .exec-kpis{
-      display:grid;
-
-      grid-template-columns:
-        repeat(6, minmax(0,1fr));
-
-      gap:9px;
-
-      margin-bottom:12px;
-    }
-
-    .exec-kpi{
-
-      min-height:72px;
-
-      padding:10px 11px;
-
-      display:flex;
-
-      align-items:center;
-
-      gap:9px;
-
-      border:
-        1px solid
-        #dbe3ec;
-
-      border-radius:8px;
-
-      background:#fff;
-
-      position:relative;
-
-      overflow:hidden;
-
-      box-shadow:
-        0 1px 3px
-        rgba(15,23,42,.04);
-    }
-
-    .exec-kpi::after{
-
-      content:'';
-
-      position:absolute;
-
-      left:0;
-      right:0;
-      bottom:0;
-
-      height:3px;
-
-      background:#2563EB;
-    }
-
-    .exec-kpi.green::after{
-      background:#16A34A;
-    }
-
-    .exec-kpi.yellow::after{
-      background:#F59E0B;
-    }
-
-    .exec-kpi.red::after{
-      background:#DC2626;
-    }
-
-    .exec-kpi.gray::after{
-      background:#64748B;
-    }
-
-    .exec-kpi-icon{
-
-      width:31px;
-      height:31px;
-
-      flex:0 0 31px;
-
-      display:flex;
-
-      align-items:center;
-      justify-content:center;
-
-      border-radius:7px;
-
-      font-size:15px;
-
-      background:#F8FAFC;
-
-      border:
-        1px solid
-        #E2E8F0;
-    }
-
-    .exec-kpi-label{
-
-      font-size:9px;
-
-      font-weight:700;
-
-      color:#64748B;
-
-      text-transform:uppercase;
-
-      letter-spacing:.03em;
-    }
-
-    .exec-kpi-value{
-
-      margin-top:3px;
-
-      font-size:18px;
-
-      line-height:1;
-
-      font-weight:700;
-
-      color:#0F172A;
-    }
-
-    .exec-kpi-value small{
-
-      font-size:9px;
-
-      font-weight:500;
-
-      color:#94A3B8;
-    }
-
-    .exec-kpi-meta{
-
-      margin-top:3px;
-
-      font-size:8.5px;
-
-      color:#94A3B8;
-    }
-
-    .exec-kpi-progress{
-
-      margin-top:5px;
-
-      width:100%;
-
-      height:4px;
-
-      overflow:hidden;
-
-      border-radius:8px;
-
-      background:#E2E8F0;
-    }
-
-    .exec-kpi-progress span{
-
-      display:block;
-
-      height:100%;
-
-      border-radius:8px;
-
-      background:#2563EB;
-    }
-
-    .exec-kpi.green
-    .exec-kpi-progress span{
-      background:#16A34A;
-    }
-
-    .exec-kpi.yellow
-    .exec-kpi-progress span{
-      background:#F59E0B;
-    }
-
-    .exec-kpi.red
-    .exec-kpi-progress span{
-      background:#DC2626;
-    }
-
-    /* =========================
-       MAIN EXECUTIVE GRID
-    ========================= */
-
-    .exec-grid{
-
-      display:grid;
-
-      grid-template-columns:
-        minmax(0,2fr)
-        minmax(0,1fr)
-        minmax(0,1fr);
-
-      grid-template-areas:
-
-        "overview status pic"
-
-        "pipeline rfs rfs"
-
-        "top5 top5 warning";
-
-      gap:10px;
-
-      align-items:stretch;
-    }
-
-    .exec-panel{
-
-      min-width:0;
-
-      background:#fff;
-
-      border:
-        1px solid
-        #dbe3ec;
-
-      border-radius:8px;
-
-      overflow:hidden;
-
-      box-shadow:
-        0 1px 3px
-        rgba(15,23,42,.04);
-
-      display:flex;
-      flex-direction:column;
-    }
-
-    .exec-panel.overview{
-      grid-area:overview;
-    }
-
-    .exec-panel.status{
-      grid-area:status;
-    }
-
-    .exec-panel.pic{
-      grid-area:pic;
-    }
-
-    .exec-panel.pipeline{
-      grid-area:pipeline;
-    }
-
-    .exec-panel.rfs{
-      grid-area:rfs;
-    }
-
-    .exec-panel.top5{
-      grid-area:top5;
-    }
-
-    .exec-panel.warning{
-      grid-area:warning;
-    }
-
-    .exec-panel-head{
-
-      min-height:31px;
-
-      padding:
-        8px 11px;
-
-      display:flex;
-
-      align-items:center;
-
-      gap:7px;
-
-      background:
-        linear-gradient(
-          90deg,
-          #0F5CA8,
-          #1672C8
-        );
-
-      color:#fff;
-
-      font-size:10.5px;
-
-      font-weight:700;
-
-      letter-spacing:.01em;
-    }
-
-    .exec-panel-head.warning-head{
-      background:
-        linear-gradient(
-          90deg,
-          #B91C1C,
-          #DC2626
-        );
-    }
-
-    .exec-panel-sub{
-      margin-left:auto;
-
-      font-size:8px;
-
-      font-weight:400;
-
-      opacity:.75;
-
-      white-space:nowrap;
-    }
-
-    .exec-panel-body{
-
-      flex:1;
-
-      min-height:0;
-
-      padding:9px;
-    }
-
-    /* =========================
-       TABLE
-    ========================= */
-
-    .exec-table-wrap{
-
-      height:100%;
-
-      max-height:220px;
-
-      overflow:auto;
-    }
-
-    table.exec-table{
-
-      width:100%;
-
-      border-collapse:collapse;
-
-      font-size:9.5px;
-    }
-
-    table.exec-table th{
-
-      position:sticky;
-
-      top:0;
-
-      z-index:2;
-
-      padding:6px 5px;
-
-      text-align:left;
-
-      white-space:nowrap;
-
-      background:#F4F7FB;
-
-      color:#475569;
-
-      border-bottom:
-        1px solid
-        #DCE4EE;
-
-      font-size:8px;
-
-      font-weight:700;
-
-      text-transform:uppercase;
-
-      letter-spacing:.02em;
-    }
-
-    table.exec-table td{
-
-      padding:6px 5px;
-
-      border-bottom:
-        1px solid
-        #EEF2F6;
-
-      color:#334155;
-
-      vertical-align:middle;
-    }
-
-    table.exec-table tbody tr:hover{
-      background:#F8FAFC;
-    }
-
-    .exec-project-name{
-
-      max-width:135px;
-
-      overflow:hidden;
-
-      text-overflow:ellipsis;
-
-      white-space:nowrap;
-
-      font-weight:600;
-
-      color:#0F172A;
-    }
-
-    .exec-project-pic{
-
-      margin-top:2px;
-
-      color:#94A3B8;
-
-      font-size:8px;
-    }
-
-    .exec-progress{
-
-      display:flex;
-
-      align-items:center;
-
-      gap:4px;
-    }
-
-    .exec-progress-value{
-
-      width:25px;
-
-      text-align:right;
-
-      font-size:8.5px;
-
-      font-weight:600;
-    }
-
-    .exec-progress-bg{
-
-      width:38px;
-
-      height:4px;
-
-      border-radius:8px;
-
-      overflow:hidden;
-
-      background:#E2E8F0;
-    }
-
-    .exec-progress-fill{
-
-      height:100%;
-
-      background:#2583DA;
-
-      border-radius:8px;
-    }
-
-    /* =========================
-       CHARTS
-    ========================= */
-
-    .exec-chart{
-
-      height:155px;
-
-      position:relative;
-
-      width:100%;
-    }
-
-    .exec-chart.tall{
-      height:170px;
-    }
-
-    .exec-chart canvas{
-
-      width:100% !important;
-
-      height:100% !important;
-    }
-
-    .exec-donut{
-
-      height:170px;
-
-      position:relative;
-    }
-
-    .exec-donut canvas{
-
-      width:100% !important;
-
-      height:100% !important;
-    }
-
-    .exec-donut-center{
-
-      position:absolute;
-
-      left:37%;
-
-      top:50%;
-
-      transform:
-        translate(-50%,-50%);
-
-      text-align:center;
-
-      pointer-events:none;
-    }
-
-    .exec-donut-number{
-
-      font-size:22px;
-
-      line-height:1;
-
-      font-weight:700;
-
-      color:#0F172A;
-    }
-
-    .exec-donut-label{
-
-      margin-top:2px;
-
-      font-size:8px;
-
-      color:#64748B;
-    }
-
-    /* =========================
-       EARLY WARNING
-    ========================= */
-
-    .warning-summary{
-
-      display:grid;
-
-      grid-template-columns:1fr 1fr;
-
-      gap:6px;
-
-      padding:7px;
-
-      background:#FFFBEB;
-
-      border-bottom:
-        1px solid
-        #FDE68A;
-    }
-
-    .warning-box{
-
-      padding:5px 7px;
-
-      background:#fff;
-
-      border:
-        1px solid
-        #FDE68A;
-
-      border-radius:5px;
-    }
-
-    .warning-label{
-
-      font-size:7.5px;
-
-      color:#92400E;
-
-      font-weight:700;
-
-      text-transform:uppercase;
-    }
-
-    .warning-value{
-
-      margin-top:1px;
-
-      font-size:15px;
-
-      line-height:1;
-
-      font-weight:700;
-
-      color:#78350F;
-    }
-
-    /* =========================
-       PIPELINE
-    ========================= */
-
-    .pipeline-flow{
-
-      display:grid;
-
-      grid-template-columns:
-        repeat(6,minmax(0,1fr));
-
-      gap:2px;
-
-      margin-top:1px;
-    }
-
-    .pipeline-step{
-
-      position:relative;
-
-      min-width:0;
-
-      min-height:105px;
-
-      padding:
-        9px 7px 8px;
-
-      background:#F2F7FD;
-
-      border:
-        1px solid
-        #BFD7F3;
-
-      text-align:center;
-
-      clip-path:
-        polygon(
-          0 0,
-          calc(100% - 10px) 0,
-          100% 50%,
-          calc(100% - 10px) 100%,
-          0 100%,
-          10px 50%
-        );
-    }
-
-    .pipeline-step:first-child{
-
-      clip-path:
-        polygon(
-          0 0,
-          calc(100% - 10px) 0,
-          100% 50%,
-          calc(100% - 10px) 100%,
-          0 100%
-        );
-    }
-
-    .pipeline-step:last-child{
-
-      clip-path:
-        polygon(
-          0 0,
-          100% 0,
-          100% 100%,
-          0 100%,
-          10px 50%
-        );
-    }
-
-    .pipeline-step.active{
-      background:#E8F2FE;
-
-      border-color:#93C5FD;
-    }
-
-    .pipeline-step.final{
-      background:#F0FDF4;
-
-      border-color:#86EFAC;
-    }
-
-    .pipeline-number{
-
-      width:22px;
-      height:22px;
-
-      margin:0 auto 6px;
-
-      border-radius:50%;
-
-      display:flex;
-
-      align-items:center;
-      justify-content:center;
-
-      background:#2563EB;
-
-      color:#fff;
-
-      font-size:9px;
-
-      font-weight:700;
-    }
-
-    .pipeline-step.final
-    .pipeline-number{
-      background:#16A34A;
-    }
-
-    .pipeline-name{
-
-      min-height:25px;
-
-      font-size:8px;
-
-      line-height:1.2;
-
-      font-weight:600;
-
-      color:#334155;
-    }
-
-    .pipeline-count{
-
-      margin-top:5px;
-
-      font-size:15px;
-
-      line-height:1;
-
-      font-weight:700;
-
-      color:#0F172A;
-    }
-
-    .pipeline-count-label{
-
-      margin-top:2px;
-
-      font-size:7.5px;
-
-      color:#94A3B8;
-    }
-
-    .pipeline-progress{
-
-      margin-top:6px;
-
-      height:4px;
-
-      background:#DCE5EF;
-
-      border-radius:8px;
-
-      overflow:hidden;
-    }
-
-    .pipeline-progress span{
-
-      display:block;
-
-      height:100%;
-
-      background:#2681D8;
-
-      border-radius:8px;
-    }
-
-    .pipeline-step.final
-    .pipeline-progress span{
-      background:#16A34A;
-    }
-
-    /* =========================
-       RESPONSIVE
-    ========================= */
-
+    .page-shell{ width:100%; max-width:1420px; margin:0 auto; }
+    
+    /* HERO */
+    .page-hero{ min-height:76px; display:flex; align-items:center; justify-content:space-between; gap:20px; padding:12px 18px; margin-bottom:12px; border-radius:10px; color:#fff; background: linear-gradient(115deg, #0B4F91 0%, #1769C2 58%, #2583DA 100%); box-shadow: 0 4px 12px rgba(15,23,42,.12); position:relative; overflow:hidden; }
+    .page-hero::after{ content:''; position:absolute; width:260px; height:160px; right:-70px; top:-90px; background: rgba(255,255,255,.07); transform: rotate(28deg); pointer-events:none; }
+    .page-hero-main{ position:relative; z-index:1; min-width:0; }
+    .page-hero-title{ font-size:22px; line-height:1.1; font-weight:700; letter-spacing:.01em; }
+    .page-hero-sub{ margin-top:5px; font-size:11px; color: rgba(255,255,255,.78); }
+    .page-hero-side{ display:flex; align-items:center; gap:10px; position:relative; z-index:1; }
+    .objective-box{ display:flex; align-items:center; gap:8px; padding: 7px 11px; min-width:230px; border: 1px solid rgba(255,255,255,.25); border-radius:7px; background: rgba(255,255,255,.08); }
+    .objective-icon{ width:28px; height:28px; display:flex; align-items:center; justify-content:center; border-radius:50%; border: 2px solid rgba(255,255,255,.85); font-size:15px; font-weight:700; }
+    .objective-label{ font-size:9px; font-weight:700; color: rgba(255,255,255,.92); text-transform:uppercase; letter-spacing:.05em; }
+    .objective-text{ margin-top:2px; font-size:9.5px; line-height:1.25; color: rgba(255,255,255,.78); max-width:210px; }
+    .data-date{ display:flex; flex-direction:column; gap:2px; padding: 7px 11px; border: 1px solid rgba(255,255,255,.20); border-radius:7px; min-width:110px; }
+    .data-date span{ font-size:8.5px; color: rgba(255,255,255,.65); }
+    .data-date strong{ font-size:9.5px; color:#fff; }
+
+    /* KPI */
+    .exec-kpis{ display:grid; grid-template-columns: repeat(6, minmax(0,1fr)); gap:9px; margin-bottom:12px; }
+    .exec-kpi{ min-height:72px; padding:10px 11px; display:flex; align-items:center; gap:9px; border: 1px solid #dbe3ec; border-radius:8px; background:#fff; position:relative; overflow:hidden; box-shadow: 0 1px 3px rgba(15,23,42,.04); }
+    .exec-kpi::after{ content:''; position:absolute; left:0; right:0; bottom:0; height:3px; background:#2563EB; }
+    .exec-kpi.green::after{ background:#16A34A; }
+    .exec-kpi.yellow::after{ background:#F59E0B; }
+    .exec-kpi.red::after{ background:#DC2626; }
+    .exec-kpi.gray::after{ background:#64748B; }
+    .exec-kpi-icon{ width:31px; height:31px; flex:0 0 31px; display:flex; align-items:center; justify-content:center; border-radius:7px; font-size:15px; background:#F8FAFC; border: 1px solid #E2E8F0; }
+    .exec-kpi-label{ font-size:9px; font-weight:700; color:#64748B; text-transform:uppercase; letter-spacing:.03em; }
+    .exec-kpi-value{ margin-top:3px; font-size:18px; line-height:1; font-weight:700; color:#0F172A; }
+    .exec-kpi-value small{ font-size:9px; font-weight:500; color:#94A3B8; }
+    .exec-kpi-meta{ margin-top:3px; font-size:8.5px; color:#94A3B8; }
+    .exec-kpi-progress{ margin-top:5px; width:100%; height:4px; overflow:hidden; border-radius:8px; background:#E2E8F0; }
+    .exec-kpi-progress span{ display:block; height:100%; border-radius:8px; background:#2563EB; }
+    .exec-kpi.green .exec-kpi-progress span{ background:#16A34A; }
+    .exec-kpi.yellow .exec-kpi-progress span{ background:#F59E0B; }
+    .exec-kpi.red .exec-kpi-progress span{ background:#DC2626; }
+
+    /* MAIN EXECUTIVE GRID */
+    .exec-grid{ display:grid; grid-template-columns: minmax(0,2fr) minmax(0,1fr) minmax(0,1fr); grid-template-areas: "overview status pic" "pipeline rfs rfs" "top5 top5 warning"; gap:10px; align-items:stretch; }
+    .exec-panel{ min-width:0; background:#fff; border: 1px solid #dbe3ec; border-radius:8px; overflow:hidden; box-shadow: 0 1px 3px rgba(15,23,42,.04); display:flex; flex-direction:column; }
+    .exec-panel.overview{ grid-area:overview; }
+    .exec-panel.status{ grid-area:status; }
+    .exec-panel.pic{ grid-area:pic; }
+    .exec-panel.pipeline{ grid-area:pipeline; }
+    .exec-panel.rfs{ grid-area:rfs; }
+    .exec-panel.top5{ grid-area:top5; }
+    .exec-panel.warning{ grid-area:warning; }
+    .exec-panel-head{ min-height:31px; padding: 8px 11px; display:flex; align-items:center; gap:7px; background: linear-gradient(90deg, #0F5CA8, #1672C8); color:#fff; font-size:10.5px; font-weight:700; letter-spacing:.01em; }
+    .exec-panel-head.warning-head{ background: linear-gradient(90deg, #B91C1C, #DC2626); }
+    .exec-panel-sub{ margin-left:auto; font-size:8px; font-weight:400; opacity:.75; white-space:nowrap; }
+    .exec-panel-body{ flex:1; min-height:0; padding:9px; }
+
+    /* TABLE */
+    .exec-table-wrap{ height:100%; max-height:220px; overflow:auto; }
+    table.exec-table{ width:100%; border-collapse:collapse; font-size:9.5px; }
+    table.exec-table th{ position:sticky; top:0; z-index:2; padding:6px 5px; text-align:left; white-space:nowrap; background:#F4F7FB; color:#475569; border-bottom: 1px solid #DCE4EE; font-size:8px; font-weight:700; text-transform:uppercase; letter-spacing:.02em; }
+    table.exec-table td{ padding:6px 5px; border-bottom: 1px solid #EEF2F6; color:#334155; vertical-align:middle; }
+    table.exec-table tbody tr:hover{ background:#F8FAFC; }
+    .exec-project-name{ max-width:135px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; color:#0F172A; }
+    .exec-project-pic{ margin-top:2px; color:#94A3B8; font-size:8px; }
+    .exec-progress{ display:flex; align-items:center; gap:4px; }
+    .exec-progress-value{ width:25px; text-align:right; font-size:8.5px; font-weight:600; }
+    .exec-progress-bg{ width:38px; height:4px; border-radius:8px; overflow:hidden; background:#E2E8F0; }
+    .exec-progress-fill{ height:100%; background:#2583DA; border-radius:8px; }
+
+    /* CHARTS */
+    .exec-chart{ height:155px; position:relative; width:100%; }
+    .exec-chart.tall{ height:170px; }
+    .exec-chart canvas{ width:100% !important; height:100% !important; }
+    .exec-donut{ height:170px; position:relative; }
+    .exec-donut canvas{ width:100% !important; height:100% !important; }
+    .exec-donut-center{ position:absolute; left:37%; top:50%; transform: translate(-50%,-50%); text-align:center; pointer-events:none; }
+    .exec-donut-number{ font-size:22px; line-height:1; font-weight:700; color:#0F172A; }
+    .exec-donut-label{ margin-top:2px; font-size:8px; color:#64748B; }
+
+    /* EARLY WARNING */
+    .warning-summary{ display:grid; grid-template-columns:1fr 1fr; gap:6px; padding:7px; background:#FFFBEB; border-bottom: 1px solid #FDE68A; }
+    .warning-box{ padding:5px 7px; background:#fff; border: 1px solid #FDE68A; border-radius:5px; }
+    .warning-label{ font-size:7.5px; color:#92400E; font-weight:700; text-transform:uppercase; }
+    .warning-value{ margin-top:1px; font-size:15px; line-height:1; font-weight:700; color:#78350F; }
+
+    /* PIPELINE */
+    .pipeline-flow{ display:grid; grid-template-columns: repeat(6,minmax(0,1fr)); gap:2px; margin-top:1px; }
+    .pipeline-step{ position:relative; min-width:0; min-height:105px; padding: 9px 7px 8px; background:#F2F7FD; border: 1px solid #BFD7F3; text-align:center; clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%, 10px 50%); }
+    .pipeline-step:first-child{ clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%); }
+    .pipeline-step:last-child{ clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 10px 50%); }
+    .pipeline-step.active{ background:#E8F2FE; border-color:#93C5FD; }
+    .pipeline-step.final{ background:#F0FDF4; border-color:#86EFAC; }
+    .pipeline-number{ width:22px; height:22px; margin:0 auto 6px; border-radius:50%; display:flex; align-items:center; justify-content:center; background:#2563EB; color:#fff; font-size:9px; font-weight:700; }
+    .pipeline-step.final .pipeline-number{ background:#16A34A; }
+    .pipeline-name{ min-height:25px; font-size:8px; line-height:1.2; font-weight:600; color:#334155; }
+    .pipeline-count{ margin-top:5px; font-size:15px; line-height:1; font-weight:700; color:#0F172A; }
+    .pipeline-count-label{ margin-top:2px; font-size:7.5px; color:#94A3B8; }
+    .pipeline-progress{ margin-top:6px; height:4px; background:#DCE5EF; border-radius:8px; overflow:hidden; }
+    .pipeline-progress span{ display:block; height:100%; background:#2681D8; border-radius:8px; }
+    .pipeline-step.final .pipeline-progress span{ background:#16A34A; }
+
+    /* RESPONSIVE */
     @media(max-width:1100px){
-
-      .page-hero-side{
-        display:none;
-      }
-
-      .exec-kpis{
-        grid-template-columns:
-          repeat(3,minmax(0,1fr));
-      }
-
-      .exec-grid{
-
-        grid-template-columns:
-          1fr 1fr;
-
-        grid-template-areas:
-
-          "overview overview"
-
-          "status pic"
-
-          "rfs rfs"
-
-          "pipeline pipeline"
-
-          "top5 warning";
-      }
-
+      .page-hero-side{ display:none; }
+      .exec-kpis{ grid-template-columns: repeat(3,minmax(0,1fr)); }
+      .exec-grid{ grid-template-columns: 1fr 1fr; grid-template-areas: "overview overview" "status pic" "rfs rfs" "pipeline pipeline" "top5 warning"; }
     }
-
     @media(max-width:700px){
-
-      .page-hero{
-        min-height:auto;
-      }
-
-      .page-hero-title{
-        font-size:18px;
-      }
-
-      .exec-kpis{
-        grid-template-columns:
-          repeat(2,minmax(0,1fr));
-      }
-
-      .exec-grid{
-
-        grid-template-columns:1fr;
-
-        grid-template-areas:
-
-          "overview"
-          "status"
-          "pic"
-          "rfs"
-          "pipeline"
-          "top5"
-          "warning";
-      }
-
-      .pipeline-flow{
-        grid-template-columns:
-          repeat(3,minmax(0,1fr));
-      }
-
+      .page-hero{ min-height:auto; }
+      .page-hero-title{ font-size:18px; }
+      .exec-kpis{ grid-template-columns: repeat(2,minmax(0,1fr)); }
+      .exec-grid{ grid-template-columns:1fr; grid-template-areas: "overview" "status" "pic" "rfs" "pipeline" "top5" "warning"; }
+      .pipeline-flow{ grid-template-columns: repeat(3,minmax(0,1fr)); }
     }
-
   </style>
   `;
 
-  // ------------------------------------------------------
-  // PROJECT TABLE
-  // ------------------------------------------------------
-
-  const sortedProjects =
-    [...projects].sort(
-      (a,b) =>
-        new Date(a.targetRfs || '2099-12-31') -
-        new Date(b.targetRfs || '2099-12-31')
-    );
-
+  const sortedProjects = [...projects].sort((a,b) => new Date(a.targetRfs || '2099-12-31') - new Date(b.targetRfs || '2099-12-31'));
   let overviewRows = '';
 
   sortedProjects.forEach((p, idx) => {
-
-    const sph =
-      projectSph(p);
-
-    const progress =
-      Math.max(
-        0,
-        Math.min(
-          100,
-          Number(p.progressPct) || 0
-        )
-      );
-
-    const rfs =
-      p.targetRfs
-        ? new Date(p.targetRfs)
-            .toLocaleDateString(
-              'id-ID',
-              {
-                day:'2-digit',
-                month:'short',
-                year:'numeric'
-              }
-            )
-        : '—';
+    const sph = projectSph(p);
+    const progress = Math.max(0, Math.min(100, Number(p.progressPct) || 0));
+    const rfs = p.targetRfs ? new Date(p.targetRfs).toLocaleDateString('id-ID', {day:'2-digit', month:'short', year:'numeric'}) : '—';
 
     overviewRows += `
       <tr>
-
         <td>${idx + 1}</td>
-
         <td>
-          <div
-            class="exec-project-name"
-            title="${escAttr(p.name)}">
-            ${escAttr(p.name)}
-          </div>
-
-          <div class="exec-project-pic">
-            ${escAttr(p.requestorDept || '—')}
-          </div>
+          <div class="exec-project-name" title="${escAttr(p.name)}">${escAttr(p.name)}</div>
+          <div class="exec-project-pic">${escAttr(p.requestorDept || '—')}</div>
         </td>
-
-        <td class="mono">
-          ${valToM(sph.awal)} M
-        </td>
-
+        <td class="mono">${valToM(sph.awal)} M</td>
+        <td>${escAttr(p.leadId || '—')}</td>
+        <td style="white-space:nowrap">${rfs}</td>
+        <td>${badgeStatus(getDynamicStatus(p))}</td>
         <td>
-          ${escAttr(p.leadId || '—')}
-        </td>
-
-        <td style="white-space:nowrap">
-          ${rfs}
-        </td>
-
-        <td>
-          ${badgeStatus(getDynamicStatus(p))}
-        </td>
-
-        <td>
-
           <div class="exec-progress">
-
-            <span class="exec-progress-value">
-              ${progress}%
-            </span>
-
+            <span class="exec-progress-value">${progress}%</span>
             <div class="exec-progress-bg">
-
-              <div
-                class="exec-progress-fill"
-                style="width:${progress}%">
-              </div>
-
+              <div class="exec-progress-fill" style="width:${progress}%"></div>
             </div>
-
           </div>
-
         </td>
-
       </tr>
     `;
   });
 
-  if(!overviewRows){
+  if(!overviewRows) overviewRows = `<tr><td colspan="7" style="text-align:center; padding:25px; color:#94A3B8;">Belum ada project.</td></tr>`;
 
-    overviewRows = `
-      <tr>
-        <td
-          colspan="7"
-          style="
-            text-align:center;
-            padding:25px;
-            color:#94A3B8;
-          ">
-          Belum ada project.
-        </td>
-      </tr>
-    `;
-  }
-
-  // ------------------------------------------------------
-  // EARLY WARNING
-  // ------------------------------------------------------
-
-  const warningProjects =
-    sortedProjects.filter(
-      p =>
-        ['Overdue','At Risk']
-          .includes(
-            getDynamicStatus(p)
-          )
-    );
-
+  const warningProjects = sortedProjects.filter(p => ['Overdue','At Risk'].includes(getDynamicStatus(p)));
   let warningRows = '';
 
-  warningProjects
-    .slice(0,5)
-    .forEach(p => {
-
-      const progress =
-        Number(p.progressPct) || 0;
-
-      const rfs =
-        p.targetRfs
-          ? new Date(p.targetRfs)
-              .toLocaleDateString(
-                'id-ID',
-                {
-                  day:'2-digit',
-                  month:'short'
-                }
-              )
-          : '—';
-
-      warningRows += `
-        <tr>
-
-          <td>
-            <div class="exec-project-name">
-              ${escAttr(p.name)}
-            </div>
-
-            <div class="exec-project-pic">
-              PIC: ${escAttr(p.leadId || '—')}
-            </div>
-          </td>
-
-          <td style="white-space:nowrap">
-            ${rfs}
-          </td>
-
-          <td>
-            <strong>
-              ${progress}%
-            </strong>
-          </td>
-
-          <td>
-            ${badgeStatus(
-              getDynamicStatus(p)
-            )}
-          </td>
-
-        </tr>
-      `;
-    });
-
-  if(!warningRows){
-
-    warningRows = `
+  warningProjects.slice(0,5).forEach(p => {
+    const progress = Number(p.progressPct) || 0;
+    const rfs = p.targetRfs ? new Date(p.targetRfs).toLocaleDateString('id-ID', {day:'2-digit', month:'short'}) : '—';
+    warningRows += `
       <tr>
-        <td
-          colspan="4"
-          style="
-            text-align:center;
-            padding:18px;
-            color:#15803D;
-          ">
-          ✓ Tidak ada project yang perlu perhatian
+        <td>
+          <div class="exec-project-name">${escAttr(p.name)}</div>
+          <div class="exec-project-pic">PIC: ${escAttr(p.leadId || '—')}</div>
         </td>
+        <td style="white-space:nowrap">${rfs}</td>
+        <td><strong>${progress}%</strong></td>
+        <td>${badgeStatus(getDynamicStatus(p))}</td>
       </tr>
     `;
-  }
+  });
 
-  // ------------------------------------------------------
-  // PIPELINE
-  // ------------------------------------------------------
+  if(!warningRows) warningRows = `<tr><td colspan="4" style="text-align:center; padding:18px; color:#15803D;">✓ Tidak ada project yang perlu perhatian</td></tr>`;
 
-  const pNames = [
-    'Project Identification',
-    'SPH Preparation',
-    'Vendor Selection',
-    'Negotiation',
-    'Finalization',
-    'RFS'
-  ];
-
+  const pNames = ['Project Identification', 'SPH Preparation', 'Vendor Selection', 'Negotiation', 'Finalization', 'RFS'];
   let pipelineHtml = '';
 
-  pNames.forEach(
-    (name, i) => {
+  pNames.forEach((name, i) => {
+    const n = i + 1;
+    const count = pCount[n];
+    const pct = totalProj ? Math.round((count / totalProj) * 100) : 0;
+    const activeClass = count > 0 ? 'active' : '';
+    const finalClass = n === 6 ? 'final' : '';
 
-      const n =
-        i + 1;
-
-      const count =
-        pCount[n];
-
-      const pct =
-        totalProj
-          ? Math.round(
-              (count / totalProj) * 100
-            )
-          : 0;
-
-      const activeClass =
-        count > 0
-          ? 'active'
-          : '';
-
-      const finalClass =
-        n === 6
-          ? 'final'
-          : '';
-
-      pipelineHtml += `
-        <div
-          class="
-            pipeline-step
-            ${activeClass}
-            ${finalClass}
-          ">
-
-          <div class="pipeline-number">
-            ${n}
-          </div>
-
-          <div class="pipeline-name">
-            ${name}
-          </div>
-
-          <div class="pipeline-count">
-            ${count}
-          </div>
-
-          <div class="pipeline-count-label">
-            ${count === 1 ? 'Project' : 'Projects'}
-          </div>
-
-          <div class="pipeline-progress">
-            <span
-              style="width:${pct}%">
-            </span>
-          </div>
-
-        </div>
-      `;
-    }
-  );
-
-  // ------------------------------------------------------
-  // RETURN
-  // ------------------------------------------------------
+    pipelineHtml += `
+      <div class="pipeline-step ${activeClass} ${finalClass}">
+        <div class="pipeline-number">${n}</div>
+        <div class="pipeline-name">${name}</div>
+        <div class="pipeline-count">${count}</div>
+        <div class="pipeline-count-label">${count === 1 ? 'Project' : 'Projects'}</div>
+        <div class="pipeline-progress"><span style="width:${pct}%"></span></div>
+      </div>
+    `;
+  });
 
   return dashStyles + `
-
-    <!-- KPI -->
-
     <div class="exec-kpis">
-
       <div class="exec-kpi">
-
-        <div
-          class="exec-kpi-icon"
-          style="color:#0284C7;">
-          ▣
-        </div>
-
+        <div class="exec-kpi-icon" style="color:#0284C7;">▣</div>
         <div>
-
-          <div class="exec-kpi-label">
-            Total Project
-          </div>
-
-          <div class="exec-kpi-value">
-            ${totalProj}
-          </div>
-
-          <div class="exec-kpi-meta">
-            ${activeProjects} active projects
-          </div>
-
+          <div class="exec-kpi-label">Total Project</div>
+          <div class="exec-kpi-value">${totalProj}</div>
+          <div class="exec-kpi-meta">${activeProjects} active projects</div>
         </div>
-
       </div>
-
-
       <div class="exec-kpi">
-
-        <div
-          class="exec-kpi-icon"
-          style="color:#4F46E5;">
-          ◉
-        </div>
-
+        <div class="exec-kpi-icon" style="color:#4F46E5;">◉</div>
         <div>
-
-          <div class="exec-kpi-label">
-            Total Project Value
-          </div>
-
-          <div
-            class="exec-kpi-value"
-            style="font-size:15px;">
-            Rp ${valToM(totalVal)} M
-          </div>
-
-          <div class="exec-kpi-meta">
-            Est. project value
-          </div>
-
+          <div class="exec-kpi-label">Total Project Value</div>
+          <div class="exec-kpi-value" style="font-size:15px;">Rp ${valToM(totalVal)} M</div>
+          <div class="exec-kpi-meta">Est. project value</div>
         </div>
-
       </div>
-
-
       <div class="exec-kpi green">
-
-        <div
-          class="exec-kpi-icon"
-          style="
-            color:#16A34A;
-            background:#F0FDF4;
-          ">
-          ✓
-        </div>
-
+        <div class="exec-kpi-icon" style="color:#16A34A; background:#F0FDF4;">✓</div>
         <div style="width:100%;">
-
-          <div class="exec-kpi-label">
-            On Track
-          </div>
-
-          <div class="exec-kpi-value">
-
-            ${sCount['On Track']}
-
-            <small>
-              ${getPct(sCount['On Track'])}%
-            </small>
-
-          </div>
-
-          <div class="exec-kpi-progress">
-            <span
-              style="
-                width:${getPct(sCount['On Track'])}%;
-                background:#16A34A;
-              ">
-            </span>
-          </div>
-
+          <div class="exec-kpi-label">On Track</div>
+          <div class="exec-kpi-value">${sCount['On Track']} <small>${getPct(sCount['On Track'])}%</small></div>
+          <div class="exec-kpi-progress"><span style="width:${getPct(sCount['On Track'])}%; background:#16A34A;"></span></div>
         </div>
-
       </div>
-
-
       <div class="exec-kpi yellow">
-
-        <div
-          class="exec-kpi-icon"
-          style="
-            color:#D97706;
-            background:#FFFBEB;
-          ">
-          !
-        </div>
-
+        <div class="exec-kpi-icon" style="color:#D97706; background:#FFFBEB;">!</div>
         <div style="width:100%;">
-
-          <div class="exec-kpi-label">
-            At Risk
-          </div>
-
-          <div class="exec-kpi-value">
-
-            ${atRisk}
-
-            <small
-              style="color:#D97706;">
-              ${getPct(atRisk)}%
-            </small>
-
-          </div>
-
-          <div class="exec-kpi-progress">
-            <span
-              style="
-                width:${getPct(atRisk)}%;
-                background:#F59E0B;
-              ">
-            </span>
-          </div>
-
+          <div class="exec-kpi-label">At Risk</div>
+          <div class="exec-kpi-value">${atRisk} <small style="color:#D97706;">${getPct(atRisk)}%</small></div>
+          <div class="exec-kpi-progress"><span style="width:${getPct(atRisk)}%; background:#F59E0B;"></span></div>
         </div>
-
       </div>
-
-
       <div class="exec-kpi red">
-
-        <div
-          class="exec-kpi-icon"
-          style="
-            color:#DC2626;
-            background:#FEF2F2;
-          ">
-          !
-        </div>
-
+        <div class="exec-kpi-icon" style="color:#DC2626; background:#FEF2F2;">!</div>
         <div style="width:100%;">
-
-          <div class="exec-kpi-label">
-            Overdue
-          </div>
-
-          <div class="exec-kpi-value">
-
-            ${overdue}
-
-            <small
-              style="color:#DC2626;">
-              ${getPct(overdue)}%
-            </small>
-
-          </div>
-
-          <div class="exec-kpi-progress">
-            <span
-              style="
-                width:${getPct(overdue)}%;
-                background:#DC2626;
-              ">
-            </span>
-          </div>
-
+          <div class="exec-kpi-label">Overdue</div>
+          <div class="exec-kpi-value">${overdue} <small style="color:#DC2626;">${getPct(overdue)}%</small></div>
+          <div class="exec-kpi-progress"><span style="width:${getPct(overdue)}%; background:#DC2626;"></span></div>
         </div>
-
       </div>
-
-
       <div class="exec-kpi gray">
-
-        <div
-          class="exec-kpi-icon"
-          style="
-            color:#475569;
-            background:#F8FAFC;
-          ">
-          ↗
-        </div>
-
+        <div class="exec-kpi-icon" style="color:#475569; background:#F8FAFC;">↗</div>
         <div>
-
-          <div class="exec-kpi-label">
-            Avg Efficiency
-          </div>
-
-          <div class="exec-kpi-value">
-            ${fmtPct(avgEfficiency)}
-          </div>
-
-          <div class="exec-kpi-meta">
-            ${efficiencies.length} project with data
-          </div>
-
+          <div class="exec-kpi-label">Avg Efficiency</div>
+          <div class="exec-kpi-value">${fmtPct(avgEfficiency)}</div>
+          <div class="exec-kpi-meta">${efficiencies.length} project with data</div>
         </div>
-
       </div>
-
     </div>
-
-
-    <!-- EXECUTIVE GRID -->
 
     <div class="exec-grid">
-
-      <!-- PROJECT OVERVIEW -->
-
       <div class="exec-panel overview">
-
-        <div class="exec-panel-head">
-
-          ▣
-
-          <span>
-            Project Presourcing Overview
-          </span>
-
-          <span class="exec-panel-sub">
-            ${totalProj} Projects
-          </span>
-
-        </div>
-
+        <div class="exec-panel-head">▣ <span>Project Presourcing Overview</span><span class="exec-panel-sub">${totalProj} Projects</span></div>
         <div class="exec-table-wrap">
-
           <table class="exec-table">
-
-            <thead>
-
-              <tr>
-                <th>No</th>
-                <th>Project Name</th>
-                <th>Value</th>
-                <th>PIC</th>
-                <th>Target RFS</th>
-                <th>Status</th>
-                <th>Progress</th>
-              </tr>
-
-            </thead>
-
-            <tbody>
-              ${overviewRows}
-            </tbody>
-
+            <thead><tr><th>No</th><th>Project Name</th><th>Value</th><th>PIC</th><th>Target RFS</th><th>Status</th><th>Progress</th></tr></thead>
+            <tbody>${overviewRows}</tbody>
           </table>
-
         </div>
-
       </div>
-
-
-      <!-- STATUS -->
 
       <div class="exec-panel status">
-
-        <div class="exec-panel-head">
-
-          ◉
-
-          <span>
-            Project Status
-          </span>
-
-        </div>
-
+        <div class="exec-panel-head">◉ <span>Project Status</span></div>
         <div class="exec-panel-body">
-
           <div class="exec-donut">
-
-            <canvas
-              id="chartStatus">
-            </canvas>
-
+            <canvas id="chartStatus"></canvas>
             <div class="exec-donut-center">
-
-              <div class="exec-donut-number">
-                ${totalProj}
-              </div>
-
-              <div class="exec-donut-label">
-                Projects
-              </div>
-
+              <div class="exec-donut-number">${totalProj}</div>
+              <div class="exec-donut-label">Projects</div>
             </div>
-
           </div>
-
         </div>
-
       </div>
-
-
-      <!-- PIC -->
 
       <div class="exec-panel pic">
-
-        <div class="exec-panel-head">
-
-          ▥
-
-          <span>
-            Project Value by PIC
-          </span>
-
-        </div>
-
+        <div class="exec-panel-head">▥ <span>Project Value by PIC</span></div>
         <div class="exec-panel-body">
-
-          <div class="exec-chart">
-
-            <canvas
-              id="chartPicValue">
-            </canvas>
-
-          </div>
-
+          <div class="exec-chart"><canvas id="chartPicValue"></canvas></div>
         </div>
-
       </div>
-
-
-      <!-- PIPELINE -->
 
       <div class="exec-panel pipeline">
-
-        <div class="exec-panel-head">
-
-          ⇢
-
-          <span>
-            Presourcing Progress Pipeline
-          </span>
-
-          <span class="exec-panel-sub">
-            ${activeProjects} active
-          </span>
-
-        </div>
-
+        <div class="exec-panel-head">⇢ <span>Presourcing Progress Pipeline</span><span class="exec-panel-sub">${activeProjects} active</span></div>
         <div class="exec-panel-body">
-
-          <div class="pipeline-flow">
-
-            ${pipelineHtml}
-
-          </div>
-
+          <div class="pipeline-flow">${pipelineHtml}</div>
         </div>
-
       </div>
-
-
-      <!-- RFS -->
 
       <div class="exec-panel rfs">
-
-        <div class="exec-panel-head">
-
-          ▥
-
-          <span>
-            Target RFS by Month
-          </span>
-
-        </div>
-
+        <div class="exec-panel-head">▥ <span>Target RFS by Month</span></div>
         <div class="exec-panel-body">
-
-          <div class="exec-chart">
-
-            <canvas
-              id="chartRfsMonth">
-            </canvas>
-
-          </div>
-
+          <div class="exec-chart"><canvas id="chartRfsMonth"></canvas></div>
         </div>
-
       </div>
-
-
-      <!-- TOP 5 -->
 
       <div class="exec-panel top5">
-
-        <div class="exec-panel-head">
-
-          ≡
-
-          <span>
-            Top 5 Project Value
-          </span>
-
-        </div>
-
+        <div class="exec-panel-head">≡ <span>Top 5 Project Value</span></div>
         <div class="exec-panel-body">
-
-          <div class="exec-chart">
-
-            <canvas
-              id="chartTop5">
-            </canvas>
-
-          </div>
-
+          <div class="exec-chart"><canvas id="chartTop5"></canvas></div>
         </div>
-
       </div>
-
-
-      <!-- EARLY WARNING -->
 
       <div class="exec-panel warning">
-
-        <div
-          class="
-            exec-panel-head
-            warning-head
-          ">
-
-          !
-
-          <span>
-            Early Warning
-          </span>
-
-          <span class="exec-panel-sub">
-            Need Attention
-          </span>
-
-        </div>
-
+        <div class="exec-panel-head warning-head">! <span>Early Warning</span><span class="exec-panel-sub">Need Attention</span></div>
         <div class="warning-summary">
-
-          <div class="warning-box">
-
-            <div class="warning-label">
-              Overdue
-            </div>
-
-            <div class="warning-value">
-              ${overdue}
-            </div>
-
-          </div>
-
-          <div class="warning-box">
-
-            <div class="warning-label">
-              At Risk
-            </div>
-
-            <div class="warning-value">
-              ${atRisk}
-            </div>
-
-          </div>
-
+          <div class="warning-box"><div class="warning-label">Overdue</div><div class="warning-value">${overdue}</div></div>
+          <div class="warning-box"><div class="warning-label">At Risk</div><div class="warning-value">${atRisk}</div></div>
         </div>
-
         <div class="exec-table-wrap">
-
           <table class="exec-table">
-
-            <thead>
-
-              <tr>
-                <th>Project</th>
-                <th>RFS</th>
-                <th>Progress</th>
-                <th>Status</th>
-              </tr>
-
-            </thead>
-
-            <tbody>
-              ${warningRows}
-            </tbody>
-
+            <thead><tr><th>Project</th><th>RFS</th><th>Progress</th><th>Status</th></tr></thead>
+            <tbody>${warningRows}</tbody>
           </table>
-
         </div>
-
       </div>
-
     </div>
-
   `;
 }
 
-// Global variable untuk menyimpan instance grafik agar tidak terjadi duplikasi/memory leak
 let dCharts = {}; 
 
 function renderDashboardCharts() {
     if (typeof Chart === 'undefined') return;
 
-    // ----------------------------------------------------
-    // COMMON CHART CONFIG
-    // ----------------------------------------------------
-    const chartFont = {
-        family: "'Inter', 'Segoe UI', Arial, sans-serif",
-        size: 10
-    };
-
+    const chartFont = { family: "'Inter', 'Segoe UI', Arial, sans-serif", size: 10 };
     const axisColor = '#64748b';
     const gridColor = '#eef2f7';
-    const primary = '#2563eb';
     const primarySoft = '#93c5fd';
     const dark = '#0f172a';
 
     const destroyChart = (key) => {
-        if (dCharts[key]) {
-            dCharts[key].destroy();
-            dCharts[key] = null;
-        }
+        if (dCharts[key]) { dCharts[key].destroy(); dCharts[key] = null; }
     };
+    const fmtRpM = (value) => `Rp ${(Number(value) || 0).toLocaleString('id-ID', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} M`;
 
-    const fmtRpM = (value) => {
-        const num = Number(value) || 0;
-        return `Rp ${num.toLocaleString('id-ID', {
-            minimumFractionDigits: 1,
-            maximumFractionDigits: 1
-        })} M`;
-    };
-
-    // ----------------------------------------------------
-    // 1. PROJECT STATUS — DONUT
-    // ----------------------------------------------------
+    // 1. PROJECT STATUS (DONUT)
     const statusLabels = ['On Track', 'At Risk', 'Overdue', 'Completed', 'Planned'];
     const statusColors = ['#16a34a', '#f59e0b', '#dc2626', '#2563eb', '#cbd5e1'];
-
-    const sCount = {
-        'On Track': 0,
-        'At Risk': 0,
-        'Overdue': 0,
-        'Completed': 0,
-        'Planned': 0
-    };
+    const sCount = { 'On Track': 0, 'At Risk': 0, 'Overdue': 0, 'Completed': 0, 'Planned': 0 };
 
     projects.forEach(p => {
         const status = getDynamicStatus(p);
-        if (sCount[status] !== undefined) {
-            sCount[status]++;
-        }
+        if (sCount[status] !== undefined) sCount[status]++;
     });
 
     const statusData = statusLabels.map(label => sCount[label]);
-
     const ctxStatus = document.getElementById('chartStatus');
 
     if (ctxStatus) {
         destroyChart('status');
-
         const hasStatusData = statusData.some(v => v > 0);
-
         dCharts.status = new Chart(ctxStatus, {
             type: 'doughnut',
             data: {
@@ -2417,45 +642,25 @@ function renderDashboardCharts() {
                 datasets: [{
                     data: hasStatusData ? statusData : [1],
                     backgroundColor: hasStatusData ? statusColors : ['#e2e8f0'],
-                    borderWidth: 0,
-                    hoverOffset: 4
+                    borderWidth: 0, hoverOffset: 4
                 }]
             },
             options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                cutout: '72%',
-
-                layout: {
-                    padding: 4
-                },
-
+                responsive: true, maintainAspectRatio: false, cutout: '72%',
+                layout: { padding: 4 },
                 plugins: {
                     legend: {
                         position: 'right',
-                        labels: {
-                            usePointStyle: true,
-                            pointStyle: 'circle',
-                            boxWidth: 7,
-                            boxHeight: 7,
-                            padding: 12,
-                            color: axisColor,
-                            font: chartFont
-                        }
+                        labels: { usePointStyle: true, pointStyle: 'circle', boxWidth: 7, boxHeight: 7, padding: 12, color: axisColor, font: chartFont }
                     },
-
                     tooltip: {
                         padding: 10,
                         callbacks: {
                             label: function(ctx) {
-                                if (!hasStatusData) {
-                                    return ' Belum ada data';
-                                }
-
+                                if (!hasStatusData) return ' Belum ada data';
                                 const value = ctx.raw || 0;
                                 const total = statusData.reduce((a, b) => a + b, 0);
                                 const pct = total ? Math.round((value / total) * 100) : 0;
-
                                 return ` ${ctx.label}: ${value} project (${pct}%)`;
                             }
                         }
@@ -2465,433 +670,116 @@ function renderDashboardCharts() {
         });
     }
 
-    // ----------------------------------------------------
-    // 2. TARGET RFS BY MONTH — BAR + LINE
-    // ----------------------------------------------------
+    // 2. TARGET RFS BY MONTH (MIXED BAR/LINE)
     const rfsData = {};
-
     projects.forEach(p => {
         if (!p.targetRfs) return;
-
         const d = new Date(p.targetRfs);
         if (isNaN(d.getTime())) return;
-
-        const months = [
-            'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
-            'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des'
-        ];
-
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des'];
         const key = `${months[d.getMonth()]} ${d.getFullYear()}`;
         const sortK = d.getFullYear() * 100 + d.getMonth();
 
-        if (!rfsData[key]) {
-            rfsData[key] = {
-                count: 0,
-                val: 0,
-                sortK
-            };
-        }
-
+        if (!rfsData[key]) rfsData[key] = { count: 0, val: 0, sortK };
         rfsData[key].count += 1;
         rfsData[key].val += (projectSph(p).awal || 0);
     });
 
-    const rfsKeys = Object.keys(rfsData).sort(
-        (a, b) => rfsData[a].sortK - rfsData[b].sortK
-    );
-
+    const rfsKeys = Object.keys(rfsData).sort((a, b) => rfsData[a].sortK - rfsData[b].sortK);
     const ctxRfs = document.getElementById('chartRfsMonth');
 
     if (ctxRfs) {
         destroyChart('rfsMonth');
-
         dCharts.rfsMonth = new Chart(ctxRfs, {
             type: 'bar',
-
             data: {
                 labels: rfsKeys,
-
                 datasets: [
-                    {
-                        type: 'bar',
-                        label: 'Jumlah Project',
-                        data: rfsKeys.map(k => rfsData[k].count),
-
-                        backgroundColor: primarySoft,
-                        borderColor: primarySoft,
-                        borderWidth: 0,
-
-                        borderRadius: 5,
-                        borderSkipped: false,
-
-                        barPercentage: 0.6,
-                        categoryPercentage: 0.7,
-
-                        yAxisID: 'y'
-                    },
-
-                    {
-                        type: 'line',
-                        label: 'Project Value',
-                        data: rfsKeys.map(k =>
-                            Number((rfsData[k].val / 1000000000).toFixed(1))
-                        ),
-
-                        borderColor: dark,
-                        backgroundColor: dark,
-
-                        borderWidth: 2,
-                        pointRadius: 3,
-                        pointHoverRadius: 5,
-
-                        tension: 0.3,
-                        fill: false,
-
-                        yAxisID: 'y1'
-                    }
+                    { type: 'bar', label: 'Jumlah Project', data: rfsKeys.map(k => rfsData[k].count), backgroundColor: primarySoft, borderColor: primarySoft, borderWidth: 0, borderRadius: 5, barPercentage: 0.6, categoryPercentage: 0.7, yAxisID: 'y' },
+                    { type: 'line', label: 'Project Value', data: rfsKeys.map(k => Number((rfsData[k].val / 1000000000).toFixed(1))), borderColor: dark, backgroundColor: dark, borderWidth: 2, pointRadius: 3, pointHoverRadius: 5, tension: 0.3, fill: false, yAxisID: 'y1' }
                 ]
             },
-
             options: {
-                responsive: true,
-                maintainAspectRatio: false,
-
-                interaction: {
-                    mode: 'index',
-                    intersect: false
-                },
-
+                responsive: true, maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
                 scales: {
-                    x: {
-                        grid: {
-                            display: false
-                        },
-                        border: {
-                            display: false
-                        },
-                        ticks: {
-                            color: axisColor,
-                            font: chartFont,
-                            maxRotation: 0,
-                            autoSkip: true
-                        }
-                    },
-
-                    y: {
-                        beginAtZero: true,
-
-                        ticks: {
-                            color: axisColor,
-                            font: chartFont,
-                            precision: 0,
-                            stepSize: 1
-                        },
-
-                        grid: {
-                            color: gridColor
-                        },
-
-                        border: {
-                            display: false
-                        }
-                    },
-
-                    y1: {
-                        beginAtZero: true,
-                        position: 'right',
-
-                        ticks: {
-                            color: axisColor,
-                            font: chartFont,
-                            callback: value => `Rp ${value} M`
-                        },
-
-                        grid: {
-                            drawOnChartArea: false
-                        },
-
-                        border: {
-                            display: false
-                        }
-                    }
+                    x: { grid: { display: false }, border: { display: false }, ticks: { color: axisColor, font: chartFont, maxRotation: 0, autoSkip: true } },
+                    y: { beginAtZero: true, ticks: { color: axisColor, font: chartFont, precision: 0, stepSize: 1 }, grid: { color: gridColor }, border: { display: false } },
+                    y1: { beginAtZero: true, position: 'right', ticks: { color: axisColor, font: chartFont, callback: value => `Rp ${value} M` }, grid: { drawOnChartArea: false }, border: { display: false } }
                 },
-
                 plugins: {
-                    legend: {
-                        position: 'bottom',
-
-                        labels: {
-                            usePointStyle: true,
-                            pointStyle: 'circle',
-                            boxWidth: 7,
-                            boxHeight: 7,
-                            padding: 14,
-                            color: axisColor,
-                            font: chartFont
-                        }
-                    },
-
-                    tooltip: {
-                        padding: 10,
-
-                        callbacks: {
-                            label: function(ctx) {
-                                if (ctx.dataset.label === 'Jumlah Project') {
-                                    return ` ${ctx.raw} project`;
-                                }
-
-                                return ` ${fmtRpM(ctx.raw)}`;
-                            }
-                        }
-                    }
+                    legend: { position: 'bottom', labels: { usePointStyle: true, pointStyle: 'circle', boxWidth: 7, boxHeight: 7, padding: 14, color: axisColor, font: chartFont } },
+                    tooltip: { padding: 10, callbacks: { label: function(ctx) { return ctx.dataset.label === 'Jumlah Project' ? ` ${ctx.raw} project` : ` ${fmtRpM(ctx.raw)}`; } } }
                 }
             }
         });
     }
 
-    // ----------------------------------------------------
-    // 3. TOP 5 PROJECT VALUE — HORIZONTAL BAR
-    // ----------------------------------------------------
-    // 3. Chart Top 5 Project Value
-const top5 = [...projects]
-    .filter(p => p.status !== 'lose')
-    .map(p => ({
-        name: p.name || 'Unnamed Project',
-        val: Number(((projectSph(p).awal || 0) / 1000000000).toFixed(1))
-    }))
-    .sort((a, b) => b.val - a.val)
-    .slice(0, 5);
+    // 3. TOP 5 PROJECT VALUE (HORIZONTAL BAR)
+    const top5 = [...projects]
+        .filter(p => p.status !== 'lose')
+        .map(p => ({ name: p.name || 'Unnamed Project', val: Number(((projectSph(p).awal || 0) / 1000000000).toFixed(1)) }))
+        .sort((a, b) => b.val - a.val)
+        .slice(0, 5);
 
-const ctxTop5 = document.getElementById('chartTop5');
-
-if (ctxTop5) {
-    if (dCharts.top5) dCharts.top5.destroy();
-
-    dCharts.top5 = new Chart(ctxTop5, {
-        type: 'bar',
-
-        data: {
-            labels: top5.map(t => {
-                return t.name.length > 24
-                    ? t.name.substring(0, 24) + '...'
-                    : t.name;
-            }),
-
-            datasets: [{
-                label: 'Project Value',
-
-                data: top5.map(t => t.val),
-
-                backgroundColor: '#2563EB',
-
-                borderWidth: 0,
-                borderRadius: 5,
-
-                barPercentage: 0.55,
-                categoryPercentage: 0.72
-            }]
-        },
-
-        options: {
-            indexAxis: 'y',
-
-            responsive: true,
-            maintainAspectRatio: false,
-
-            layout: {
-                padding: {
-                    left: 4,
-                    right: 10,
-                    top: 4,
-                    bottom: 2
-                }
+    const ctxTop5 = document.getElementById('chartTop5');
+    if (ctxTop5) {
+        destroyChart('top5');
+        dCharts.top5 = new Chart(ctxTop5, {
+            type: 'bar',
+            data: {
+                labels: top5.map(t => t.name.length > 24 ? t.name.substring(0, 24) + '...' : t.name),
+                datasets: [{ label: 'Project Value', data: top5.map(t => t.val), backgroundColor: '#2563EB', borderWidth: 0, borderRadius: 5, barPercentage: 0.55, categoryPercentage: 0.72 }]
             },
-
-            scales: {
-                x: {
-                    beginAtZero: true,
-
-                    grid: {
-                        color: '#EEF2F7'
-                    },
-
-                    border: {
-                        display: false
-                    },
-
-                    ticks: {
-                        color: '#94A3B8',
-
-                        font: {
-                            family: "'Space Grotesk', sans-serif",
-                            size: 9
-                        },
-
-                        callback: value => `Rp ${value} M`
-                    }
+            options: {
+                indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+                layout: { padding: { left: 4, right: 10, top: 4, bottom: 2 } },
+                scales: {
+                    x: { beginAtZero: true, grid: { color: '#EEF2F7' }, border: { display: false }, ticks: { color: '#94A3B8', font: { family: "'Space Grotesk', sans-serif", size: 9 }, callback: value => `Rp ${value} M` } },
+                    y: { grid: { display: false }, border: { display: false }, ticks: { color: '#475569', font: { family: "'Space Grotesk', sans-serif", size: 9.5, weight: '500' } } }
                 },
-
-                y: {
-                    grid: {
-                        display: false
-                    },
-
-                    border: {
-                        display: false
-                    },
-
-                    ticks: {
-                        color: '#475569',
-
-                        font: {
-                            family: "'Space Grotesk', sans-serif",
-                            size: 9.5,
-                            weight: '500'
-                        }
-                    }
-                }
-            },
-
-            plugins: {
-                legend: {
-                    display: false
-                },
-
-                tooltip: {
-                    padding: 9,
-
-                    callbacks: {
-                        label: ctx =>
-                            ` Rp ${Number(ctx.raw).toLocaleString('id-ID')} M`
-                    }
-                }
+                plugins: { legend: { display: false }, tooltip: { padding: 9, callbacks: { label: ctx => ` Rp ${Number(ctx.raw).toLocaleString('id-ID')} M` } } }
             }
-        }
-    });
-}
+        });
+    }
 
-    // ----------------------------------------------------
-    // 4. PROJECT VALUE BY PIC — HORIZONTAL BAR
-    // ----------------------------------------------------
+    // 4. PROJECT VALUE BY PIC (HORIZONTAL BAR)
     const picValData = {};
-
-    team.forEach(m => {
-        picValData[m] = 0;
-    });
-
+    team.forEach(m => picValData[m] = 0);
     projects.forEach(p => {
         if (!p.leadId) return;
-
-        if (picValData[p.leadId] === undefined) {
-            picValData[p.leadId] = 0;
-        }
-
-        picValData[p.leadId] += (
-            (projectSph(p).awal || 0) / 1000000000
-        );
+        if (picValData[p.leadId] === undefined) picValData[p.leadId] = 0;
+        picValData[p.leadId] += ((projectSph(p).awal || 0) / 1000000000);
     });
 
     const picData = Object.entries(picValData)
-        .map(([name, value]) => ({
-            name,
-            value: Number(value.toFixed(1))
-        }))
+        .map(([name, value]) => ({ name, value: Number(value.toFixed(1)) }))
         .filter(x => x.value > 0)
         .sort((a, b) => b.value - a.value);
 
     const ctxPic = document.getElementById('chartPicValue');
-
     if (ctxPic) {
         destroyChart('picVal');
-
         dCharts.picVal = new Chart(ctxPic, {
             type: 'bar',
-
             data: {
                 labels: picData.map(x => x.name),
-
-                datasets: [{
-                    label: 'Project Value',
-                    data: picData.map(x => x.value),
-
-                    backgroundColor: '#3b82f6',
-                    borderWidth: 0,
-
-                    borderRadius: 5,
-                    borderSkipped: false,
-
-                    barPercentage: 0.58,
-                    categoryPercentage: 0.72
-                }]
+                datasets: [{ label: 'Project Value', data: picData.map(x => x.value), backgroundColor: '#3b82f6', borderWidth: 0, borderRadius: 5, barPercentage: 0.58, categoryPercentage: 0.72 }]
             },
-
             options: {
-                indexAxis: 'y',
-
-                responsive: true,
-                maintainAspectRatio: false,
-
+                indexAxis: 'y', responsive: true, maintainAspectRatio: false,
                 scales: {
-                    x: {
-                        beginAtZero: true,
-
-                        grid: {
-                            color: gridColor
-                        },
-
-                        border: {
-                            display: false
-                        },
-
-                        ticks: {
-                            color: axisColor,
-                            font: chartFont,
-
-                            callback: value =>
-                                `Rp ${value} M`
-                        }
-                    },
-
-                    y: {
-                        grid: {
-                            display: false
-                        },
-
-                        border: {
-                            display: false
-                        },
-
-                        ticks: {
-                            color: '#334155',
-                            font: {
-                                ...chartFont,
-                                weight: '500'
-                            }
-                        }
-                    }
+                    x: { beginAtZero: true, grid: { color: gridColor }, border: { display: false }, ticks: { color: axisColor, font: chartFont, callback: value => `Rp ${value} M` } },
+                    y: { grid: { display: false }, border: { display: false }, ticks: { color: '#334155', font: { ...chartFont, weight: '500' } } }
                 },
-
-                plugins: {
-                    legend: {
-                        display: false
-                    },
-
-                    tooltip: {
-                        padding: 10,
-
-                        callbacks: {
-                            label: ctx =>
-                                ` ${fmtRpM(ctx.raw)}`
-                        }
-                    }
-                }
+                plugins: { legend: { display: false }, tooltip: { padding: 10, callbacks: { label: ctx => ` ${fmtRpM(ctx.raw)}` } } }
             }
         });
     }
 }
 
 // --------------------------------------------------------
-// RENDER DETAIL PROJECTS (Tabel Lengkap)
+// RENDER DETAIL PROJECTS & TEAM 
 // --------------------------------------------------------
 function renderProjects(){
   const filtered = projects.filter(p=>{
@@ -2921,9 +809,7 @@ function renderProjects(){
           <td class="num mono">${durationDays(p)} hari</td>
         </tr>
       `;
-      if (openProjectId === p.id) {
-        tbodyHtml += `<tr><td colspan="7">${renderProjectDetail(p)}</td></tr>`;
-      }
+      if (openProjectId === p.id) tbodyHtml += `<tr><td colspan="7">${renderProjectDetail(p)}</td></tr>`;
     });
   }
 
@@ -2951,13 +837,8 @@ function renderProjects(){
       </div>
       <div class="panel-body">
         <table>
-          <thead><tr>
-            <th>Project</th><th>Pemohon</th><th>Status EWS</th><th>Tahap Pipeline</th>
-            <th class="num">SPH Awal</th><th class="num">Efficiency</th><th class="num">Durasi</th>
-          </tr></thead>
-          <tbody>
-            ${tbodyHtml}
-          </tbody>
+          <thead><tr><th>Project</th><th>Pemohon</th><th>Status EWS</th><th>Tahap Pipeline</th><th class="num">SPH Awal</th><th class="num">Efficiency</th><th class="num">Durasi</th></tr></thead>
+          <tbody>${tbodyHtml}</tbody>
         </table>
       </div>
     </div>
@@ -2966,7 +847,6 @@ function renderProjects(){
 
 function renderProjectDetail(p){
   const uniq = uniquePicsInProject(p);
-  
   const docsHtml = `
     <div style="margin: 12px 0; padding: 12px; background: #FFFFFF; border: 1px dashed var(--border); border-radius: 6px;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
@@ -2976,14 +856,10 @@ function renderProjectDetail(p){
         ${p.comparison_docs && p.comparison_docs.length > 0 ? 
             p.comparison_docs.map(doc => `
                 <div style="display:flex; justify-content:space-between; font-size: 12px; padding: 6px 0; border-bottom: 1px solid var(--border-soft);">
-                    <div>
-                        <span style="font-weight:600; color:var(--text);">${escAttr(doc.vendor_name)}</span> 
-                        <span style="color:var(--text-muted);"> — Penawaran: <span class="mono">${fmtIdr(doc.offered_price)}</span></span>
-                    </div>
+                    <div><span style="font-weight:600; color:var(--text);">${escAttr(doc.vendor_name)}</span> <span style="color:var(--text-muted);"> — Penawaran: <span class="mono">${fmtIdr(doc.offered_price)}</span></span></div>
                     <a href="${doc.file_path}" target="_blank" style="color: var(--primary); text-decoration: none; font-weight:500;">Lihat File</a>
                 </div>
-            `).join('') 
-            : '<div style="font-size:11.5px; color:var(--text-muted);">Belum ada dokumen pembanding yang diunggah.</div>'
+            `).join('') : '<div style="font-size:11.5px; color:var(--text-muted);">Belum ada dokumen pembanding yang diunggah.</div>'
         }
     </div>
   `;
@@ -2998,12 +874,11 @@ function renderProjectDetail(p){
           <div>Item</div><div>Qty</div><div>UoM</div><div>Vendor</div><div class="num">SPH Awal</div><div class="num">SPH Final</div><div class="num">Efficiency</div><div>PIC</div>
         </div>
       `;
-      let itemsHtml = '';
       (boq.items || []).forEach(it => {
         const eff = p.sphMode === 'item' ? efficiencyPct(it.sphAwal, it.sphFinal) : null;
         const notesHtml = it.notes ? `<div style="font-size:11px; color:var(--text-muted); margin-top:3px;">📝 ${escAttr(it.notes)}</div>` : '';
         const picsHtml = (it.picIds || []).map(x => `<span class="pic-chip">${escAttr(x)}</span>`).join('');
-        itemsHtml += `
+        sowsHtml += `
           <div style="display:grid; grid-template-columns: 2fr 0.4fr 0.5fr 1fr 1fr 1fr 0.8fr 1.5fr; gap:8px; padding:7px 0; font-size:12.5px; border-bottom:1px solid var(--border-soft); align-items:start;">
             <div><div style="font-weight:500;">${escAttr(it.product) || '—'}</div>${notesHtml}</div>
             <div style="color:var(--text-muted);">${it.qty || '-'}</div>
@@ -3016,7 +891,6 @@ function renderProjectDetail(p){
           </div>
         `;
       });
-      sowsHtml += itemsHtml; 
     });
   });
 
@@ -3055,17 +929,9 @@ function renderTeam(){
       </div>
       <div class="panel-body">
         <table>
-          <thead><tr>
-            <th>Anggota</th><th class="num">Lead Count</th><th class="num">Support Load</th><th class="num">Win Rate</th><th class="num">Avg Efficiency</th>
-          </tr></thead>
+          <thead><tr><th>Anggota</th><th class="num">Lead Count</th><th class="num">Support Load</th><th class="num">Win Rate</th><th class="num">Avg Efficiency</th></tr></thead>
           <tbody>
-          ${rows.map(r=>`<tr>
-            <td>${escAttr(r.name)}</td>
-            <td class="num mono">${r.leadCount}</td>
-            <td class="num mono">${r.supportLoad.toFixed(2)}</td>
-            <td class="num mono">${fmtPct(r.winRate)}</td>
-            <td class="num mono">${fmtPct(r.avgEff)}</td>
-          </tr>`).join('')}
+          ${rows.map(r=>`<tr><td>${escAttr(r.name)}</td><td class="num mono">${r.leadCount}</td><td class="num mono">${r.supportLoad.toFixed(2)}</td><td class="num mono">${fmtPct(r.winRate)}</td><td class="num mono">${fmtPct(r.avgEff)}</td></tr>`).join('')}
           </tbody>
         </table>
       </div>
@@ -3073,156 +939,27 @@ function renderTeam(){
   `;
 }
 
+// ---------- Event Wirings ----------
 function wireEvents(){
-
-  document
-    .querySelectorAll('[data-tab]')
-    .forEach(el => {
-
-      el.onclick = () =>
-        switchDashboardTab(
-          el.dataset.tab
-        );
-
-    });
-
-  const fp =
-    document.getElementById('f-priority');
-
-  if(fp){
-
-    fp.value =
-      filters.priority;
-
-    fp.onchange = () => {
-
-      filters.priority =
-        fp.value;
-
-      render();
-
-    };
-  }
-
-
-  const fs =
-    document.getElementById('f-status');
-
-  if(fs){
-
-    fs.value =
-      filters.status;
-
-    fs.onchange = () => {
-
-      filters.status =
-        fs.value;
-
-      render();
-
-    };
-  }
-
-
-  document
-    .querySelectorAll('[data-open]')
-    .forEach(el => {
-
-      el.onclick = () => {
-
-        const id =
-          el.dataset.open;
-
-        openProjectId =
-          openProjectId === id
-            ? null
-            : id;
-
-        render();
-
-      };
-
-    });
-
-
-  const btnNew =
-    document.getElementById(
-      'btn-new-project'
-    );
-
-  if(btnNew){
-
-    btnNew.onclick = () =>
-      openProjectModal(null);
-
-  }
-
-
-  document
-    .querySelectorAll('[data-edit-project]')
-    .forEach(el => {
-
-      el.onclick = e => {
-
-        e.stopPropagation();
-
-        openProjectModal(
-          el.dataset.editProject
-        );
-
-      };
-
-    });
-
-
-  document
-    .querySelectorAll('[data-delete-project]')
-    .forEach(el => {
-
-      el.onclick = e => {
-
-        e.stopPropagation();
-
-        if(
-          confirm(
-            'Hapus project ini?'
-          )
-        ){
-
-          projects =
-            projects.filter(
-              p =>
-                p.id !==
-                el.dataset.deleteProject
-            );
-
-          saveAll();
-
-          render();
-
-        }
-
-      };
-
-    });
-
-
-  const btnTeam =
-    document.getElementById(
-      'btn-manage-team'
-    );
-
-  if(btnTeam){
-
-    btnTeam.onclick =
-      () => openTeamModal();
-
-  }
-
+  const fp = document.getElementById('f-priority');
+  if(fp){ fp.value=filters.priority; fp.onchange=()=>{filters.priority=fp.value; render();}; }
+  
+  const fs = document.getElementById('f-status');
+  if(fs){ fs.value=filters.status; fs.onchange=()=>{filters.status=fs.value; render();}; }
+  
+  document.querySelectorAll('[data-open]').forEach(el=> el.onclick = ()=>{ const id=el.dataset.open; openProjectId = openProjectId===id?null:id; render(); });
+  
+  const btnNew = document.getElementById('btn-new-project');
+  if(btnNew) btnNew.onclick = ()=> openProjectModal(null);
+  
+  document.querySelectorAll('[data-edit-project]').forEach(el=> el.onclick=(e)=>{ e.stopPropagation(); openProjectModal(el.dataset.editProject); });
+  document.querySelectorAll('[data-delete-project]').forEach(el=> el.onclick=(e)=>{ e.stopPropagation(); if(confirm('Hapus project ini?')){ projects = projects.filter(p=>p.id!==el.dataset.deleteProject); saveAll(); render(); } });
+  
+  const btnTeam = document.getElementById('btn-manage-team');
+  if(btnTeam) btnTeam.onclick = ()=> openTeamModal();
 }
 
 function downloadProjectReport(projectId) { window.location.href = `/api/download_report?project_id=${projectId}`; }
-
 function triggerRevisiBoq(projectId) {
     const fileInput = document.createElement('input');
     fileInput.type = 'file'; fileInput.accept = '.xlsx, .xls'; fileInput.style.display = 'none'; 
@@ -3247,26 +984,27 @@ function triggerRevisiBoq(projectId) {
     fileInput.click();
 }
 
+// ---------- Modals ----------
 function blankProject(){
   return {
-    id: uid('proj'), name:'', requestorName:'', requestorDept:'',
-    priority:'Medium', status:'ongoing', leadId: team[0]||'',
-    sphMode:'item', projectSphAwal:null, projectSphFinal:null,
-    createdAt: todayStr(), closedAt:null, targetRfs: '', pipelineStage: '1 - Project Identification', progressPct: 0,
-    comparison_docs: [],
+    id: uid('proj'), name:'', requestorName:'', requestorDept:'', priority:'Medium', status:'ongoing', leadId: team[0]||'', sphMode:'item', projectSphAwal:null, projectSphFinal:null,
+    createdAt: todayStr(), closedAt:null, targetRfs: '', pipelineStage: '1 - Project Identification', progressPct: 0, comparison_docs: [],
     sows:[{ id:uid('sow'), name:'', boqs:[{ id:uid('boq'), name:'', items:[{ id:uid('item'), product:'', qty:1, vendor:'', notes:'', picIds:[], sphAwal:null, sphFinal:null }] }] }]
   };
 }
+
 function openProjectModal(id){
   modalScroll = 0; 
   const existing = id ? JSON.parse(JSON.stringify(projects.find(p=>p.id===id))) : blankProject();
   modal = { type:'project', data: existing, isNew: !id };
   render();
 }
+
 function openTeamModal(){ 
   modalScroll = 0; 
   modal = { type:'team', data:{ names: team.join(', ') } }; render(); 
 }
+
 function renderModal(){
   let root = document.getElementById('modal-root');
   if(!root){ root = document.createElement('div'); root.id='modal-root'; document.body.appendChild(root); }
@@ -3291,7 +1029,6 @@ function projectModalHtml(d, isNew){
           <div class="field"><label>Nama pemohon (SA)</label><input id="m-req-name" value="${escAttr(d.requestorName)}"></div>
           <div class="field"><label>Departemen</label><input id="m-req-dept" value="${escAttr(d.requestorDept)}"></div>
         </div>
-        
         <div class="grid3" style="background: #f8f9fa; padding: 12px; border-radius: 6px; margin-bottom: 12px; border: 1px dashed #ced4da;">
            <div class="field" style="margin:0;"><label>Target RFS</label><input type="date" id="m-target-rfs" value="${escAttr(d.targetRfs)}"></div>
            <div class="field" style="margin:0;"><label>Tahap Pipeline</label>
@@ -3306,29 +1043,12 @@ function projectModalHtml(d, isNew){
            </div>
            <div class="field" style="margin:0;"><label>Progress (%)</label><input type="number" id="m-progress" min="0" max="100" value="${d.progressPct || 0}"></div>
         </div>
-
         <div class="grid3">
-          <div class="field"><label>Prioritas</label>
-            <select id="m-priority">${['Medium','High','Urgent'].map(x=>`<option ${d.priority===x?'selected':''}>${x}</option>`).join('')}</select>
-          </div>
-          <div class="field"><label>Status (Tutup Project)</label>
-            <select id="m-status">
-              <option value="ongoing" ${d.status==='ongoing'?'selected':''}>Berjalan</option>
-              <option value="win" ${d.status==='win'?'selected':''}>Menang (Win)</option>
-              <option value="lose" ${d.status==='lose'?'selected':''}>Kalah (Lose)</option>
-            </select>
-          </div>
-          <div class="field"><label>Lead Presource</label>
-            <select id="m-lead">${team.map(t=>`<option ${d.leadId===t?'selected':''}>${escAttr(t)}</option>`).join('')}</select>
-          </div>
+          <div class="field"><label>Prioritas</label><select id="m-priority">${['Medium','High','Urgent'].map(x=>`<option ${d.priority===x?'selected':''}>${x}</option>`).join('')}</select></div>
+          <div class="field"><label>Status (Tutup Project)</label><select id="m-status"><option value="ongoing" ${d.status==='ongoing'?'selected':''}>Berjalan</option><option value="win" ${d.status==='win'?'selected':''}>Menang (Win)</option><option value="lose" ${d.status==='lose'?'selected':''}>Kalah (Lose)</option></select></div>
+          <div class="field"><label>Lead Presource</label><select id="m-lead">${team.map(t=>`<option ${d.leadId===t?'selected':''}>${escAttr(t)}</option>`).join('')}</select></div>
         </div>
-        
-        <div class="field"><label>Mode SPH</label>
-          <select id="m-sphmode">
-            <option value="item" ${d.sphMode==='item'?'selected':''}>Per item/produk</option>
-            <option value="project" ${d.sphMode==='project'?'selected':''}>Total project saja</option>
-          </select>
-        </div>
+        <div class="field"><label>Mode SPH</label><select id="m-sphmode"><option value="item" ${d.sphMode==='item'?'selected':''}>Per item/produk</option><option value="project" ${d.sphMode==='project'?'selected':''}>Total project saja</option></select></div>
         <div id="m-project-sph" style="${d.sphMode==='project'?'':'display:none'}">
           <div class="grid2">
             <div class="field"><label>SPH Awal (total)</label><input type="number" id="m-proj-awal" value="${d.projectSphAwal??''}"></div>
@@ -3338,30 +1058,13 @@ function projectModalHtml(d, isNew){
         <div id="sows-container">${d.sows.map((sow,si)=>sowBlockHtml(sow,si)).join('')}</div>
         <button class="mini-btn" id="m-add-sow" type="button">+ Tambah SoW</button>
       </div>
-      <div class="modal-ft">
-        <button class="btn-ghost" id="m-cancel" type="button">Batal</button>
-        <button class="btn-primary" id="m-save" type="button">Simpan</button>
-      </div>
+      <div class="modal-ft"><button class="btn-ghost" id="m-cancel" type="button">Batal</button><button class="btn-primary" id="m-save" type="button">Simpan</button></div>
     </div>
   </div>`;
 }
 
-function sowBlockHtml(sow, si){
-  return `<div class="sow-block" data-sow-idx="${si}">
-    <div class="field"><label>Scope of Work</label><input class="sow-name" data-si="${si}" value="${escAttr(sow.name)}"></div>
-    ${sow.boqs.map((boq,bi)=>boqBlockHtml(boq,si,bi)).join('')}
-    <button class="mini-btn" data-add-boq="${si}" type="button">+ Tambah BoQ</button>
-    <button class="mini-btn danger" data-del-sow="${si}" type="button" style="float:right;">Hapus SoW</button>
-  </div>`;
-}
-function boqBlockHtml(boq, si, bi){
-  return `<div class="boq-block" data-boq-idx="${bi}">
-    <div class="field"><label>Bill of Quantity</label><input class="boq-name" data-si="${si}" data-bi="${bi}" value="${escAttr(boq.name)}"></div>
-    ${boq.items.map((it,ii)=>itemBlockHtml(it,si,bi,ii)).join('')}
-    <button class="mini-btn" data-add-item="${si}:${bi}" type="button">+ Tambah item/produk</button>
-    <button class="mini-btn danger" data-del-boq="${si}:${bi}" type="button" style="float:right;">Hapus BoQ</button>
-  </div>`;
-}
+function sowBlockHtml(sow, si){ return `<div class="sow-block" data-sow-idx="${si}"><div class="field"><label>Scope of Work</label><input class="sow-name" data-si="${si}" value="${escAttr(sow.name)}"></div>${sow.boqs.map((boq,bi)=>boqBlockHtml(boq,si,bi)).join('')}<button class="mini-btn" data-add-boq="${si}" type="button">+ Tambah BoQ</button><button class="mini-btn danger" data-del-sow="${si}" type="button" style="float:right;">Hapus SoW</button></div>`; }
+function boqBlockHtml(boq, si, bi){ return `<div class="boq-block" data-boq-idx="${bi}"><div class="field"><label>Bill of Quantity</label><input class="boq-name" data-si="${si}" data-bi="${bi}" value="${escAttr(boq.name)}"></div>${boq.items.map((it,ii)=>itemBlockHtml(it,si,bi,ii)).join('')}<button class="mini-btn" data-add-item="${si}:${bi}" type="button">+ Tambah item/produk</button><button class="mini-btn danger" data-del-boq="${si}:${bi}" type="button" style="float:right;">Hapus BoQ</button></div>`; }
 function itemBlockHtml(it, si, bi, ii){
   return `<div class="item-block" data-item-idx="${ii}">
     <div style="display:grid; grid-template-columns: 2fr 0.4fr 0.6fr 1.5fr; gap:12px; margin-bottom:12px;">
@@ -3377,12 +1080,8 @@ function itemBlockHtml(it, si, bi, ii){
     </div>
   </div>`;
 }
-function teamModalHtml(d){
-  return `<div class="overlay" id="ov" style="z-index: 100;"><div class="modal" style="max-width:480px;"><div class="modal-hd"><h3>Kelola tim</h3><button class="mini-btn" id="m-close">Tutup</button></div>
-    <div class="modal-body"><textarea id="m-team-names" rows="4">${escAttr(d.names)}</textarea></div>
-    <div class="modal-ft"><button class="btn-ghost" id="m-cancel">Batal</button><button class="btn-primary" id="m-save-team">Simpan</button></div>
-  </div></div>`;
-}
+
+function teamModalHtml(d){ return `<div class="overlay" id="ov" style="z-index: 100;"><div class="modal" style="max-width:480px;"><div class="modal-hd"><h3>Kelola tim</h3><button class="mini-btn" id="m-close">Tutup</button></div><div class="modal-body"><textarea id="m-team-names" rows="4">${escAttr(d.names)}</textarea></div><div class="modal-ft"><button class="btn-ghost" id="m-cancel">Batal</button><button class="btn-primary" id="m-save-team">Simpan</button></div></div></div>`; }
 
 function syncModalData() {
   if(!modal || modal.type !== 'project') return;
@@ -3419,27 +1118,19 @@ function wireModalEvents(){
     if(sBtn) sBtn.onclick = ()=>{ team = val('m-team-names').split(',').map(s=>s.trim()).filter(Boolean); modal=null; render(); saveAll(); };
     return;
   }
+  
   const sphmode = document.getElementById('m-sphmode');
   if(sphmode) sphmode.onchange = ()=>{ syncModalData(); modal.data.sphMode = sphmode.value; render(); };
 
-  document.getElementById('m-add-sow').onclick = ()=>{
-    syncModalData(); modal.data.sows.push({id:uid('sow'), name:'', boqs:[{id:uid('boq'), name:'', items:[{id:uid('item'), product:'', qty:1, vendor:'', picIds:[], sphAwal:null, sphFinal:null}]}]}); render();
-  };
+  document.getElementById('m-add-sow').onclick = ()=>{ syncModalData(); modal.data.sows.push({id:uid('sow'), name:'', boqs:[{id:uid('boq'), name:'', items:[{id:uid('item'), product:'', qty:1, vendor:'', picIds:[], sphAwal:null, sphFinal:null}]}]}); render(); };
   document.querySelectorAll('[data-add-boq]').forEach(el=> el.onclick=()=>{ syncModalData(); modal.data.sows[+el.dataset.addBoq].boqs.push({id:uid('boq'), name:'', items:[{id:uid('item'), product:'', qty:1, vendor:'', picIds:[], sphAwal:null, sphFinal:null}]}); render(); });
   document.querySelectorAll('[data-add-item]').forEach(el=>{ const [si,bi] = el.dataset.addItem.split(':').map(Number); el.onclick = ()=>{ syncModalData(); modal.data.sows[si].boqs[bi].items.push({id:uid('item'), product:'', qty:1, vendor:'', picIds:[], sphAwal:null, sphFinal:null}); render(); }; });
   document.querySelectorAll('[data-del-sow]').forEach(el=> el.onclick=()=>{ syncModalData(); modal.data.sows.splice(+el.dataset.delSow,1); render(); });
   document.querySelectorAll('[data-del-boq]').forEach(el=>{ const [si,bi] = el.dataset.delBoq.split(':').map(Number); el.onclick=()=>{ syncModalData(); modal.data.sows[si].boqs.splice(bi,1); render(); }; });
   document.querySelectorAll('[data-del-item]').forEach(el=>{ const [si,bi,ii] = el.dataset.delItem.split(':').map(Number); el.onclick=()=>{ syncModalData(); modal.data.sows[si].boqs[bi].items.splice(ii,1); render(); }; });
-  document.querySelectorAll('[data-pic]').forEach(el=>{
-    const [si,bi,ii,name] = el.dataset.pic.split(':');
-    el.onclick = ()=>{ syncModalData(); const arr = modal.data.sows[+si].boqs[+bi].items[+ii].picIds; const idx = arr.indexOf(name); if(idx>=0) arr.splice(idx,1); else arr.push(name); render(); };
-  });
+  document.querySelectorAll('[data-pic]').forEach(el=>{ const [si,bi,ii,name] = el.dataset.pic.split(':'); el.onclick = ()=>{ syncModalData(); const arr = modal.data.sows[+si].boqs[+bi].items[+ii].picIds; const idx = arr.indexOf(name); if(idx>=0) arr.splice(idx,1); else arr.push(name); render(); }; });
 
-  document.getElementById('m-save').onclick = ()=>{
-    syncModalData(); const d = modal.data; const idx = projects.findIndex(p=>p.id===d.id);
-    if(idx>=0) projects[idx]=d; else projects.push(d);
-    document.getElementById('modal-root').innerHTML = ''; modal = null; render(); saveAll();
-  };
+  document.getElementById('m-save').onclick = ()=>{ syncModalData(); const d = modal.data; const idx = projects.findIndex(p=>p.id===d.id); if(idx>=0) projects[idx]=d; else projects.push(d); document.getElementById('modal-root').innerHTML = ''; modal = null; render(); saveAll(); };
 }
 
 function val(id){ const el=document.getElementById(id); return el?el.value:''; }
@@ -3473,9 +1164,7 @@ async function submitUploadPembanding(projectId) {
     const price = document.getElementById('up-vendor-price').value;
     const file = document.getElementById('up-vendor-file').files[0];
     if (!name || !price || !file) { alert("Semua kolom wajib diisi!"); return; }
-    const formData = new FormData();
-    formData.append('ticket_id', projectId); formData.append('vendor_name', name);
-    formData.append('offered_price', price); formData.append('file', file);
+    const formData = new FormData(); formData.append('ticket_id', projectId); formData.append('vendor_name', name); formData.append('offered_price', price); formData.append('file', file);
     document.body.style.cursor = 'wait';
     try {
         const res = await fetch('/api/upload_comparison', { method: 'POST', body: formData });
