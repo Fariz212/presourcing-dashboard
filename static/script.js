@@ -1416,6 +1416,454 @@ function showRevisionPreview(
         file;
 }
 
+function showRevisionPreview(
+    projectId,
+    file,
+    data
+) {
+
+    const s =
+        data.summary;
+
+    const addedHtml =
+        data.added.length
+            ? data.added.map(
+                item => `
+                    <div class="revision-row added">
+
+                        <div class="revision-mark">
+                            +
+                        </div>
+
+                        <div>
+
+                            <strong>
+                                ${escAttr(
+                                    item.description
+                                )}
+                            </strong>
+
+                            <div class="revision-meta">
+                                ${item.qty || 0}
+                                ${escAttr(item.uom || '')}
+                                ${item.vendor
+                                    ? ` · ${escAttr(item.vendor)}`
+                                    : ''}
+                            </div>
+
+                        </div>
+
+                    </div>
+                `
+            ).join('')
+            : `
+                <div class="revision-empty">
+                    Tidak ada item baru.
+                </div>
+            `;
+
+
+    const updatedHtml =
+        data.updated.length
+            ? data.updated.map(
+                item => {
+
+                    const changeText =
+                        Object.entries(
+                            item.changes
+                        ).map(
+                            ([key, values]) => `
+                                <span>
+                                    <b>${key}</b>:
+                                    ${escAttr(
+                                        String(values[0])
+                                    )}
+                                    →
+                                    ${escAttr(
+                                        String(values[1])
+                                    )}
+                                </span>
+                            `
+                        ).join('<br>');
+
+                    return `
+                        <div class="revision-row updated">
+
+                            <div class="revision-mark">
+                                ~
+                            </div>
+
+                            <div>
+
+                                <strong>
+                                    ${escAttr(
+                                        item.description
+                                    )}
+                                </strong>
+
+                                <div class="revision-meta">
+                                    ${changeText}
+                                </div>
+
+                            </div>
+
+                        </div>
+                    `;
+                }
+            ).join('')
+            : `
+                <div class="revision-empty">
+                    Tidak ada item yang berubah.
+                </div>
+            `;
+
+
+    const removedHtml =
+        data.removed.length
+            ? data.removed.map(
+                item => `
+                    <div class="revision-row removed">
+
+                        <div class="revision-mark">
+                            −
+                        </div>
+
+                        <div>
+
+                            <strong>
+                                ${escAttr(
+                                    item.description
+                                )}
+                            </strong>
+
+                            <div class="revision-meta">
+                                Item ini akan dihapus dari BoQ.
+                            </div>
+
+                        </div>
+
+                    </div>
+                `
+            ).join('')
+            : `
+                <div class="revision-empty">
+                    Tidak ada item yang dihapus.
+                </div>
+            `;
+
+
+    const modal =
+        document.createElement('div');
+
+    modal.id =
+        'revision-preview-modal';
+
+    modal.className =
+        'overlay';
+
+    modal.style.zIndex =
+        '110';
+
+
+    modal.innerHTML = `
+
+        <div
+            class="modal"
+            style="
+                max-width:780px;
+                max-height:90vh;
+            "
+        >
+
+            <div class="modal-hd">
+
+                <div>
+
+                    <h3>
+                        Review Revisi BoQ
+                    </h3>
+
+                    <div
+                        style="
+                            margin-top:3px;
+                            font-size:10px;
+                            color:#94A3B8;
+                        "
+                    >
+
+                        ${escAttr(file.name)}
+
+                    </div>
+
+                </div>
+
+                <button
+                    class="mini-btn"
+                    onclick="closeRevisionPreview()"
+                >
+                    Tutup
+                </button>
+
+            </div>
+
+
+            <div class="modal-body">
+
+                <div
+                    style="
+                        padding:12px;
+                        background:#F8FAFC;
+                        border:1px solid #E2E8F0;
+                        border-radius:7px;
+                        margin-bottom:14px;
+                    "
+                >
+
+                    <div
+                        style="
+                            font-size:10px;
+                            color:#64748B;
+                            margin-bottom:8px;
+                        "
+                    >
+                        Perubahan yang akan diterapkan
+                    </div>
+
+
+                    <div
+                        style="
+                            display:grid;
+                            grid-template-columns:
+                                repeat(4,1fr);
+                            gap:7px;
+                        "
+                    >
+
+                        ${revisionSummaryCard(
+                            '+',
+                            s.added,
+                            'Added',
+                            '#15803D',
+                            '#F0FDF4'
+                        )}
+
+                        ${revisionSummaryCard(
+                            '~',
+                            s.updated,
+                            'Updated',
+                            '#2563EB',
+                            '#EFF6FF'
+                        )}
+
+                        ${revisionSummaryCard(
+                            '−',
+                            s.removed,
+                            'Removed',
+                            '#DC2626',
+                            '#FEF2F2'
+                        )}
+
+                        ${revisionSummaryCard(
+                            '=',
+                            s.unchanged,
+                            'Unchanged',
+                            '#64748B',
+                            '#F8FAFC'
+                        )}
+
+                    </div>
+
+                </div>
+
+
+                <div class="revision-section">
+
+                    <div class="revision-section-title added-title">
+                        + Added (${s.added})
+                    </div>
+
+                    ${addedHtml}
+
+                </div>
+
+
+                <div class="revision-section">
+
+                    <div class="revision-section-title updated-title">
+                        ~ Updated (${s.updated})
+                    </div>
+
+                    ${updatedHtml}
+
+                </div>
+
+
+                <div class="revision-section">
+
+                    <div class="revision-section-title removed-title">
+                        − Removed (${s.removed})
+                    </div>
+
+                    ${removedHtml}
+
+                </div>
+
+            </div>
+
+
+            <div class="modal-ft">
+
+                <button
+                    class="btn-ghost"
+                    onclick="closeRevisionPreview()"
+                >
+                    Batal
+                </button>
+
+                <button
+                    class="btn-primary"
+                    onclick="confirmRevisionBoq(
+                        '${projectId}'
+                    )"
+                >
+                    Confirm &amp; Apply Revision
+                </button>
+
+            </div>
+
+        </div>
+    `;
+
+
+    document.body.appendChild(
+        modal
+    );
+
+    window.pendingRevisionFile =
+        file;
+}
+
+function closeRevisionPreview() {
+
+    const modal =
+        document.getElementById(
+            'revision-preview-modal'
+        );
+
+    if(modal){
+        modal.remove();
+    }
+
+    window.pendingRevisionFile =
+        null;
+}
+
+async function confirmRevisionBoq(
+    projectId
+) {
+
+    const file =
+        window.pendingRevisionFile;
+
+    if(!file){
+        alert(
+            'File revision tidak ditemukan.'
+        );
+        return;
+    }
+
+
+    const formData =
+        new FormData();
+
+    formData.append(
+        'file',
+        file
+    );
+
+    formData.append(
+        'ticket_id',
+        projectId
+    );
+
+
+    const btn =
+        document.querySelector(
+            '#revision-preview-modal .btn-primary'
+        );
+
+    if(btn){
+        btn.disabled = true;
+        btn.innerText =
+            'Applying revision...';
+    }
+
+
+    try {
+
+        const res =
+            await fetch(
+                '/api/revisi_boq',
+                {
+                    method:'POST',
+                    body:formData
+                }
+            );
+
+        const result =
+            await res.json();
+
+
+        if(
+            res.ok &&
+            result.success
+        ){
+
+            closeRevisionPreview();
+
+            alert(
+                'BoQ berhasil direvisi.'
+            );
+
+            loadAll();
+
+        }
+        else {
+
+            alert(
+                `Gagal menerapkan revisi: ${
+                    result.message || ''
+                }`
+            );
+
+            if(btn){
+                btn.disabled = false;
+                btn.innerText =
+                    'Confirm & Apply Revision';
+            }
+
+        }
+
+    }
+    catch(error){
+
+        console.error(
+            error
+        );
+
+        alert(
+            'Terjadi kesalahan saat menerapkan revisi.'
+        );
+
+        if(btn){
+            btn.disabled = false;
+            btn.innerText =
+                'Confirm & Apply Revision';
+        }
+
+    }
+}
+
 // ---------- Modals ----------
 function blankProject(){
   return {
@@ -1888,18 +2336,72 @@ function projectModalHtml(d, isNew){
           </div>
 
 
-          <div class="add-row">
+          <div
+  style="
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:8px;
+    margin-top:8px;
+  "
+>
 
-            <button
-              class="mini-btn form-add-btn"
-              id="m-add-sow"
-              type="button">
+  <div
+    style="
+      display:flex;
+      gap:6px;
+      flex-wrap:wrap;
+    "
+  >
 
-              + Tambah Scope of Work
+    <button
+      class="mini-btn form-add-btn"
+      id="m-add-sow"
+      type="button">
 
-            </button>
+      + Tambah Scope of Work
 
-          </div>
+    </button>
+
+    <button
+      class="mini-btn"
+      id="m-import-boq"
+      type="button"
+      style="
+        color:#1458A6;
+        border-color:#93C5FD;
+        background:#EFF6FF;
+      ">
+
+      📥 Import Excel
+
+    </button>
+
+    <input
+      id="m-import-boq-file"
+      type="file"
+      accept=".xlsx,.xls"
+      style="display:none;">
+
+  </div>
+
+  <div
+    style="
+      font-size:9px;
+      color:#94A3B8;
+    "
+  >
+
+    Template BoQ standard
+
+  </div>
+
+</div>
+
+<div
+  id="m-import-preview"
+  style="margin-top:8px;"
+></div>
 
         </div>
 
@@ -2355,6 +2857,397 @@ function wireModalEvents(){
   }
   
   const sphmode = document.getElementById('m-sphmode');
+    // =====================================================
+  // IMPORT EXCEL BOQ - NEW PROJECT
+  // =====================================================
+
+  const importBtn =
+    document.getElementById(
+      'm-import-boq'
+    );
+
+  const importFile =
+    document.getElementById(
+      'm-import-boq-file'
+    );
+
+  if(importBtn && importFile){
+
+    importBtn.onclick = () =>
+      importFile.click();
+
+
+    importFile.onchange = async () => {
+
+      const file =
+        importFile.files[0];
+
+      if(!file) return;
+
+
+      const previewBox =
+        document.getElementById(
+          'm-import-preview'
+        );
+
+
+      previewBox.innerHTML = `
+        <div
+          style="
+            padding:9px 10px;
+            background:#F8FAFC;
+            border:1px solid #E2E8F0;
+            border-radius:6px;
+            font-size:9.5px;
+            color:#64748B;
+          "
+        >
+          ⏳ Membaca ${escAttr(file.name)}...
+        </div>
+      `;
+
+
+      const formData =
+        new FormData();
+
+      formData.append(
+        'file',
+        file
+      );
+
+
+      try{
+
+        const response =
+          await fetch(
+            '/api/project_import_boq/preview',
+            {
+              method:'POST',
+              body:formData
+            }
+          );
+
+
+        const result =
+          await response.json();
+
+
+        if(
+          !response.ok ||
+          !result.success
+        ){
+
+          previewBox.innerHTML = `
+            <div
+              style="
+                padding:9px 10px;
+                background:#FEF2F2;
+                border:1px solid #FECACA;
+                border-radius:6px;
+                color:#B91C1C;
+                font-size:9.5px;
+              "
+            >
+              ❌ ${escAttr(
+                result.message ||
+                'Gagal membaca file.'
+              )}
+            </div>
+          `;
+
+          return;
+        }
+
+
+        window.pendingProjectBoqImport =
+          result.data;
+
+
+        const s =
+          result.data.summary;
+
+        const issueHtml =
+          result.data.issues.length
+            ? `
+              <div
+                style="
+                  margin-top:7px;
+                  padding:7px;
+                  background:#FFFBEB;
+                  border:1px solid #FDE68A;
+                  border-radius:5px;
+                  font-size:9px;
+                  color:#92400E;
+                "
+              >
+
+                ${result.data.issues
+                  .slice(0,5)
+                  .map(issue => `
+                    <div>
+                      Row ${issue.row}:
+                      ${escAttr(
+                        issue.message
+                      )}
+                    </div>
+                  `)
+                  .join('')}
+
+                ${
+                  result.data.issues.length > 5
+                    ? `
+                      <div
+                        style="
+                          margin-top:3px;
+                          color:#A16207;
+                        "
+                      >
+                        +
+                        ${
+                          result.data.issues.length - 5
+                        }
+                        issue lainnya
+                      </div>
+                    `
+                    : ''
+                }
+
+              </div>
+            `
+            : '';
+
+
+        previewBox.innerHTML = `
+
+          <div
+            style="
+              padding:9px;
+              background:#F0FDF4;
+              border:1px solid #BBF7D0;
+              border-radius:6px;
+            "
+          >
+
+            <div
+              style="
+                display:flex;
+                align-items:center;
+                justify-content:space-between;
+                gap:8px;
+              "
+            >
+
+              <div>
+
+                <div
+                  style="
+                    font-size:10px;
+                    font-weight:700;
+                    color:#166534;
+                  "
+                >
+                  ✓ Excel siap di-import
+                </div>
+
+                <div
+                  style="
+                    margin-top:2px;
+                    font-size:8.5px;
+                    color:#64748B;
+                  "
+                >
+                  ${escAttr(file.name)}
+                </div>
+
+              </div>
+
+              <button
+                class="mini-btn"
+                id="m-apply-import"
+                type="button"
+                style="
+                  background:#16A34A;
+                  color:#FFFFFF;
+                  border-color:#16A34A;
+                  font-weight:600;
+                "
+              >
+                Import ke Project
+              </button>
+
+            </div>
+
+
+            <div
+              style="
+                display:grid;
+                grid-template-columns:
+                  repeat(4,1fr);
+                gap:5px;
+                margin-top:7px;
+              "
+            >
+
+              <div>
+                <strong
+                  style="
+                    display:block;
+                    font-size:14px;
+                    color:#0F172A;
+                  "
+                >
+                  ${s.items}
+                </strong>
+                <span
+                  style="
+                    font-size:8px;
+                    color:#64748B;
+                  "
+                >
+                  Items
+                </span>
+              </div>
+
+              <div>
+                <strong
+                  style="
+                    display:block;
+                    font-size:14px;
+                    color:#0F172A;
+                  "
+                >
+                  ${s.sows}
+                </strong>
+                <span
+                  style="
+                    font-size:8px;
+                    color:#64748B;
+                  "
+                >
+                  Scope
+                </span>
+              </div>
+
+              <div>
+                <strong
+                  style="
+                    display:block;
+                    font-size:14px;
+                    color:#0F172A;
+                  "
+                >
+                  ${s.boqs}
+                </strong>
+                <span
+                  style="
+                    font-size:8px;
+                    color:#64748B;
+                  "
+                >
+                  BoQ
+                </span>
+              </div>
+
+              <div>
+                <strong
+                  style="
+                    display:block;
+                    font-size:14px;
+                    color:${s.errors ? '#DC2626' : '#15803D'};
+                  "
+                >
+                  ${s.errors}
+                </strong>
+                <span
+                  style="
+                    font-size:8px;
+                    color:#64748B;
+                  "
+                >
+                  Errors
+                </span>
+              </div>
+
+            </div>
+
+            ${issueHtml}
+
+          </div>
+
+        `;
+
+
+        const applyBtn =
+          document.getElementById(
+            'm-apply-import'
+          );
+
+
+        if(applyBtn){
+
+          applyBtn.onclick = () => {
+
+            if(
+              result.data.has_errors
+            ){
+
+              alert(
+                'Masih ada error pada Excel. ' +
+                'Perbaiki file terlebih dahulu.'
+              );
+
+              return;
+            }
+
+
+            syncModalData();
+
+
+            modal.data.sows =
+              JSON.parse(
+                JSON.stringify(
+                  result.data.sows
+                )
+              );
+
+
+            window.pendingProjectBoqImport =
+              null;
+
+            render();
+
+          };
+
+        }
+
+      }
+      catch(error){
+
+        console.error(
+          'Import BoQ error:',
+          error
+        );
+
+        previewBox.innerHTML = `
+          <div
+            style="
+              padding:9px;
+              background:#FEF2F2;
+              border:1px solid #FECACA;
+              color:#B91C1C;
+              border-radius:6px;
+              font-size:9.5px;
+            "
+          >
+            ❌ Gagal menghubungi server.
+          </div>
+        `;
+
+      }
+
+    };
+
+  }
   if(sphmode) sphmode.onchange = ()=>{ syncModalData(); modal.data.sphMode = sphmode.value; render(); };
 
   document.getElementById('m-add-sow').onclick = ()=>{ syncModalData(); modal.data.sows.push({id:uid('sow'), name:'', boqs:[{id:uid('boq'), name:'', items:[{id:uid('item'), product:'', qty:1, vendor:'', picIds:[], sphAwal:null, sphFinal:null}]}]}); render(); };

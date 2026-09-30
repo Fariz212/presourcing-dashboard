@@ -47,15 +47,14 @@ def init_db():
         cursor.execute('''CREATE TABLE IF NOT EXISTS request_items (id INTEGER PRIMARY KEY AUTOINCREMENT, ticket_id TEXT NOT NULL, sow_name TEXT DEFAULT 'General Scope', boq_section TEXT DEFAULT 'General Items', item_no TEXT, description TEXT NOT NULL, preferred_brand TEXT, quantity INTEGER, uom TEXT, delivery_time TEXT, vendor TEXT, FOREIGN KEY (ticket_id) REFERENCES requests(ticket_id) ON DELETE CASCADE)''')
         cursor.execute('''CREATE TABLE IF NOT EXISTS notifications (id INTEGER PRIMARY KEY AUTOINCREMENT, target_user TEXT NOT NULL, message TEXT NOT NULL, is_read INTEGER DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
 
-        # UPDATE: Tambah kolom target_rfs, pipeline_stage, dan progress_pct
         cursor.execute('''CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, name TEXT, requestor_name TEXT, requestor_dept TEXT, priority TEXT, status TEXT, lead_id TEXT, sph_mode TEXT, project_sph_awal REAL, project_sph_final REAL, created_at TEXT, closed_at TEXT, target_rfs TEXT, pipeline_stage TEXT, progress_pct INTEGER)''')
         
-        # MIGRATION: Auto-tambah kolom baru jika database lama sudah ada (tanpa menghapus data)
+        # MIGRATION
         for col, dtype in [('target_rfs', 'TEXT'), ('pipeline_stage', 'TEXT'), ('progress_pct', 'INTEGER')]:
             try:
                 cursor.execute(f"ALTER TABLE projects ADD COLUMN {col} {dtype}")
             except sqlite3.OperationalError:
-                pass # Kolom sudah ada, aman.
+                pass 
 
         cursor.execute('''CREATE TABLE IF NOT EXISTS sows (id TEXT PRIMARY KEY, project_id TEXT, name TEXT, FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE)''')
         cursor.execute('''CREATE TABLE IF NOT EXISTS boqs (id TEXT PRIMARY KEY, sow_id TEXT, name TEXT, FOREIGN KEY(sow_id) REFERENCES sows(id) ON DELETE CASCADE)''')
@@ -114,8 +113,6 @@ def get_projects_relational(cursor):
         p['projectSphFinal'] = p.pop('project_sph_final')
         p['createdAt'] = p.pop('created_at')
         p['closedAt'] = p.pop('closed_at')
-        
-        # Mapping nama kolom baru dari DB (snake_case) ke Javascript (camelCase)
         p['targetRfs'] = p.pop('target_rfs', None)
         p['pipelineStage'] = p.pop('pipeline_stage', None)
         p['progressPct'] = p.pop('progress_pct', None)
@@ -165,17 +162,12 @@ def get_notifications():
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             
-            # ==========================================
-            # 🤖 AUTO-EWS (EARLY WARNING SYSTEM) TRIGGER
-            # ==========================================
-            # Jika yang sedang login adalah admin presourcing, periksa kesehatan project
             if target == 'admin':
                 cursor.execute("SELECT id, name, target_rfs FROM projects WHERE status = 'ongoing' AND target_rfs IS NOT NULL AND target_rfs != ''")
                 ongoing_projects = cursor.fetchall()
                 
                 for p in ongoing_projects:
                     try:
-                        # Hitung selisih hari ini dengan Target RFS
                         rfs_date = datetime.strptime(p['target_rfs'], '%Y-%m-%d').date()
                         today = datetime.now().date()
                         days_left = (rfs_date - today).days
@@ -186,18 +178,14 @@ def get_notifications():
                         elif days_left <= 14:
                             msg = f"⚠️ AT RISK: Project '{p['name']}' tersisa {days_left} hari menuju RFS."
                         
-                        # Anti-Spam: Cek apakah notifikasi yang sama sudah dikirimkan HARI INI
                         if msg:
                             cursor.execute("SELECT COUNT(*) FROM notifications WHERE target_user = 'admin' AND message = ? AND date(created_at) = date('now', 'localtime')", (msg,))
                             if cursor.fetchone()[0] == 0:
                                 cursor.execute("INSERT INTO notifications (target_user, message) VALUES ('admin', ?)", (msg,))
-                    except Exception as parse_err:
-                        pass # Abaikan jika format tanggal ada yang salah (invalid date)
+                    except Exception:
+                        pass 
             
             conn.commit()
-            # ==========================================
-            
-            # Ambil daftar notifikasi untuk ditampilkan di layar
             cursor.execute("SELECT * FROM notifications WHERE target_user = ? OR target_user = 'broadcast' ORDER BY created_at DESC LIMIT 20", (target,))
             return jsonify({"success": True, "data": [dict(r) for r in cursor.fetchall()]}), 200
             
@@ -232,7 +220,6 @@ def get_requests():
         with contextlib.closing(sqlite3.connect(DB_NAME)) as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
-            # UBAH QUERY: Join dengan tabel projects untuk mengambil data pipeline dan progress
             query = """
                 SELECT r.*, u.full_name, u.department, 
                        p.pipeline_stage, p.progress_pct, p.target_rfs 
@@ -241,8 +228,7 @@ def get_requests():
                 LEFT JOIN projects p ON r.ticket_id = p.id
             """
             if role != 'admin':
-                query += " WHERE r.requester_username = ?"
-                query += " ORDER BY r.created_at DESC"
+                query += " WHERE r.requester_username = ? ORDER BY r.created_at DESC"
                 cursor.execute(query, (username,))
             else:
                 query += " ORDER BY r.created_at DESC"
@@ -316,14 +302,12 @@ def assign_ticket():
                     title = f"{req['title']} ({req['client_name'] or 'Klien Umum'})"
                     created = req['created_at'][:10] if req['created_at'] else datetime.now().strftime('%Y-%m-%d')
                     
-                    # LOGIKA BARU: Tarik SLA Date untuk dijadikan Target RFS, dan set default Pipeline Stage ke Tahap 1
                     sla_date = req['sla_date'] if req['sla_date'] else ""
                     default_stage = "1 - Project Identification"
-                    default_progress = 0
                     
                     cursor.execute('''INSERT INTO projects (id, name, requestor_name, requestor_dept, priority, status, lead_id, sph_mode, created_at, target_rfs, pipeline_stage, progress_pct) 
                                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', 
-                                      (ticket_id, title, req_name, req_dept, 'High', 'ongoing', pic_username, 'item', created, sla_date, default_stage, default_progress))
+                                      (ticket_id, title, req_name, req_dept, 'High', 'ongoing', pic_username, 'item', created, sla_date, default_stage, 0))
                     
                     cursor.execute("SELECT * FROM request_items WHERE ticket_id = ?", (ticket_id,))
                     req_items = cursor.fetchall()
@@ -385,7 +369,6 @@ def api_presourcing():
 
                 for p in projects:
                     cursor.execute("DELETE FROM projects WHERE id = ?", (p['id'],)) 
-                    # UPDATE QUERY: Menambahkan target_rfs, pipeline_stage, progress_pct saat POST (Save)
                     cursor.execute('''INSERT INTO projects (id, name, requestor_name, requestor_dept, priority, status, lead_id, sph_mode, project_sph_awal, project_sph_final, created_at, closed_at, target_rfs, pipeline_stage, progress_pct) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', (p['id'], p.get('name'), p.get('requestorName'), p.get('requestorDept'), p.get('priority'), p.get('status'), p.get('leadId'), p.get('sphMode'), p.get('projectSphAwal'), p.get('projectSphFinal'), p.get('createdAt'), p.get('closedAt'), p.get('targetRfs'), p.get('pipelineStage'), p.get('progressPct')))
 
                     for sow in p.get('sows', []):
@@ -435,13 +418,26 @@ def download_report():
             for boq in sow.get('boqs', []):
                 for item in boq.get('items', []):
                     report_data.append({
-                        "Ticket ID": p.get('id', ''), "Nama Project": p.get('name', ''),
-                        "Requestor": p.get('requestorName', ''), "PIC Assigned": p.get('leadId', ''),
-                        "Status": p.get('status', ''), "Tanggal Dibuat": p.get('createdAt', ''),
-                        "Target RFS": p.get('targetRfs', ''), "Pipeline Stage": p.get('pipelineStage', ''),
-                        "Scope of Work": sow.get('name', ''), "BoQ Section": boq.get('name', ''),
-                        "Deskripsi Item": item.get('product', ''), "Qty": item.get('qty', 0),
-                        "Vendor": item.get('vendor', ''), "SPH Awal": item.get('sphAwal', ''), "SPH Final": item.get('sphFinal', '')
+                        "Ticket ID": p.get('id', ''),
+                        "Nama Project": p.get('name', ''),
+                        "Requestor": p.get('requestorName', ''),
+                        "PIC Assigned": p.get('leadId', ''),
+                        "Status": p.get('status', ''),
+                        "Tanggal Dibuat": p.get('createdAt', ''),
+                        "Target RFS": p.get('targetRfs', ''),
+                        "Pipeline Stage": p.get('pipelineStage', ''),
+                        "Item ID": item.get('id', ''),
+                        "Item No": item.get('itemNo', ''),
+                        "Scope of Work": sow.get('name', ''),
+                        "BoQ Section": boq.get('name', ''),
+                        "Deskripsi Item": item.get('product', ''),
+                        "Qty": item.get('qty', 0),
+                        "UoM": item.get('uom', ''),
+                        "Preferred Brand": item.get('_preferredBrand', ''),
+                        "Delivery Time (RFS)": item.get('_deliveryTime', ''),
+                        "Vendor": item.get('vendor', ''),
+                        "SPH Awal": item.get('sphAwal', ''),
+                        "SPH Final": item.get('sphFinal', '')
                     })
     if not report_data: report_data.append({"Ticket ID": target_project_id or "-", "Nama Project": "Data tidak ditemukan"})
         
@@ -451,272 +447,90 @@ def download_report():
     output.seek(0)
     return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', as_attachment=True, download_name=f"Report_{target_project_id or 'All_Projects'}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx")
 
-@app.route('/api/revisi_boq/preview', methods=['POST'])
-def preview_revisi_boq():
-
-    ticket_id = request.form.get('ticket_id')
-
-    if 'file' not in request.files or not ticket_id:
-        return jsonify({
-            "success": False,
-            "message": "Data tidak valid"
-        }), 400
+@app.route('/api/project_import_boq/preview', methods=['POST'])
+def preview_project_import_boq():
+    if 'file' not in request.files: return jsonify({"success": False, "message": "File Excel tidak ditemukan."}), 400
+    file = request.files['file']
+    if file.filename == '': return jsonify({"success": False, "message": "Nama file tidak valid."}), 400
 
     try:
-        df = pd.read_excel(request.files['file'])
-
-        for col in df.select_dtypes(
-            include=['datetime64']
-        ).columns:
-            df[col] = df[col].dt.strftime('%Y-%m-%d')
+        df = pd.read_excel(file)
+        df.columns = [str(col).strip() for col in df.columns]
+        missing_columns = [col for col in ["Deskripsi Item"] if col not in df.columns]
+        
+        if missing_columns:
+            return jsonify({"success": False, "message": f"Format template tidak sesuai. Kolom wajib tidak ditemukan: {', '.join(missing_columns)}"}), 400
 
         df = df.fillna("")
+        sows, issues = {}, []
+        total_rows, valid_rows = 0, 0
 
-        # ==========================================
-        # NORMALIZE EXCEL DATA
-        # ==========================================
+        for excel_idx, row in df.iterrows():
+            total_rows += 1
+            description = str(row.get("Deskripsi Item", "")).strip()
+            if not description: continue
 
-        new_rows = []
+            qty_raw = row.get("Qty", "")
+            uom = str(row.get("UoM", "")).strip()
+            preferred_brand = str(row.get("Preferred Brand", "")).strip()
+            delivery_time = str(row.get("Delivery Time (RFS)", "")).strip()
+            vendor = str(row.get("Vendor (Opsional)", "")).strip()
+            sow_name = str(row.get("Scope of Work (Opsional)", "")).strip() or "General Scope of Work"
+            boq_name = str(row.get("Bill of Quantity (Opsional)", "")).strip() or "General Items"
 
-        for _, row in df.iterrows():
+            # Validasi
+            excel_row = excel_idx + 2
+            qty = 0
+            if qty_raw != "":
+                try:
+                    qty = float(qty_raw)
+                    if qty < 0: issues.append({"row": excel_row, "severity": "error", "message": "Qty tidak boleh negatif."})
+                except (ValueError, TypeError):
+                    issues.append({"row": excel_row, "severity": "error", "message": "Qty harus berupa angka."})
+            if not uom: issues.append({"row": excel_row, "severity": "warning", "message": "UoM kosong."})
 
-            desc = str(
-                row.get("Deskripsi Item", "")
-            ).strip()
+            item = {
+                "id": str(row.get("Item ID", "")).strip() or f"item_{uuid.uuid4().hex[:8]}",
+                "itemNo": str(row.get("Item No", valid_rows + 1)).strip(),
+                "product": description,
+                "qty": qty,
+                "uom": uom,
+                "vendor": vendor,
+                "notes": "",
+                "picIds": [],
+                "sphAwal": None,
+                "sphFinal": None,
+                "_preferredBrand": preferred_brand,
+                "_deliveryTime": delivery_time
+            }
 
-            if not desc:
-                continue
+            if sow_name not in sows: sows[sow_name] = {}
+            if boq_name not in sows[sow_name]: sows[sow_name][boq_name] = []
+            sows[sow_name][boq_name].append(item)
+            valid_rows += 1
 
-            new_rows.append({
-                "description": desc,
-                "qty": row.get("Qty", 0),
-                "uom": str(
-                    row.get("UoM", "")
-                ).strip(),
-                "vendor": str(
-                    row.get(
-                        "Vendor (Opsional)",
-                        ""
-                    )
-                ).strip(),
-                "sow": str(
-                    row.get(
-                        "Scope of Work (Opsional)",
-                        ""
-                    )
-                ).strip()
-                or "General Scope of Work",
-                "boq": str(
-                    row.get(
-                        "Bill of Quantity (Opsional)",
-                        ""
-                    )
-                ).strip()
-                or "General Items"
-            })
+        result_sows = []
+        for sow_name, boq_groups in sows.items():
+            sow_obj = {"id": f"sow_{uuid.uuid4().hex[:8]}", "name": sow_name, "boqs": []}
+            for boq_name, items in boq_groups.items():
+                sow_obj["boqs"].append({"id": f"boq_{uuid.uuid4().hex[:8]}", "name": boq_name, "items": items})
+            result_sows.append(sow_obj)
 
-        # ==========================================
-        # LOAD CURRENT REQUEST ITEMS
-        # ==========================================
-
-        with contextlib.closing(
-            sqlite3.connect(DB_NAME)
-        ) as conn:
-
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
-
-            cursor.execute(
-                """
-                SELECT *
-                FROM request_items
-                WHERE ticket_id = ?
-                """,
-                (ticket_id,)
-            )
-
-            old_rows = [
-                dict(r)
-                for r in cursor.fetchall()
-            ]
-
-        # ==========================================
-        # GROUP BY DESCRIPTION
-        # ==========================================
-
-        old_map = {}
-
-        for r in old_rows:
-
-            key = str(
-                r.get("description", "")
-            ).strip().lower()
-
-            old_map.setdefault(
-                key,
-                []
-            ).append(r)
-
-        added = []
-        updated = []
-        unchanged = []
-
-        # ==========================================
-        # MATCH NEW FILE AGAINST OLD DATA
-        # ==========================================
-
-        for row in new_rows:
-
-            key = row["description"].lower()
-
-            if (
-                key in old_map
-                and len(old_map[key]) > 0
-            ):
-
-                old = old_map[key].pop(0)
-
-                old_qty = old.get(
-                    "quantity", 0
-                )
-
-                old_uom = str(
-                    old.get("uom", "")
-                    or ""
-                ).strip()
-
-                old_vendor = str(
-                    old.get("vendor", "")
-                    or ""
-                ).strip()
-
-                old_sow = str(
-                    old.get("sow_name", "")
-                    or "General Scope of Work"
-                ).strip()
-
-                old_boq = str(
-                    old.get("boq_section", "")
-                    or "General Items"
-                ).strip()
-
-                changes = {}
-
-                if str(old_qty) != str(row["qty"]):
-                    changes["Qty"] = [
-                        old_qty,
-                        row["qty"]
-                    ]
-
-                if old_uom != row["uom"]:
-                    changes["UoM"] = [
-                        old_uom,
-                        row["uom"]
-                    ]
-
-                if old_vendor != row["vendor"]:
-                    changes["Vendor"] = [
-                        old_vendor,
-                        row["vendor"]
-                    ]
-
-                if old_sow != row["sow"]:
-                    changes["Scope"] = [
-                        old_sow,
-                        row["sow"]
-                    ]
-
-                if old_boq != row["boq"]:
-                    changes["BoQ"] = [
-                        old_boq,
-                        row["boq"]
-                    ]
-
-                if changes:
-
-                    updated.append({
-                        "description":
-                            row["description"],
-                        "changes":
-                            changes
-                    })
-
-                else:
-
-                    unchanged.append(
-                        row["description"]
-                    )
-
-            else:
-
-                added.append({
-                    "description":
-                        row["description"],
-                    "qty":
-                        row["qty"],
-                    "uom":
-                        row["uom"],
-                    "vendor":
-                        row["vendor"]
-                })
-
-        # ==========================================
-        # REMAINING OLD ITEMS = REMOVED
-        # ==========================================
-
-        removed = []
-
-        for remaining in old_map.values():
-
-            for old in remaining:
-
-                removed.append({
-                    "description":
-                        old.get(
-                            "description",
-                            ""
-                        ),
-                    "qty":
-                        old.get(
-                            "quantity",
-                            0
-                        ),
-                    "uom":
-                        old.get(
-                            "uom",
-                            ""
-                        ),
-                    "vendor":
-                        old.get(
-                            "vendor",
-                            ""
-                        )
-                })
+        total_boqs = sum(len(sow["boqs"]) for sow in result_sows)
+        total_items = sum(len(boq["items"]) for sow in result_sows for boq in sow["boqs"])
+        has_errors = any(x["severity"] == "error" for x in issues)
 
         return jsonify({
             "success": True,
             "data": {
-                "summary": {
-                    "added": len(added),
-                    "updated": len(updated),
-                    "removed": len(removed),
-                    "unchanged": len(unchanged),
-                    "total_new":
-                        len(new_rows)
-                },
-                "added": added,
-                "updated": updated,
-                "removed": removed,
-                "unchanged": unchanged
+                "summary": {"rows": total_rows, "items": total_items, "sows": len(result_sows), "boqs": total_boqs, "errors": sum(1 for x in issues if x["severity"] == "error"), "warnings": sum(1 for x in issues if x["severity"] == "warning")},
+                "issues": issues[:50],
+                "has_errors": has_errors,
+                "sows": result_sows
             }
         }), 200
-
     except Exception as e:
-
-        return jsonify({
-            "success": False,
-            "message": str(e)
-        }), 500
+        return jsonify({"success": False, "message": str(e)}), 500
 
 @app.route('/api/revisi_boq', methods=['POST'])
 def revisi_boq():
@@ -732,6 +546,7 @@ def revisi_boq():
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             
+            # --- 1. UPDATE request_items (Sisi Presales / Meta Data) ---
             cursor.execute("SELECT * FROM request_items WHERE ticket_id = ?", (ticket_id,))
             old_req_map = {}
             for r in cursor.fetchall():
@@ -750,22 +565,21 @@ def revisi_boq():
                 
                 if desc_key in old_req_map and len(old_req_map[desc_key]) > 0:
                     old_req = old_req_map[desc_key].pop(0)
-                    cursor.execute("UPDATE request_items SET sow_name=?, boq_section=?, quantity=?, uom=?, vendor=? WHERE id=?", 
-                                   (s_name, b_name, qty, uom, vendor, old_req['id']))
+                    cursor.execute("UPDATE request_items SET sow_name=?, boq_section=?, quantity=?, uom=?, vendor=? WHERE id=?", (s_name, b_name, qty, uom, vendor, old_req['id']))
                 else:
-                    cursor.execute("INSERT INTO request_items (ticket_id, sow_name, boq_section, description, quantity, uom, vendor) VALUES (?, ?, ?, ?, ?, ?, ?)", 
-                                   (ticket_id, s_name, b_name, desc_raw, qty, uom, vendor))
+                    cursor.execute("INSERT INTO request_items (ticket_id, sow_name, boq_section, description, quantity, uom, vendor) VALUES (?, ?, ?, ?, ?, ?, ?)", (ticket_id, s_name, b_name, desc_raw, qty, uom, vendor))
                                    
             for leftover_list in old_req_map.values():
                 for leftover_req in leftover_list:
                     cursor.execute("DELETE FROM request_items WHERE id = ?", (leftover_req['id'],))
             
+            # --- 2. UPDATE items, boqs, sows (Sisi Presourcing) ---
             cursor.execute("SELECT i.* FROM items i JOIN boqs b ON i.boq_id = b.id JOIN sows s ON b.sow_id = s.id WHERE s.project_id = ?", (ticket_id,))
             old_items_map = {}
             for r in cursor.fetchall():
-                key = str(r['product']).strip().lower()
-                if key not in old_items_map: old_items_map[key] = []
-                old_items_map[key].append(dict(r))
+                item_id = str(r['id'] or '').strip()
+                if item_id:
+                    old_items_map[item_id] = dict(r)
                 
             sow_map = {} 
             boq_map = {} 
@@ -779,33 +593,41 @@ def revisi_boq():
             for _, row in df.iterrows():
                 desc_raw = str(row.get("Deskripsi Item", "")).strip()
                 if not desc_raw: continue
-                desc_key = desc_raw.lower()
                 
-                qty, uom, vendor = row.get("Qty", 0), str(row.get("UoM", "")), str(row.get("Vendor (Opsional)", ""))
+                item_id = str(row.get("Item ID", "")).strip()
+                qty = row.get("Qty", 0)
+                uom = str(row.get("UoM", "")).strip()
+                vendor = str(row.get("Vendor (Opsional)", "")).strip()
                 s_name = str(row.get("Scope of Work (Opsional)", "")).strip() or "General Scope of Work"
                 b_name = str(row.get("Bill of Quantity (Opsional)", "")).strip() or "General Items"
-                
+
+                # Cari atau Buat SoW Baru jika diedit di Excel
                 if s_name not in sow_map:
-                    new_sow_id = f"sow_{uuid.uuid4().hex[:8]}"
-                    cursor.execute("INSERT INTO sows (id, project_id, name) VALUES (?, ?, ?)", (new_sow_id, ticket_id, s_name))
-                    sow_map[s_name] = new_sow_id
-                
-                if (s_name, b_name) not in boq_map:
-                    new_boq_id = f"boq_{uuid.uuid4().hex[:8]}"
-                    cursor.execute("INSERT INTO boqs (id, sow_id, name) VALUES (?, ?, ?)", (new_boq_id, sow_map[s_name], b_name))
-                    boq_map[(s_name, b_name)] = new_boq_id
-                    
-                target_boq_id = boq_map[(s_name, b_name)]
-                
-                if desc_key in old_items_map and len(old_items_map[desc_key]) > 0:
-                    old_item = old_items_map[desc_key].pop(0) 
-                    cursor.execute("UPDATE items SET boq_id=?, qty=?, uom=?, vendor=? WHERE id=?", (target_boq_id, qty, uom, vendor, old_item['id']))
+                    target_sow_id = f"sow_{uuid.uuid4().hex[:8]}"
+                    cursor.execute("INSERT INTO sows (id, project_id, name) VALUES (?, ?, ?)", (target_sow_id, ticket_id, s_name))
+                    sow_map[s_name] = target_sow_id
                 else:
-                    cursor.execute("INSERT INTO items (id, boq_id, product, qty, uom, vendor, pic_ids) VALUES (?, ?, ?, ?, ?, ?, ?)", (f"item_{uuid.uuid4().hex[:8]}", target_boq_id, desc_raw, qty, uom, vendor, "[]"))
+                    target_sow_id = sow_map[s_name]
+
+                # Cari atau Buat BoQ Baru jika diedit di Excel
+                if (s_name, b_name) not in boq_map:
+                    target_boq_id = f"boq_{uuid.uuid4().hex[:8]}"
+                    cursor.execute("INSERT INTO boqs (id, sow_id, name) VALUES (?, ?, ?)", (target_boq_id, target_sow_id, b_name))
+                    boq_map[(s_name, b_name)] = target_boq_id
+                else:
+                    target_boq_id = boq_map[(s_name, b_name)]
+                
+                # Update data produk berdasarkan Item ID dari Excel
+                if item_id and item_id in old_items_map:
+                    old_item = old_items_map.pop(item_id)
+                    cursor.execute("UPDATE items SET boq_id = ?, product = ?, qty = ?, uom = ?, vendor = ? WHERE id = ?", (target_boq_id, desc_raw, qty, uom, vendor, old_item['id']))
+                else:
+                    new_item_id = item_id if item_id else f"item_{uuid.uuid4().hex[:8]}"
+                    cursor.execute("INSERT INTO items (id, boq_id, product, qty, uom, vendor, pic_ids) VALUES (?, ?, ?, ?, ?, ?, ?)", (new_item_id, target_boq_id, desc_raw, qty, uom, vendor, "[]"))
                                    
-            for leftover_list in old_items_map.values():
-                for leftover_item in leftover_list:
-                    cursor.execute("DELETE FROM items WHERE id = ?", (leftover_item['id'],))
+            # Bersihkan sisa-sisa item, boq, atau sow yang dihapus dari Excel
+            for leftover_item in old_items_map.values():
+                cursor.execute("DELETE FROM items WHERE id = ?", (leftover_item['id'],))
                 
             cursor.execute("DELETE FROM boqs WHERE id NOT IN (SELECT DISTINCT boq_id FROM items)")
             cursor.execute("DELETE FROM sows WHERE id NOT IN (SELECT DISTINCT sow_id FROM boqs)")
