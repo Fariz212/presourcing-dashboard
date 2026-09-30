@@ -204,7 +204,7 @@ function tabBtn(id,label){
 }
 
 // --------------------------------------------------------
-// RENDER OVERVIEW: EXECUTIVE DASHBOARD (PRO UI/UX OPTIMIZED)
+// RENDER OVERVIEW: EXECUTIVE DASHBOARD (CUSTOM 70:30 & STACKED LAYOUT)
 // --------------------------------------------------------
 function renderOverview(){
   const totalProj = projects.length;
@@ -233,7 +233,7 @@ function renderOverview(){
       setTimeout(renderDashboardCharts, 100);
   }
 
-  // CSS Profesional: Equal-height cards, tabel compact anti-wrapping, chart container presisi
+  // CSS Khusus Layout 70:30 dan Baris Bawah Pipeline Full-Width
   const dashStyles = `
     <style>
         .kpi-row-new { display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); gap: 14px; margin-bottom: 20px; }
@@ -248,21 +248,20 @@ function renderOverview(){
 
         .kpi-icon { width: 38px; height: 38px; border-radius: 50%; display:flex; align-items:center; justify-content:center; font-size: 18px; }
         
-        /* Grid 3 Kolom sejajar sempurna (align-items: stretch) */
-        .dash-grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; margin-bottom: 16px; align-items: stretch; }
+        /* Baris 1 & 2: Grid 2 Kolom (Proporsi 70:30 dan 50:50) */
+        .dash-grid-70-30 { display: grid; grid-template-columns: 2.3fr 1fr; gap: 16px; margin-bottom: 16px; align-items: stretch; }
+        .dash-grid-50-50 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; align-items: stretch; }
         
-        .dash-panel { background: #fff; border-radius: 8px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.04); display: flex; flex-direction: column; height: 100%; min-height: 310px; }
+        .dash-panel { background: #fff; border-radius: 8px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.04); display: flex; flex-direction: column; height: 100%; min-height: 290px; }
         .dash-panel-hd { background: #1E63C8; color: white; padding: 11px 14px; font-weight: 600; font-size: 13px; display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
         .dash-panel-hd.danger-hd { background: #DC3545; }
         
         .dash-panel-body { padding: 14px; flex: 1; display: flex; flex-direction: column; justify-content: center; }
         
-        /* Kontainer Chart Presisi Tinggi */
-        .chart-box { position: relative; width: 100%; height: 210px; flex: 1; display: flex; align-items: center; justify-content: center; }
+        .chart-box { position: relative; width: 100%; height: 190px; flex: 1; display: flex; align-items: center; justify-content: center; }
 
-        /* Scrollable Table dipatok pas untuk 5 baris */
         .scrollable-table-container {
-            max-height: 255px; 
+            max-height: 240px; 
             overflow-y: auto; 
             overflow-x: auto;
             flex: 1;
@@ -272,7 +271,7 @@ function renderOverview(){
             top: 0;
             background: #F8FAFC;
             z-index: 2;
-            white-space: nowrap; /* Mencegah judul kolom terpotong / turun baris */
+            white-space: nowrap;
         }
 
         .badge { padding: 3px 8px; border-radius: 4px; font-size: 10.5px; font-weight: 600; }
@@ -285,14 +284,19 @@ function renderOverview(){
         .prog-bar-bg { background: #e5e7eb; border-radius: 4px; height: 6px; width: 100%; margin-top: 3px; }
         .prog-bar-fill { height: 100%; background: #3B82F6; border-radius: 4px; }
 
-        .pipeline-container { display: flex; gap: 2px; margin-top: 5px; width: 100%; }
-        .pipe-stage { flex: 1; color: white; padding: 10px 4px; text-align: center; font-size: 10.5px; clip-path: polygon(0% 0%, 92% 0%, 100% 50%, 92% 100%, 0% 100%, 8% 50%); margin-right: -8px; }
-        .pipe-stage:first-child { clip-path: polygon(0% 0%, 92% 0%, 100% 50%, 92% 100%, 0% 100%); }
-        .pipe-stage:last-child { clip-path: polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%, 8% 50%); margin-right: 0; }
+        /* Pipeline Styles untuk Tampilan Full-Width di Bawah */
+        .pipeline-container { display: flex; gap: 4px; margin-top: 5px; width: 100%; }
+        .pipe-stage { flex: 1; color: white; padding: 14px 8px; text-align: center; font-size: 11px; clip-path: polygon(0% 0%, 94% 0%, 100% 50%, 94% 100%, 0% 100%, 6% 50%); margin-right: -10px; }
+        .pipe-stage:first-child { clip-path: polygon(0% 0%, 94% 0%, 100% 50%, 94% 100%, 0% 100%); }
+        .pipe-stage:last-child { clip-path: polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%, 6% 50%); margin-right: 0; }
         
         table.dash-table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
         table.dash-table th { padding: 8px 6px; border-bottom: 2px solid #e2e8f0; text-align: left; color: #64748b; font-weight: 600; font-size: 10.5px; text-transform: uppercase;}
         table.dash-table td { padding: 8px 6px; border-bottom: 1px solid #f1f5f9; }
+
+        @media(max-width: 900px) {
+            .dash-grid-70-30, .dash-grid-50-50 { grid-template-columns: 1fr; }
+        }
     </style>
   `;
 
@@ -303,7 +307,7 @@ function renderOverview(){
       overviewRows += `
       <tr>
           <td>${idx+1}</td>
-          <td style="font-weight:500; max-width: 120px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${escAttr(p.name)}">${escAttr(p.name)}</td>
+          <td style="font-weight:500; max-width: 140px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${escAttr(p.name)}">${escAttr(p.name)}</td>
           <td class="mono">${valToM(projectSph(p).awal)}</td>
           <td>${escAttr(p.leadId)}</td>
           <td style="white-space: nowrap;">${p.targetRfs ? new Date(p.targetRfs).toLocaleDateString('id-ID', {day:'numeric', month:'short', year:'numeric'}) : '-'}</td>
@@ -329,15 +333,14 @@ function renderOverview(){
   });
   if(!ewsRows) ewsRows = `<tr><td colspan="4" style="text-align:center; color:var(--green); padding:20px;">Semua project aman! 🎉</td></tr>`;
 
-  const pNames = ['Ident', 'Prep', 'Vendor', 'Negot', 'Final', 'RFS'];
+  const pNames = ['Identification', 'SPH Preparation', 'Vendor Selection', 'Negotiation', 'Finalization', 'RFS'];
   let pipelineHtml = '<div class="pipeline-container">';
   pNames.forEach((name, i) => {
       const n = i+1;
       pipelineHtml += `
           <div class="pipe-stage" style="z-index: ${6-i}; background: ${n<=3 ? '#3B82F6' : (n<=5 ? '#0EA5E9' : '#22C55E')};">
-              <div style="font-size:12px; font-weight:bold; margin-bottom:2px;">${n}</div>
-              <div style="line-height:1.1; font-size:9.5px;">${name}</div>
-              <div style="margin-top:4px; font-weight:bold; font-size:10.5px;">${pCount[n]} P</div>
+              <div style="font-size:13px; font-weight:bold; margin-bottom:2px;">${n} - ${name}</div>
+              <div style="margin-top:6px; font-weight:bold; font-size:12px;">${pCount[n]} Proyek</div>
           </div>
       `;
   });
@@ -354,8 +357,8 @@ function renderOverview(){
         <div class="kpi-card"><div class="kpi-icon" style="background:#f1f5f9; color:#475569;">🏁</div><div style="width:100%;"><div style="font-size:11px; color:#64748b;">Completed</div><div style="display:flex; justify-content:space-between; align-items:flex-end;"><div style="font-size:18px; font-weight:bold;">${sCount['Completed']}</div><div style="font-size:11px; font-weight:bold; color:#475569;">${getPct(sCount['Completed'])}%</div></div></div></div>
     </div>
 
-    <!-- ROW 2: OVERVIEW TABLE, STATUS CHART, RFS MONTH -->
-    <div class="dash-grid-3">
+    <!-- ROW 1: OVERVIEW (70%) & PROJECT STATUS PIE CHART (30%) -->
+    <div class="dash-grid-70-30">
         <div class="dash-panel">
             <div class="dash-panel-hd">📋 Project Presourcing Overview</div>
             <div class="scrollable-table-container">
@@ -371,22 +374,10 @@ function renderOverview(){
                 <div class="chart-box"><canvas id="chartStatus"></canvas></div>
             </div>
         </div>
-        <div class="dash-panel">
-            <div class="dash-panel-hd">📈 Target RFS by Month</div>
-            <div class="dash-panel-body">
-                <div class="chart-box"><canvas id="chartRfsMonth"></canvas></div>
-            </div>
-        </div>
     </div>
 
-    <!-- ROW 3: PIPELINE, TOP 5 VALUE, EWS TABLE -->
-    <div class="dash-grid-3">
-        <div class="dash-panel">
-            <div class="dash-panel-hd">🔄 Presourcing Progress Pipeline</div>
-            <div class="dash-panel-body" style="justify-content: flex-start; padding-top: 20px;">
-                ${pipelineHtml}
-            </div>
-        </div>
+    <!-- ROW 2: TOP 5 PROJECT VALUE & EARLY WARNING (50:50) -->
+    <div class="dash-grid-50-50">
         <div class="dash-panel">
             <div class="dash-panel-hd">🏆 Top 5 Project Value</div>
             <div class="dash-panel-body">
@@ -401,6 +392,14 @@ function renderOverview(){
                     <tbody>${ewsRows}</tbody>
                 </table>
             </div>
+        </div>
+    </div>
+
+    <!-- ROW 3: PROGRESS PIPELINE (FULL WIDTH DI BAWAH) -->
+    <div class="dash-panel" style="margin-bottom: 16px;">
+        <div class="dash-panel-hd">🔄 Presourcing Progress Pipeline</div>
+        <div class="dash-panel-body" style="padding: 20px;">
+            ${pipelineHtml}
         </div>
     </div>
   `;
