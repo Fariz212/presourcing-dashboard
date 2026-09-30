@@ -261,26 +261,41 @@ function render(){
 function renderOverview(){
   const totalProj = projects.length;
   let totalVal = 0;
+  
   const sCount = { 'On Track': 0, 'At Risk': 0, 'Overdue': 0, 'Completed': 0, 'Planned': 0 };
   const pCount = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
 
+  // Hitung Nilai dan Status untuk SEMUA project
   projects.forEach(p => {
     totalVal += (projectSph(p).awal || 0);
     const status = getDynamicStatus(p);
     if(sCount[status] !== undefined) sCount[status]++;
+  });
 
+  // Filter HANYA project yang aktif untuk perhitungan Pipeline
+  const activeProjectsData = projects.filter(p => p.status === 'ongoing');
+  const activeProjects = activeProjectsData.length;
+
+  // Hitung posisi Pipeline (Diskrit)
+  activeProjectsData.forEach(p => {
     let stage = parseInt(String(p.pipelineStage || '').charAt(0));
-    if(!isNaN(stage) && stage >= 1 && stage <= 6){
-      for(let s = 1; s <= stage; s++){
-        pCount[s]++;
-      }
+    
+    // Jika format pipeline kosong / bukan angka standar (misal: "- (0%)"), 
+    // asumsikan project baru masuk dan tempatkan di Stage 1
+    if(isNaN(stage) || stage < 1 || stage > 6){
+      stage = 1;
     }
+    
+    // Tambahkan +1 HANYA pada stage tempat project tersebut berada saat ini
+    pCount[stage]++;
   });
 
   const efficiencies = projects.map(p => efficiencyPct(projectSph(p).awal, projectSph(p).final)).filter(v => v != null && isFinite(v));
   const avgEfficiency = efficiencies.length ? efficiencies.reduce((a,b) => a+b, 0) / efficiencies.length : null;
+  
   const getPct = val => totalProj ? Math.round((val / totalProj) * 100) : 0;
-  const activeProjects = projects.filter(p => p.status === 'ongoing').length;
+  
+  // (Variabel activeProjects sudah dideklarasikan di atas, sehingga deklarasi lamanya dihapus dari sini)
   const atRisk = sCount['At Risk'];
   const overdue = sCount['Overdue'];
 
@@ -462,13 +477,16 @@ function renderOverview(){
 
   if(!warningRows) warningRows = `<tr><td colspan="4" style="text-align:center; padding:18px; color:#15803D;">✓ Tidak ada project yang perlu perhatian</td></tr>`;
 
-  const pNames = ['Project Identification', 'SPH Preparation', 'Vendor Selection', 'Negotiation', 'Finalization', 'RFS'];
+ const pNames = ['Project Identification', 'SPH Preparation', 'Vendor Selection', 'Negotiation', 'Finalization', 'RFS'];
   let pipelineHtml = '';
 
   pNames.forEach((name, i) => {
     const n = i + 1;
     const count = pCount[n];
-    const pct = totalProj ? Math.round((count / totalProj) * 100) : 0;
+    
+    // UBAH BARIS INI: Gunakan activeProjects sebagai pembagi persentase
+    const pct = activeProjects ? Math.round((count / activeProjects) * 100) : 0;
+    
     const activeClass = count > 0 ? 'active' : '';
     const finalClass = n === 6 ? 'final' : '';
 
