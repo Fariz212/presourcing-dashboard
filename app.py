@@ -451,6 +451,273 @@ def download_report():
     output.seek(0)
     return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', as_attachment=True, download_name=f"Report_{target_project_id or 'All_Projects'}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx")
 
+@app.route('/api/revisi_boq/preview', methods=['POST'])
+def preview_revisi_boq():
+
+    ticket_id = request.form.get('ticket_id')
+
+    if 'file' not in request.files or not ticket_id:
+        return jsonify({
+            "success": False,
+            "message": "Data tidak valid"
+        }), 400
+
+    try:
+        df = pd.read_excel(request.files['file'])
+
+        for col in df.select_dtypes(
+            include=['datetime64']
+        ).columns:
+            df[col] = df[col].dt.strftime('%Y-%m-%d')
+
+        df = df.fillna("")
+
+        # ==========================================
+        # NORMALIZE EXCEL DATA
+        # ==========================================
+
+        new_rows = []
+
+        for _, row in df.iterrows():
+
+            desc = str(
+                row.get("Deskripsi Item", "")
+            ).strip()
+
+            if not desc:
+                continue
+
+            new_rows.append({
+                "description": desc,
+                "qty": row.get("Qty", 0),
+                "uom": str(
+                    row.get("UoM", "")
+                ).strip(),
+                "vendor": str(
+                    row.get(
+                        "Vendor (Opsional)",
+                        ""
+                    )
+                ).strip(),
+                "sow": str(
+                    row.get(
+                        "Scope of Work (Opsional)",
+                        ""
+                    )
+                ).strip()
+                or "General Scope of Work",
+                "boq": str(
+                    row.get(
+                        "Bill of Quantity (Opsional)",
+                        ""
+                    )
+                ).strip()
+                or "General Items"
+            })
+
+        # ==========================================
+        # LOAD CURRENT REQUEST ITEMS
+        # ==========================================
+
+        with contextlib.closing(
+            sqlite3.connect(DB_NAME)
+        ) as conn:
+
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+
+            cursor.execute(
+                """
+                SELECT *
+                FROM request_items
+                WHERE ticket_id = ?
+                """,
+                (ticket_id,)
+            )
+
+            old_rows = [
+                dict(r)
+                for r in cursor.fetchall()
+            ]
+
+        # ==========================================
+        # GROUP BY DESCRIPTION
+        # ==========================================
+
+        old_map = {}
+
+        for r in old_rows:
+
+            key = str(
+                r.get("description", "")
+            ).strip().lower()
+
+            old_map.setdefault(
+                key,
+                []
+            ).append(r)
+
+        added = []
+        updated = []
+        unchanged = []
+
+        # ==========================================
+        # MATCH NEW FILE AGAINST OLD DATA
+        # ==========================================
+
+        for row in new_rows:
+
+            key = row["description"].lower()
+
+            if (
+                key in old_map
+                and len(old_map[key]) > 0
+            ):
+
+                old = old_map[key].pop(0)
+
+                old_qty = old.get(
+                    "quantity", 0
+                )
+
+                old_uom = str(
+                    old.get("uom", "")
+                    or ""
+                ).strip()
+
+                old_vendor = str(
+                    old.get("vendor", "")
+                    or ""
+                ).strip()
+
+                old_sow = str(
+                    old.get("sow_name", "")
+                    or "General Scope of Work"
+                ).strip()
+
+                old_boq = str(
+                    old.get("boq_section", "")
+                    or "General Items"
+                ).strip()
+
+                changes = {}
+
+                if str(old_qty) != str(row["qty"]):
+                    changes["Qty"] = [
+                        old_qty,
+                        row["qty"]
+                    ]
+
+                if old_uom != row["uom"]:
+                    changes["UoM"] = [
+                        old_uom,
+                        row["uom"]
+                    ]
+
+                if old_vendor != row["vendor"]:
+                    changes["Vendor"] = [
+                        old_vendor,
+                        row["vendor"]
+                    ]
+
+                if old_sow != row["sow"]:
+                    changes["Scope"] = [
+                        old_sow,
+                        row["sow"]
+                    ]
+
+                if old_boq != row["boq"]:
+                    changes["BoQ"] = [
+                        old_boq,
+                        row["boq"]
+                    ]
+
+                if changes:
+
+                    updated.append({
+                        "description":
+                            row["description"],
+                        "changes":
+                            changes
+                    })
+
+                else:
+
+                    unchanged.append(
+                        row["description"]
+                    )
+
+            else:
+
+                added.append({
+                    "description":
+                        row["description"],
+                    "qty":
+                        row["qty"],
+                    "uom":
+                        row["uom"],
+                    "vendor":
+                        row["vendor"]
+                })
+
+        # ==========================================
+        # REMAINING OLD ITEMS = REMOVED
+        # ==========================================
+
+        removed = []
+
+        for remaining in old_map.values():
+
+            for old in remaining:
+
+                removed.append({
+                    "description":
+                        old.get(
+                            "description",
+                            ""
+                        ),
+                    "qty":
+                        old.get(
+                            "quantity",
+                            0
+                        ),
+                    "uom":
+                        old.get(
+                            "uom",
+                            ""
+                        ),
+                    "vendor":
+                        old.get(
+                            "vendor",
+                            ""
+                        )
+                })
+
+        return jsonify({
+            "success": True,
+            "data": {
+                "summary": {
+                    "added": len(added),
+                    "updated": len(updated),
+                    "removed": len(removed),
+                    "unchanged": len(unchanged),
+                    "total_new":
+                        len(new_rows)
+                },
+                "added": added,
+                "updated": updated,
+                "removed": removed,
+                "unchanged": unchanged
+            }
+        }), 200
+
+    except Exception as e:
+
+        return jsonify({
+            "success": False,
+            "message": str(e)
+        }), 500
+
 @app.route('/api/revisi_boq', methods=['POST'])
 def revisi_boq():
     ticket_id = request.form.get('ticket_id')

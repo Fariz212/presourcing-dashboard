@@ -631,6 +631,101 @@ body{
 
 }
 
+.revision-section{
+  margin-bottom:12px;
+}
+
+.revision-section-title{
+  padding-bottom:6px;
+  margin-bottom:4px;
+
+  font-size:9px;
+  font-weight:700;
+
+  text-transform:uppercase;
+  letter-spacing:.04em;
+
+  border-bottom:1px solid #E2E8F0;
+}
+
+.added-title{
+  color:#15803D;
+}
+
+.updated-title{
+  color:#2563EB;
+}
+
+.removed-title{
+  color:#DC2626;
+}
+
+.revision-row{
+  display:flex;
+  align-items:flex-start;
+  gap:8px;
+
+  padding:7px 8px;
+
+  border-bottom:1px solid #F1F5F9;
+}
+
+.revision-mark{
+  width:20px;
+  height:20px;
+
+  flex:0 0 20px;
+
+  display:flex;
+  align-items:center;
+  justify-content:center;
+
+  border-radius:4px;
+
+  font-size:11px;
+  font-weight:700;
+}
+
+.revision-row.added
+.revision-mark{
+  background:#DCFCE7;
+  color:#15803D;
+}
+
+.revision-row.updated
+.revision-mark{
+  background:#DBEAFE;
+  color:#2563EB;
+}
+
+.revision-row.removed
+.revision-mark{
+  background:#FEE2E2;
+  color:#DC2626;
+}
+
+.revision-row strong{
+  font-size:10.5px;
+  color:#334155;
+}
+
+.revision-meta{
+  margin-top:2px;
+
+  font-size:9px;
+  line-height:1.4;
+
+  color:#64748B;
+}
+
+.revision-empty{
+  padding:8px;
+
+  color:#94A3B8;
+
+  font-size:9.5px;
+}
+
 </style>
 </head>
 <body>
