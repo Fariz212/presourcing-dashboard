@@ -713,6 +713,10 @@ function renderOverview(){
         height:230px;
         position:relative;
       }
+      
+      .ux-chart-compact {
+        height: 190px;
+      }
 
       .ux-chart canvas {
         width:100% !important;
@@ -1118,7 +1122,7 @@ function renderOverview(){
           </div>
 
           <div class="ux-panel-body">
-            <div class="ux-chart">
+            <div class="ux-chart ux-chart-compact">
               <canvas id="chartTop5"></canvas>
             </div>
           </div>
@@ -1133,7 +1137,7 @@ function renderOverview(){
           </div>
 
           <div class="ux-panel-body">
-            <div class="ux-chart">
+            <div class="ux-chart ux-chart-compact">
               <canvas id="chartStatus"></canvas>
             </div>
           </div>
@@ -1470,109 +1474,123 @@ function renderDashboardCharts() {
     // ----------------------------------------------------
     // 3. TOP 5 PROJECT VALUE — HORIZONTAL BAR
     // ----------------------------------------------------
-    const top5 = [...projects]
-        .filter(p => p.status !== 'lose')
-        .map(p => ({
-            name: p.name || 'Unnamed Project',
-            val: Number(((projectSph(p).awal || 0) / 1000000000).toFixed(1))
-        }))
-        .sort((a, b) => b.val - a.val)
-        .slice(0, 5);
+    // 3. Chart Top 5 Project Value
+const top5 = [...projects]
+    .filter(p => p.status !== 'lose')
+    .map(p => ({
+        name: p.name || 'Unnamed Project',
+        val: Number(((projectSph(p).awal || 0) / 1000000000).toFixed(1))
+    }))
+    .sort((a, b) => b.val - a.val)
+    .slice(0, 5);
 
-    const ctxTop5 = document.getElementById('chartTop5');
+const ctxTop5 = document.getElementById('chartTop5');
 
-    if (ctxTop5) {
-        destroyChart('top5');
+if (ctxTop5) {
+    if (dCharts.top5) dCharts.top5.destroy();
 
-        dCharts.top5 = new Chart(ctxTop5, {
-            type: 'bar',
+    dCharts.top5 = new Chart(ctxTop5, {
+        type: 'bar',
 
-            data: {
-                labels: top5.map(t => {
-                    const name = t.name;
-                    return name.length > 28
-                        ? name.substring(0, 28) + '...'
-                        : name;
-                }),
+        data: {
+            labels: top5.map(t => {
+                return t.name.length > 24
+                    ? t.name.substring(0, 24) + '...'
+                    : t.name;
+            }),
 
-                datasets: [{
-                    label: 'Project Value',
-                    data: top5.map(t => t.val),
+            datasets: [{
+                label: 'Project Value',
 
-                    backgroundColor: primary,
-                    borderWidth: 0,
+                data: top5.map(t => t.val),
 
-                    borderRadius: 5,
-                    borderSkipped: false,
+                backgroundColor: '#2563EB',
 
-                    barPercentage: 0.62,
-                    categoryPercentage: 0.72
-                }]
+                borderWidth: 0,
+                borderRadius: 5,
+
+                barPercentage: 0.55,
+                categoryPercentage: 0.72
+            }]
+        },
+
+        options: {
+            indexAxis: 'y',
+
+            responsive: true,
+            maintainAspectRatio: false,
+
+            layout: {
+                padding: {
+                    left: 4,
+                    right: 10,
+                    top: 4,
+                    bottom: 2
+                }
             },
 
-            options: {
-                indexAxis: 'y',
+            scales: {
+                x: {
+                    beginAtZero: true,
 
-                responsive: true,
-                maintainAspectRatio: false,
-
-                scales: {
-                    x: {
-                        beginAtZero: true,
-
-                        grid: {
-                            color: gridColor
-                        },
-
-                        border: {
-                            display: false
-                        },
-
-                        ticks: {
-                            color: axisColor,
-                            font: chartFont,
-
-                            callback: value =>
-                                `Rp ${value} M`
-                        }
+                    grid: {
+                        color: '#EEF2F7'
                     },
 
-                    y: {
-                        grid: {
-                            display: false
-                        },
-
-                        border: {
-                            display: false
-                        },
-
-                        ticks: {
-                            color: '#334155',
-                            font: {
-                                ...chartFont,
-                                weight: '500'
-                            }
-                        }
-                    }
-                },
-
-                plugins: {
-                    legend: {
+                    border: {
                         display: false
                     },
 
-                    tooltip: {
-                        padding: 10,
+                    ticks: {
+                        color: '#94A3B8',
 
-                        callbacks: {
-                            label: ctx =>
-                                ` ${fmtRpM(ctx.raw)}`
+                        font: {
+                            family: "'Space Grotesk', sans-serif",
+                            size: 9
+                        },
+
+                        callback: value => `Rp ${value} M`
+                    }
+                },
+
+                y: {
+                    grid: {
+                        display: false
+                    },
+
+                    border: {
+                        display: false
+                    },
+
+                    ticks: {
+                        color: '#475569',
+
+                        font: {
+                            family: "'Space Grotesk', sans-serif",
+                            size: 9.5,
+                            weight: '500'
                         }
                     }
                 }
+            },
+
+            plugins: {
+                legend: {
+                    display: false
+                },
+
+                tooltip: {
+                    padding: 9,
+
+                    callbacks: {
+                        label: ctx =>
+                            ` Rp ${Number(ctx.raw).toLocaleString('id-ID')} M`
+                    }
+                }
             }
-        });
-    }
+        }
+    });
+}
 
     // ----------------------------------------------------
     // 4. PROJECT VALUE BY PIC — HORIZONTAL BAR

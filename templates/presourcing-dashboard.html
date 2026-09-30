@@ -196,6 +196,144 @@ body{
   }
 }
 
+/* ======================================================
+   ENTERPRISE BLUE NAVBAR
+   ====================================================== */
+
+.navbar {
+  background: linear-gradient(
+    110deg,
+    #0B4F91 0%,
+    #1769C2 55%,
+    #2382D9 100%
+  );
+
+  border-bottom: 1px solid rgba(255,255,255,.15);
+  box-shadow: 0 4px 14px rgba(15,23,42,.12);
+
+  padding: 12px 32px;
+
+  min-height: 68px;
+}
+
+/* BRAND */
+
+.navbar .brand h2 {
+  color:#FFFFFF !important;
+}
+
+.navbar .brand span {
+  color:rgba(255,255,255,.72) !important;
+}
+
+/* MAIN NAV */
+
+.app-nav {
+  display:flex;
+  align-items:center;
+  gap:4px;
+  margin-left:40px;
+  margin-right:auto;
+}
+
+.app-nav-item {
+  border:1px solid transparent;
+  background:transparent;
+
+  color:rgba(255,255,255,.78);
+
+  font-family:inherit;
+  font-size:12.5px;
+  font-weight:600;
+
+  padding:8px 14px;
+
+  border-radius:7px;
+
+  cursor:pointer;
+
+  transition:
+    background .15s ease,
+    color .15s ease,
+    border-color .15s ease;
+}
+
+.app-nav-item:hover {
+  color:#FFFFFF;
+  background:rgba(255,255,255,.10);
+}
+
+.app-nav-item.active {
+  background:#FFFFFF;
+  border-color:#FFFFFF;
+  color:#1458A6;
+
+  box-shadow:0 2px 5px rgba(15,23,42,.10);
+}
+
+/* USER */
+
+.nav-user-name {
+  color:#FFFFFF !important;
+}
+
+.nav-user-role {
+  color:rgba(255,255,255,.68) !important;
+}
+
+/* INBOX */
+
+.btn-nav-outline {
+  background:rgba(255,255,255,.10) !important;
+
+  border:1px solid rgba(255,255,255,.28) !important;
+
+  color:#FFFFFF !important;
+}
+
+.btn-nav-outline:hover {
+  background:rgba(255,255,255,.18) !important;
+  border-color:rgba(255,255,255,.45) !important;
+}
+
+/* NOTIFICATION */
+
+.notif-btn {
+  color:#FFFFFF !important;
+}
+
+.notif-btn:hover {
+  background:rgba(255,255,255,.12) !important;
+}
+
+/* LOGOUT */
+
+.btn-danger-outline {
+  background:transparent !important;
+
+  border-color:rgba(255,255,255,.55) !important;
+
+  color:#FFFFFF !important;
+}
+
+.btn-danger-outline:hover {
+  background:rgba(220,38,38,.18) !important;
+  border-color:#FCA5A5 !important;
+}
+
+/* MOBILE */
+
+@media(max-width:900px) {
+
+  .navbar {
+    padding:12px 18px;
+  }
+
+  .app-nav {
+    width:auto;
+    margin-left:20px;
+  }
+}
 /* --- Tweak Navbar Buttons --- */
 .btn-nav-outline { background: transparent; border: 1px solid var(--border); color: var(--text); padding: 7px 12px; border-radius: 6px; cursor: pointer; font-weight: 500; font-family: inherit; font-size: 12.5px; transition: all 0.15s ease; display: flex; align-items: center; gap: 6px; }
 .btn-nav-outline:hover { background: var(--panel-2); border-color: var(--text-muted); }
