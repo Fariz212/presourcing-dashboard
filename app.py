@@ -47,7 +47,16 @@ def init_db():
         cursor.execute('''CREATE TABLE IF NOT EXISTS request_items (id INTEGER PRIMARY KEY AUTOINCREMENT, ticket_id TEXT NOT NULL, sow_name TEXT DEFAULT 'General Scope', boq_section TEXT DEFAULT 'General Items', item_no TEXT, description TEXT NOT NULL, preferred_brand TEXT, quantity INTEGER, uom TEXT, delivery_time TEXT, vendor TEXT, FOREIGN KEY (ticket_id) REFERENCES requests(ticket_id) ON DELETE CASCADE)''')
         cursor.execute('''CREATE TABLE IF NOT EXISTS notifications (id INTEGER PRIMARY KEY AUTOINCREMENT, target_user TEXT NOT NULL, message TEXT NOT NULL, is_read INTEGER DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
 
-        cursor.execute('''CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, name TEXT, requestor_name TEXT, requestor_dept TEXT, priority TEXT, status TEXT, lead_id TEXT, sph_mode TEXT, project_sph_awal REAL, project_sph_final REAL, created_at TEXT, closed_at TEXT)''')
+        # UPDATE: Tambah kolom target_rfs, pipeline_stage, dan progress_pct
+        cursor.execute('''CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, name TEXT, requestor_name TEXT, requestor_dept TEXT, priority TEXT, status TEXT, lead_id TEXT, sph_mode TEXT, project_sph_awal REAL, project_sph_final REAL, created_at TEXT, closed_at TEXT, target_rfs TEXT, pipeline_stage TEXT, progress_pct INTEGER)''')
+        
+        # MIGRATION: Auto-tambah kolom baru jika database lama sudah ada (tanpa menghapus data)
+        for col, dtype in [('target_rfs', 'TEXT'), ('pipeline_stage', 'TEXT'), ('progress_pct', 'INTEGER')]:
+            try:
+                cursor.execute(f"ALTER TABLE projects ADD COLUMN {col} {dtype}")
+            except sqlite3.OperationalError:
+                pass # Kolom sudah ada, aman.
+
         cursor.execute('''CREATE TABLE IF NOT EXISTS sows (id TEXT PRIMARY KEY, project_id TEXT, name TEXT, FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE)''')
         cursor.execute('''CREATE TABLE IF NOT EXISTS boqs (id TEXT PRIMARY KEY, sow_id TEXT, name TEXT, FOREIGN KEY(sow_id) REFERENCES sows(id) ON DELETE CASCADE)''')
         cursor.execute('''CREATE TABLE IF NOT EXISTS items (id TEXT PRIMARY KEY, boq_id TEXT, product TEXT, qty REAL, uom TEXT, vendor TEXT, sph_awal REAL, sph_final REAL, notes TEXT, pic_ids TEXT, FOREIGN KEY(boq_id) REFERENCES boqs(id) ON DELETE CASCADE)''')
@@ -63,39 +72,7 @@ def init_db():
                 cursor.execute('''INSERT INTO users (username, password, full_name, department, role) VALUES (?, ?, ?, ?, ?)''', user_data)
         conn.commit()
 
-def migrate_json_to_relational():
-    with contextlib.closing(sqlite3.connect(DB_NAME)) as conn:
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        
-        cursor.execute("SELECT COUNT(*) FROM projects")
-        if cursor.fetchone()[0] > 0:
-            return 
-            
-        cursor.execute("SELECT json_data FROM dashboard_state WHERE data_type = 'projects'")
-        row = cursor.fetchone()
-        if not row or not row['json_data']:
-            return
-            
-        projects_list = json.loads(row['json_data'])
-        
-        for p in projects_list:
-            cursor.execute('''INSERT OR IGNORE INTO projects (id, name, requestor_name, requestor_dept, priority, status, lead_id, sph_mode, project_sph_awal, project_sph_final, created_at, closed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', (p.get('id'), p.get('name'), p.get('requestorName'), p.get('requestorDept'), p.get('priority'), p.get('status'), p.get('leadId'), p.get('sphMode'), p.get('projectSphAwal'), p.get('projectSphFinal'), p.get('createdAt'), p.get('closedAt')))
-            for sow in p.get('sows', []):
-                cursor.execute("INSERT OR IGNORE INTO sows (id, project_id, name) VALUES (?, ?, ?)", (sow.get('id'), p.get('id'), sow.get('name')))
-                for boq in sow.get('boqs', []):
-                    cursor.execute("INSERT OR IGNORE INTO boqs (id, sow_id, name) VALUES (?, ?, ?)", (boq.get('id'), sow.get('id'), boq.get('name')))
-                    for it in boq.get('items', []):
-                        cursor.execute('''INSERT OR IGNORE INTO items (id, boq_id, product, qty, uom, vendor, sph_awal, sph_final, notes, pic_ids) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', (it.get('id'), boq.get('id'), it.get('product'), it.get('qty'), it.get('uom'), it.get('vendor'), it.get('sphAwal'), it.get('sphFinal'), it.get('notes'), json.dumps(it.get('picIds', []))))
-            for doc in p.get('comparison_docs', []):
-                vendor_name = doc.get('vendor_name') or doc.get('vendorName')
-                offered_price = doc.get('offered_price') or doc.get('offeredPrice')
-                file_path = doc.get('file_path') or doc.get('filePath')
-                cursor.execute('''INSERT INTO comparison_docs (project_id, vendor_name, offered_price, file_path) VALUES (?, ?, ?, ?)''', (p.get('id'), vendor_name, offered_price, file_path))
-        conn.commit()
-
 init_db()
-migrate_json_to_relational()
 
 # --- HELPER: AMBIL DATA RELASIONAL ---
 def get_projects_relational(cursor):
@@ -137,6 +114,12 @@ def get_projects_relational(cursor):
         p['projectSphFinal'] = p.pop('project_sph_final')
         p['createdAt'] = p.pop('created_at')
         p['closedAt'] = p.pop('closed_at')
+        
+        # Mapping nama kolom baru dari DB (snake_case) ke Javascript (camelCase)
+        p['targetRfs'] = p.pop('target_rfs', None)
+        p['pipelineStage'] = p.pop('pipeline_stage', None)
+        p['progressPct'] = p.pop('progress_pct', None)
+
         projects_data.append(p)
     return projects_data
 
@@ -223,15 +206,12 @@ def upload_boq():
     if not ticket_id or 'file' not in request.files: return jsonify({"success": False, "message": "Data tidak lengkap"}), 400
     try:
         df = pd.read_excel(request.files['file'])
-        # Perbaikan Timestamp Pandas
         for col in df.select_dtypes(include=['datetime64']).columns:
             df[col] = df[col].dt.strftime('%Y-%m-%d')
         df = df.fillna("")
 
         with contextlib.closing(sqlite3.connect(DB_NAME)) as conn:
             cursor = conn.cursor()
-            
-            # PERBAIKAN 1: Hapus data upload sebelumnya agar tidak menumpuk dan menduplikasi saat di-assign!
             cursor.execute("DELETE FROM request_items WHERE ticket_id = ?", (ticket_id,))
             
             for _, row in df.iterrows():
@@ -284,7 +264,14 @@ def assign_ticket():
                     title = f"{req['title']} ({req['client_name'] or 'Klien Umum'})"
                     created = req['created_at'][:10] if req['created_at'] else datetime.now().strftime('%Y-%m-%d')
                     
-                    cursor.execute('''INSERT INTO projects (id, name, requestor_name, requestor_dept, priority, status, lead_id, sph_mode, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''', (ticket_id, title, req_name, req_dept, 'High', 'ongoing', pic_username, 'item', created))
+                    # LOGIKA BARU: Tarik SLA Date untuk dijadikan Target RFS, dan set default Pipeline Stage ke Tahap 1
+                    sla_date = req['sla_date'] if req['sla_date'] else ""
+                    default_stage = "1 - Project Identification"
+                    default_progress = 0
+                    
+                    cursor.execute('''INSERT INTO projects (id, name, requestor_name, requestor_dept, priority, status, lead_id, sph_mode, created_at, target_rfs, pipeline_stage, progress_pct) 
+                                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', 
+                                      (ticket_id, title, req_name, req_dept, 'High', 'ongoing', pic_username, 'item', created, sla_date, default_stage, default_progress))
                     
                     cursor.execute("SELECT * FROM request_items WHERE ticket_id = ?", (ticket_id,))
                     req_items = cursor.fetchall()
@@ -346,7 +333,8 @@ def api_presourcing():
 
                 for p in projects:
                     cursor.execute("DELETE FROM projects WHERE id = ?", (p['id'],)) 
-                    cursor.execute('''INSERT INTO projects (id, name, requestor_name, requestor_dept, priority, status, lead_id, sph_mode, project_sph_awal, project_sph_final, created_at, closed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', (p['id'], p.get('name'), p.get('requestorName'), p.get('requestorDept'), p.get('priority'), p.get('status'), p.get('leadId'), p.get('sphMode'), p.get('projectSphAwal'), p.get('projectSphFinal'), p.get('createdAt'), p.get('closedAt')))
+                    # UPDATE QUERY: Menambahkan target_rfs, pipeline_stage, progress_pct saat POST (Save)
+                    cursor.execute('''INSERT INTO projects (id, name, requestor_name, requestor_dept, priority, status, lead_id, sph_mode, project_sph_awal, project_sph_final, created_at, closed_at, target_rfs, pipeline_stage, progress_pct) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', (p['id'], p.get('name'), p.get('requestorName'), p.get('requestorDept'), p.get('priority'), p.get('status'), p.get('leadId'), p.get('sphMode'), p.get('projectSphAwal'), p.get('projectSphFinal'), p.get('createdAt'), p.get('closedAt'), p.get('targetRfs'), p.get('pipelineStage'), p.get('progressPct')))
 
                     for sow in p.get('sows', []):
                         cursor.execute("INSERT INTO sows (id, project_id, name) VALUES (?, ?, ?)", (sow['id'], p['id'], sow.get('name')))
@@ -398,6 +386,7 @@ def download_report():
                         "Ticket ID": p.get('id', ''), "Nama Project": p.get('name', ''),
                         "Requestor": p.get('requestorName', ''), "PIC Assigned": p.get('leadId', ''),
                         "Status": p.get('status', ''), "Tanggal Dibuat": p.get('createdAt', ''),
+                        "Target RFS": p.get('targetRfs', ''), "Pipeline Stage": p.get('pipelineStage', ''),
                         "Scope of Work": sow.get('name', ''), "BoQ Section": boq.get('name', ''),
                         "Deskripsi Item": item.get('product', ''), "Qty": item.get('qty', 0),
                         "Vendor": item.get('vendor', ''), "SPH Awal": item.get('sphAwal', ''), "SPH Final": item.get('sphFinal', '')
@@ -416,7 +405,6 @@ def revisi_boq():
     if 'file' not in request.files or not ticket_id: return jsonify({"success": False, "message": "Data tidak valid"}), 400
     try:
         df = pd.read_excel(request.files['file'])
-        # Sanitasi Timestamp
         for col in df.select_dtypes(include=['datetime64']).columns:
             df[col] = df[col].dt.strftime('%Y-%m-%d')
         df = df.fillna("")
@@ -425,7 +413,6 @@ def revisi_boq():
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             
-            # --- 1. UPDATE TABEL PRESALES (SA PORTAL) MENGGUNAKAN LIST MAPPING ---
             cursor.execute("SELECT * FROM request_items WHERE ticket_id = ?", (ticket_id,))
             old_req_map = {}
             for r in cursor.fetchall():
@@ -442,7 +429,6 @@ def revisi_boq():
                 s_name = str(row.get("Scope of Work (Opsional)", "")).strip() or "General Scope of Work"
                 b_name = str(row.get("Bill of Quantity (Opsional)", "")).strip() or "General Items"
                 
-                # Cek item kembar di SA Portal
                 if desc_key in old_req_map and len(old_req_map[desc_key]) > 0:
                     old_req = old_req_map[desc_key].pop(0)
                     cursor.execute("UPDATE request_items SET sow_name=?, boq_section=?, quantity=?, uom=?, vendor=? WHERE id=?", 
@@ -451,12 +437,10 @@ def revisi_boq():
                     cursor.execute("INSERT INTO request_items (ticket_id, sow_name, boq_section, description, quantity, uom, vendor) VALUES (?, ?, ?, ?, ?, ?, ?)", 
                                    (ticket_id, s_name, b_name, desc_raw, qty, uom, vendor))
                                    
-            # Bersihkan item lama di SA Portal yang dihapus di Excel baru
             for leftover_list in old_req_map.values():
                 for leftover_req in leftover_list:
                     cursor.execute("DELETE FROM request_items WHERE id = ?", (leftover_req['id'],))
             
-            # --- 2. UPDATE TABEL PRESOURCING (ADMIN PORTAL) MENGGUNAKAN LIST MAPPING ---
             cursor.execute("SELECT i.* FROM items i JOIN boqs b ON i.boq_id = b.id JOIN sows s ON b.sow_id = s.id WHERE s.project_id = ?", (ticket_id,))
             old_items_map = {}
             for r in cursor.fetchall():
@@ -494,14 +478,12 @@ def revisi_boq():
                     
                 target_boq_id = boq_map[(s_name, b_name)]
                 
-                # Cek item kembar di Admin Portal
                 if desc_key in old_items_map and len(old_items_map[desc_key]) > 0:
                     old_item = old_items_map[desc_key].pop(0) 
                     cursor.execute("UPDATE items SET boq_id=?, qty=?, uom=?, vendor=? WHERE id=?", (target_boq_id, qty, uom, vendor, old_item['id']))
                 else:
                     cursor.execute("INSERT INTO items (id, boq_id, product, qty, uom, vendor, pic_ids) VALUES (?, ?, ?, ?, ?, ?, ?)", (f"item_{uuid.uuid4().hex[:8]}", target_boq_id, desc_raw, qty, uom, vendor, "[]"))
                                    
-            # Bersihkan item lama di Admin Portal yang dihapus di Excel baru
             for leftover_list in old_items_map.values():
                 for leftover_item in leftover_list:
                     cursor.execute("DELETE FROM items WHERE id = ?", (leftover_item['id'],))
