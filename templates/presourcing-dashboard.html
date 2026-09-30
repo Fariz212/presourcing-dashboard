@@ -229,6 +229,408 @@ body{
 .page-hero-title { font-size: 22px; line-height: 1.1; font-weight: 700; letter-spacing: .01em; margin-bottom: 4px; }
 .page-hero-sub { font-size: 11.5px; color: rgba(255,255,255,.85); }
 
+/* =========================================================
+   PROJECT MODAL - COMPACT ENTERPRISE FORM
+   UI ONLY - API / DATA STRUCTURE TIDAK BERUBAH
+   ========================================================= */
+
+.project-modal {
+  max-width: 900px !important;
+}
+
+.project-modal .modal-body {
+  padding: 16px 18px 90px;
+}
+
+.form-section {
+  margin-bottom: 14px;
+}
+
+.form-section:last-child {
+  margin-bottom: 0;
+}
+
+.form-section-head {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+
+  margin-bottom:8px;
+  padding-bottom:6px;
+
+  border-bottom:1px solid #E2E8F0;
+}
+
+.form-section-title {
+  font-size:11px;
+  font-weight:700;
+  color:#0F5CA8;
+  text-transform:uppercase;
+  letter-spacing:.05em;
+}
+
+.form-section-note {
+  font-size:9px;
+  color:#94A3B8;
+}
+
+.project-name-field {
+  margin-bottom:10px;
+}
+
+.project-name-field input {
+  height:38px !important;
+  font-size:13px !important;
+  font-weight:600;
+}
+
+.required-mark::after {
+  content:' *';
+  color:#DC2626;
+}
+
+.execution-box {
+  padding:10px;
+
+  background:#F8FAFC;
+
+  border:1px solid #DCE4EE;
+  border-radius:7px;
+}
+
+.execution-box .field {
+  margin-bottom:10px;
+}
+
+.execution-box .field:last-child {
+  margin-bottom:0;
+}
+
+.sph-summary-box {
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+
+  margin-top:8px;
+  padding:10px;
+
+  background:#F8FAFC;
+
+  border:1px solid #DCE4EE;
+  border-radius:7px;
+}
+
+.sph-summary-box .field {
+  margin-bottom:0;
+}
+
+.sow-block {
+  margin:0 0 10px !important;
+  padding:10px !important;
+
+  background:#F8FAFC !important;
+
+  border:1px solid #DCE4EE !important;
+  border-radius:7px !important;
+}
+
+.sow-head {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+
+  margin-bottom:8px;
+}
+
+.sow-index {
+  width:22px;
+  height:22px;
+
+  flex:0 0 22px;
+
+  display:flex;
+  align-items:center;
+  justify-content:center;
+
+  background:#E8F2FE;
+  color:#2563EB;
+
+  border-radius:50%;
+
+  font-size:9px;
+  font-weight:700;
+}
+
+.sow-heading {
+  display:flex;
+  align-items:center;
+  gap:7px;
+
+  flex:1;
+  min-width:0;
+}
+
+.sow-heading-text {
+  font-size:10.5px;
+  font-weight:700;
+  color:#334155;
+}
+
+.sow-actions {
+  display:flex;
+  gap:5px;
+}
+
+.boq-block {
+  margin:8px 0 0 !important;
+  padding:9px !important;
+
+  background:#FFFFFF !important;
+
+  border:1px solid #E2E8F0 !important;
+  border-radius:6px !important;
+}
+
+.boq-head {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+
+  margin-bottom:8px;
+}
+
+.boq-heading {
+  display:flex;
+  align-items:center;
+  gap:6px;
+
+  min-width:0;
+}
+
+.boq-number {
+  width:20px;
+  height:20px;
+
+  display:flex;
+  align-items:center;
+  justify-content:center;
+
+  border-radius:5px;
+
+  background:#F1F5F9;
+  color:#64748B;
+
+  font-size:8px;
+  font-weight:700;
+}
+
+.boq-title-text {
+  font-size:10px;
+  font-weight:700;
+  color:#475569;
+}
+
+.item-block {
+  margin:7px 0 0 !important;
+  padding:9px !important;
+
+  background:#FAFCFF;
+
+  border:1px solid #E5EAF0 !important;
+  border-radius:6px;
+
+  position:relative;
+}
+
+.item-head {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+
+  margin-bottom:7px;
+}
+
+.item-label {
+  font-size:9px;
+  font-weight:700;
+  color:#94A3B8;
+  text-transform:uppercase;
+  letter-spacing:.04em;
+}
+
+.item-grid-main {
+  display:grid;
+
+  grid-template-columns:
+    minmax(0,2.2fr)
+    .55fr
+    .7fr
+    minmax(0,1.4fr);
+
+  gap:8px;
+}
+
+.item-grid-finance {
+  display:grid;
+
+  grid-template-columns:
+    minmax(0,1fr)
+    minmax(0,1fr)
+    minmax(0,1.5fr);
+
+  gap:8px;
+
+  margin-top:7px;
+}
+
+.item-grid-main .field,
+.item-grid-finance .field {
+  margin-bottom:0;
+}
+
+.item-block label {
+  font-size:9px !important;
+  margin-bottom:4px !important;
+}
+
+.item-block input {
+  padding:6px 8px !important;
+  font-size:10.5px !important;
+}
+
+.pic-select {
+  gap:4px !important;
+}
+
+.pic-opt {
+  padding:4px 7px !important;
+
+  font-size:9.5px !important;
+
+  border-radius:4px !important;
+
+  background:#FFFFFF;
+}
+
+.add-row {
+  display:flex;
+  justify-content:flex-start;
+  gap:6px;
+
+  margin-top:8px;
+}
+
+.form-add-btn {
+  border:1px dashed #93C5FD !important;
+
+  background:#F8FBFF !important;
+
+  color:#2563EB !important;
+
+  font-size:9.5px !important;
+
+  padding:5px 9px !important;
+
+  border-radius:5px !important;
+}
+
+.form-add-btn:hover {
+  background:#EFF6FF !important;
+}
+
+.form-danger-btn {
+  font-size:9px !important;
+  padding:4px 7px !important;
+}
+
+.project-modal .modal-ft {
+  padding:11px 18px;
+
+  min-height:62px;
+
+  box-shadow:
+    0 -4px 12px
+    rgba(15,23,42,.06);
+}
+
+.modal-summary {
+  margin-right:auto;
+
+  display:flex;
+  align-items:center;
+  gap:12px;
+}
+
+.modal-summary-item {
+  display:flex;
+  flex-direction:column;
+  gap:1px;
+}
+
+.modal-summary-label {
+  font-size:8px;
+  color:#94A3B8;
+  text-transform:uppercase;
+}
+
+.modal-summary-value {
+  font-size:11px;
+  font-weight:700;
+  color:#334155;
+}
+
+.modal-summary-divider {
+  width:1px;
+  height:26px;
+  background:#E2E8F0;
+}
+
+@media(max-width:800px) {
+
+  .item-grid-main {
+    grid-template-columns:
+      1fr 80px 90px;
+  }
+
+  .item-grid-main .field:nth-child(1) {
+    grid-column:1 / -1;
+  }
+
+  .item-grid-main .field:nth-child(4) {
+    grid-column:1 / -1;
+  }
+
+  .item-grid-finance {
+    grid-template-columns:1fr 1fr;
+  }
+
+}
+
+@media(max-width:600px) {
+
+  .grid2,
+  .grid3 {
+    grid-template-columns:1fr !important;
+  }
+
+  .item-grid-main,
+  .item-grid-finance {
+    grid-template-columns:1fr;
+  }
+
+  .modal-summary-divider {
+    display:none;
+  }
+
+  .modal-summary {
+    gap:7px;
+  }
+
+}
+
 </style>
 </head>
 <body>

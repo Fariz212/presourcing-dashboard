@@ -1035,69 +1035,872 @@ function renderModal(){
 }
 
 function projectModalHtml(d, isNew){
+
+  const totalSows =
+    (d.sows || []).length;
+
+  const totalBoqs =
+    (d.sows || []).reduce(
+      (sum, sow) =>
+        sum + (sow.boqs || []).length,
+      0
+    );
+
+  const totalItems =
+    (d.sows || []).reduce(
+      (sum, sow) =>
+        sum +
+        (sow.boqs || []).reduce(
+          (bSum, boq) =>
+            bSum + (boq.items || []).length,
+          0
+        ),
+      0
+    );
+
   return `
-  <div class="overlay" id="ov" style="z-index: 100;">
-    <div class="modal">
+  <div
+    class="overlay"
+    id="ov"
+    style="z-index:100;">
+
+    <div
+      class="modal project-modal">
+
+      <!-- HEADER -->
+
       <div class="modal-hd">
-        <h3>${isNew?'Project baru':'Edit project'}</h3>
-        <button class="mini-btn" id="m-close" type="button">Tutup</button>
-      </div>
-      <div class="modal-body">
-        <div class="field"><label>Nama project</label><input id="m-name" value="${escAttr(d.name)}"></div>
-        <div class="grid2">
-          <div class="field"><label>Nama pemohon (SA)</label><input id="m-req-name" value="${escAttr(d.requestorName)}"></div>
-          <div class="field"><label>Departemen</label><input id="m-req-dept" value="${escAttr(d.requestorDept)}"></div>
-        </div>
-        <div class="grid3" style="background: #f8f9fa; padding: 12px; border-radius: 6px; margin-bottom: 12px; border: 1px dashed #ced4da;">
-           <div class="field" style="margin:0;"><label>Target RFS</label><input type="date" id="m-target-rfs" value="${escAttr(d.targetRfs)}"></div>
-           <div class="field" style="margin:0;"><label>Tahap Pipeline</label>
-             <select id="m-pipeline-stage">
-                <option value="1 - Project Identification" ${d.pipelineStage==='1 - Project Identification'?'selected':''}>1 - Identification</option>
-                <option value="2 - SPH Preparation" ${d.pipelineStage==='2 - SPH Preparation'?'selected':''}>2 - SPH Prep</option>
-                <option value="3 - Vendor Selection" ${d.pipelineStage==='3 - Vendor Selection'?'selected':''}>3 - Vendor Select</option>
-                <option value="4 - Negotiation" ${d.pipelineStage==='4 - Negotiation'?'selected':''}>4 - Negotiation</option>
-                <option value="5 - Finalization" ${d.pipelineStage==='5 - Finalization'?'selected':''}>5 - Finalization</option>
-                <option value="6 - RFS" ${d.pipelineStage==='6 - RFS'?'selected':''}>6 - RFS</option>
-             </select>
-           </div>
-           <div class="field" style="margin:0;"><label>Progress (%)</label><input type="number" id="m-progress" min="0" max="100" value="${d.progressPct || 0}"></div>
-        </div>
-        <div class="grid3">
-          <div class="field"><label>Prioritas</label><select id="m-priority">${['Medium','High','Urgent'].map(x=>`<option ${d.priority===x?'selected':''}>${x}</option>`).join('')}</select></div>
-          <div class="field"><label>Status (Tutup Project)</label><select id="m-status"><option value="ongoing" ${d.status==='ongoing'?'selected':''}>Berjalan</option><option value="win" ${d.status==='win'?'selected':''}>Menang (Win)</option><option value="lose" ${d.status==='lose'?'selected':''}>Kalah (Lose)</option></select></div>
-          <div class="field"><label>Lead Presource</label><select id="m-lead">${team.map(t=>`<option ${d.leadId===t?'selected':''}>${escAttr(t)}</option>`).join('')}</select></div>
-        </div>
-        <div class="field"><label>Mode SPH</label><select id="m-sphmode"><option value="item" ${d.sphMode==='item'?'selected':''}>Per item/produk</option><option value="project" ${d.sphMode==='project'?'selected':''}>Total project saja</option></select></div>
-        <div id="m-project-sph" style="${d.sphMode==='project'?'':'display:none'}">
-          <div class="grid2">
-            <div class="field"><label>SPH Awal (total)</label><input type="number" id="m-proj-awal" value="${d.projectSphAwal??''}"></div>
-            <div class="field"><label>SPH Final (total)</label><input type="number" id="m-proj-final" value="${d.projectSphFinal??''}"></div>
+
+        <div>
+
+          <h3>
+            ${isNew ? 'Project baru' : 'Edit project'}
+          </h3>
+
+          <div
+            style="
+              margin-top:3px;
+              font-size:9px;
+              color:#94A3B8;">
+
+            ${isNew
+              ? 'Tambahkan project baru ke portfolio presourcing'
+              : 'Perbarui informasi dan detail project'}
+
           </div>
+
         </div>
-        <div id="sows-container">${d.sows.map((sow,si)=>sowBlockHtml(sow,si)).join('')}</div>
-        <button class="mini-btn" id="m-add-sow" type="button">+ Tambah SoW</button>
+
+        <button
+          class="mini-btn"
+          id="m-close"
+          type="button">
+
+          Tutup
+
+        </button>
+
       </div>
-      <div class="modal-ft"><button class="btn-ghost" id="m-cancel" type="button">Batal</button><button class="btn-primary" id="m-save" type="button">Simpan</button></div>
+
+
+      <!-- BODY -->
+
+      <div class="modal-body">
+
+
+        <!-- ==========================================
+             01 PROJECT INFORMATION
+        =========================================== -->
+
+        <div class="form-section">
+
+          <div class="form-section-head">
+
+            <div class="form-section-title">
+              01 · Project Information
+            </div>
+
+            <div class="form-section-note">
+              Basic project information
+            </div>
+
+          </div>
+
+
+          <div
+            class="field project-name-field">
+
+            <label class="required-mark">
+              Nama project
+            </label>
+
+            <input
+              id="m-name"
+              value="${escAttr(d.name)}"
+              placeholder="Masukkan nama project">
+
+          </div>
+
+
+          <div class="grid2">
+
+            <div class="field">
+
+              <label>
+                Nama pemohon (SA)
+              </label>
+
+              <input
+                id="m-req-name"
+                value="${escAttr(d.requestorName)}"
+                placeholder="Nama requester">
+
+            </div>
+
+
+            <div class="field">
+
+              <label>
+                Departemen
+              </label>
+
+              <input
+                id="m-req-dept"
+                value="${escAttr(d.requestorDept)}"
+                placeholder="Departemen">
+
+            </div>
+
+          </div>
+
+        </div>
+
+
+        <!-- ==========================================
+             02 EXECUTION
+        =========================================== -->
+
+        <div class="form-section">
+
+          <div class="form-section-head">
+
+            <div class="form-section-title">
+              02 · Execution
+            </div>
+
+            <div class="form-section-note">
+              Schedule, pipeline &amp; ownership
+            </div>
+
+          </div>
+
+
+          <div class="execution-box">
+
+            <div class="grid3">
+
+              <div class="field">
+
+                <label class="required-mark">
+                  Target RFS
+                </label>
+
+                <input
+                  type="date"
+                  id="m-target-rfs"
+                  value="${escAttr(d.targetRfs)}">
+
+              </div>
+
+
+              <div class="field">
+
+                <label>
+                  Tahap Pipeline
+                </label>
+
+                <select id="m-pipeline-stage">
+
+                  <option value="1 - Project Identification"
+                    ${d.pipelineStage==='1 - Project Identification'?'selected':''}>
+                    1 - Identification
+                  </option>
+
+                  <option value="2 - SPH Preparation"
+                    ${d.pipelineStage==='2 - SPH Preparation'?'selected':''}>
+                    2 - SPH Preparation
+                  </option>
+
+                  <option value="3 - Vendor Selection"
+                    ${d.pipelineStage==='3 - Vendor Selection'?'selected':''}>
+                    3 - Vendor Selection
+                  </option>
+
+                  <option value="4 - Negotiation"
+                    ${d.pipelineStage==='4 - Negotiation'?'selected':''}>
+                    4 - Negotiation
+                  </option>
+
+                  <option value="5 - Finalization"
+                    ${d.pipelineStage==='5 - Finalization'?'selected':''}>
+                    5 - Finalization
+                  </option>
+
+                  <option value="6 - RFS"
+                    ${d.pipelineStage==='6 - RFS'?'selected':''}>
+                    6 - RFS
+                  </option>
+
+                </select>
+
+              </div>
+
+
+              <div class="field">
+
+                <label>
+                  Progress (%)
+                </label>
+
+                <input
+                  type="number"
+                  id="m-progress"
+                  min="0"
+                  max="100"
+                  value="${d.progressPct || 0}">
+
+              </div>
+
+            </div>
+
+
+            <div class="grid3">
+
+              <div class="field">
+
+                <label>
+                  Prioritas
+                </label>
+
+                <select id="m-priority">
+
+                  ${['Medium','High','Urgent']
+                    .map(x => `
+                      <option
+                        ${d.priority === x ? 'selected' : ''}>
+                        ${x}
+                      </option>
+                    `)
+                    .join('')}
+
+                </select>
+
+              </div>
+
+
+              <div class="field">
+
+                <label>
+                  Status
+                </label>
+
+                <select id="m-status">
+
+                  <option
+                    value="ongoing"
+                    ${d.status==='ongoing'?'selected':''}>
+                    Berjalan
+                  </option>
+
+                  <option
+                    value="win"
+                    ${d.status==='win'?'selected':''}>
+                    Menang (Win)
+                  </option>
+
+                  <option
+                    value="lose"
+                    ${d.status==='lose'?'selected':''}>
+                    Kalah (Lose)
+                  </option>
+
+                </select>
+
+              </div>
+
+
+              <div class="field">
+
+                <label>
+                  Lead Presource
+                </label>
+
+                <select id="m-lead">
+
+                  ${team
+                    .map(t => `
+                      <option
+                        ${d.leadId===t?'selected':''}>
+                        ${escAttr(t)}
+                      </option>
+                    `)
+                    .join('')}
+
+                </select>
+
+              </div>
+
+            </div>
+
+          </div>
+
+        </div>
+
+
+        <!-- ==========================================
+             03 SPH
+        =========================================== -->
+
+        <div class="form-section">
+
+          <div class="form-section-head">
+
+            <div class="form-section-title">
+              03 · SPH
+            </div>
+
+            <div class="form-section-note">
+              Pricing calculation mode
+            </div>
+
+          </div>
+
+
+          <div class="field">
+
+            <label>
+              Mode SPH
+            </label>
+
+            <select id="m-sphmode">
+
+              <option
+                value="item"
+                ${d.sphMode==='item'?'selected':''}>
+                Per item / produk
+              </option>
+
+              <option
+                value="project"
+                ${d.sphMode==='project'?'selected':''}>
+                Total project saja
+              </option>
+
+            </select>
+
+          </div>
+
+
+          <div
+            id="m-project-sph"
+            style="
+              ${d.sphMode==='project'
+                ? ''
+                : 'display:none'}">
+
+            <div class="sph-summary-box">
+
+              <div class="field">
+
+                <label>
+                  SPH Awal (total)
+                </label>
+
+                <input
+                  type="number"
+                  id="m-proj-awal"
+                  value="${d.projectSphAwal ?? ''}">
+
+              </div>
+
+
+              <div class="field">
+
+                <label>
+                  SPH Final (total)
+                </label>
+
+                <input
+                  type="number"
+                  id="m-proj-final"
+                  value="${d.projectSphFinal ?? ''}">
+
+              </div>
+
+            </div>
+
+          </div>
+
+        </div>
+
+
+        <!-- ==========================================
+             04 SCOPE & BOQ
+        =========================================== -->
+
+        <div class="form-section">
+
+          <div class="form-section-head">
+
+            <div class="form-section-title">
+              04 · Scope &amp; BoQ
+            </div>
+
+            <div class="form-section-note">
+              ${totalSows} SoW · ${totalBoqs} BoQ · ${totalItems} Items
+            </div>
+
+          </div>
+
+
+          <div id="sows-container">
+
+            ${(d.sows || [])
+              .map(
+                (sow, si) =>
+                  sowBlockHtml(sow, si)
+              )
+              .join('')}
+
+          </div>
+
+
+          <div class="add-row">
+
+            <button
+              class="mini-btn form-add-btn"
+              id="m-add-sow"
+              type="button">
+
+              + Tambah Scope of Work
+
+            </button>
+
+          </div>
+
+        </div>
+
+      </div>
+
+
+      <!-- FOOTER -->
+
+      <div class="modal-ft">
+
+        <div class="modal-summary">
+
+          <div class="modal-summary-item">
+
+            <span class="modal-summary-label">
+              Scope
+            </span>
+
+            <span class="modal-summary-value">
+              ${totalSows}
+            </span>
+
+          </div>
+
+
+          <div class="modal-summary-divider"></div>
+
+
+          <div class="modal-summary-item">
+
+            <span class="modal-summary-label">
+              BoQ
+            </span>
+
+            <span class="modal-summary-value">
+              ${totalBoqs}
+            </span>
+
+          </div>
+
+
+          <div class="modal-summary-divider"></div>
+
+
+          <div class="modal-summary-item">
+
+            <span class="modal-summary-label">
+              Items
+            </span>
+
+            <span class="modal-summary-value">
+              ${totalItems}
+            </span>
+
+          </div>
+
+        </div>
+
+
+        <button
+          class="btn-ghost"
+          id="m-cancel"
+          type="button">
+
+          Batal
+
+        </button>
+
+
+        <button
+          class="btn-primary"
+          id="m-save"
+          type="button">
+
+          ${isNew ? 'Simpan Project' : 'Simpan Perubahan'}
+
+        </button>
+
+      </div>
+
     </div>
-  </div>`;
+
+  </div>
+  `;
 }
 
-function sowBlockHtml(sow, si){ return `<div class="sow-block" data-sow-idx="${si}"><div class="field"><label>Scope of Work</label><input class="sow-name" data-si="${si}" value="${escAttr(sow.name)}"></div>${sow.boqs.map((boq,bi)=>boqBlockHtml(boq,si,bi)).join('')}<button class="mini-btn" data-add-boq="${si}" type="button">+ Tambah BoQ</button><button class="mini-btn danger" data-del-sow="${si}" type="button" style="float:right;">Hapus SoW</button></div>`; }
-function boqBlockHtml(boq, si, bi){ return `<div class="boq-block" data-boq-idx="${bi}"><div class="field"><label>Bill of Quantity</label><input class="boq-name" data-si="${si}" data-bi="${bi}" value="${escAttr(boq.name)}"></div>${boq.items.map((it,ii)=>itemBlockHtml(it,si,bi,ii)).join('')}<button class="mini-btn" data-add-item="${si}:${bi}" type="button">+ Tambah item/produk</button><button class="mini-btn danger" data-del-boq="${si}:${bi}" type="button" style="float:right;">Hapus BoQ</button></div>`; }
+function sowBlockHtml(sow, si){
+
+  return `
+    <div
+      class="sow-block"
+      data-sow-idx="${si}">
+
+      <div class="sow-head">
+
+        <div class="sow-heading">
+
+          <div class="sow-index">
+            ${si + 1}
+          </div>
+
+          <div class="sow-heading-text">
+            Scope of Work
+          </div>
+
+        </div>
+
+
+        <div class="sow-actions">
+
+          <button
+            class="mini-btn danger form-danger-btn"
+            data-del-sow="${si}"
+            type="button">
+
+            Hapus
+
+          </button>
+
+        </div>
+
+      </div>
+
+
+      <div class="field">
+
+        <label class="required-mark">
+          Nama Scope of Work
+        </label>
+
+        <input
+          class="sow-name"
+          data-si="${si}"
+          value="${escAttr(sow.name)}"
+          placeholder="Contoh: Network Deployment">
+
+      </div>
+
+
+      <div>
+
+        ${(sow.boqs || [])
+          .map(
+            (boq, bi) =>
+              boqBlockHtml(
+                boq,
+                si,
+                bi
+              )
+          )
+          .join('')}
+
+      </div>
+
+
+      <div class="add-row">
+
+        <button
+          class="mini-btn form-add-btn"
+          data-add-boq="${si}"
+          type="button">
+
+          + Tambah BoQ
+
+        </button>
+
+      </div>
+
+    </div>
+  `;
+}
+function boqBlockHtml(boq, si, bi){
+
+  return `
+    <div
+      class="boq-block"
+      data-boq-idx="${bi}">
+
+      <div class="boq-head">
+
+        <div class="boq-heading">
+
+          <div class="boq-number">
+            ${bi + 1}
+          </div>
+
+          <div class="boq-title-text">
+            Bill of Quantity
+          </div>
+
+        </div>
+
+
+        <button
+          class="mini-btn danger form-danger-btn"
+          data-del-boq="${si}:${bi}"
+          type="button">
+
+          Hapus
+
+        </button>
+
+      </div>
+
+
+      <div class="field">
+
+        <label>
+          Nama BoQ
+        </label>
+
+        <input
+          class="boq-name"
+          data-si="${si}"
+          data-bi="${bi}"
+          value="${escAttr(boq.name)}"
+          placeholder="Nama paket / BoQ">
+
+      </div>
+
+
+      <div>
+
+        ${(boq.items || [])
+          .map(
+            (it, ii) =>
+              itemBlockHtml(
+                it,
+                si,
+                bi,
+                ii
+              )
+          )
+          .join('')}
+
+      </div>
+
+
+      <div class="add-row">
+
+        <button
+          class="mini-btn form-add-btn"
+          data-add-item="${si}:${bi}"
+          type="button">
+
+          + Tambah Item
+
+        </button>
+
+      </div>
+
+    </div>
+  `;
+}
+
 function itemBlockHtml(it, si, bi, ii){
-  return `<div class="item-block" data-item-idx="${ii}">
-    <div style="display:grid; grid-template-columns: 2fr 0.4fr 0.6fr 1.5fr; gap:12px; margin-bottom:12px;">
-      <div class="field" style="margin:0;"><label>Produk</label><input class="it-product" data-path="${si}:${bi}:${ii}" value="${escAttr(it.product)}"></div>
-      <div class="field" style="margin:0;"><label>Qty</label><input type="number" class="it-qty" data-path="${si}:${bi}:${ii}" value="${it.qty??1}"></div>
-      <div class="field" style="margin:0;"><label>UoM</label><input class="it-uom" data-path="${si}:${bi}:${ii}" value="${escAttr(it.uom)}"></div>
-      <div class="field" style="margin:0;"><label>Vendor</label><input class="it-vendor" data-path="${si}:${bi}:${ii}" value="${escAttr(it.vendor)}"></div>
+
+  return `
+    <div
+      class="item-block"
+      data-item-idx="${ii}">
+
+      <div class="item-head">
+
+        <div class="item-label">
+          Item ${ii + 1}
+        </div>
+
+        <button
+          class="mini-btn danger form-danger-btn"
+          data-del-item="${si}:${bi}:${ii}"
+          type="button">
+
+          Hapus
+
+        </button>
+
+      </div>
+
+
+      <!-- BASIC ITEM -->
+
+      <div class="item-grid-main">
+
+        <div class="field">
+
+          <label>
+            Produk
+          </label>
+
+          <input
+            class="it-product"
+            data-path="${si}:${bi}:${ii}"
+            value="${escAttr(it.product)}"
+            placeholder="Nama produk / service">
+
+        </div>
+
+
+        <div class="field">
+
+          <label>
+            Qty
+          </label>
+
+          <input
+            type="number"
+            class="it-qty"
+            data-path="${si}:${bi}:${ii}"
+            value="${it.qty ?? 1}"
+            min="0">
+
+        </div>
+
+
+        <div class="field">
+
+          <label>
+            UoM
+          </label>
+
+          <input
+            class="it-uom"
+            data-path="${si}:${bi}:${ii}"
+            value="${escAttr(it.uom)}"
+            placeholder="Unit">
+
+        </div>
+
+
+        <div class="field">
+
+          <label>
+            Vendor
+          </label>
+
+          <input
+            class="it-vendor"
+            data-path="${si}:${bi}:${ii}"
+            value="${escAttr(it.vendor)}"
+            placeholder="Vendor">
+
+        </div>
+
+      </div>
+
+
+      <!-- FINANCIAL + PIC -->
+
+      <div class="item-grid-finance">
+
+        <div class="field">
+
+          <label>
+            SPH Awal
+          </label>
+
+          <input
+            type="number"
+            class="it-awal"
+            data-path="${si}:${bi}:${ii}"
+            value="${it.sphAwal ?? ''}"
+            placeholder="0">
+
+        </div>
+
+
+        <div class="field">
+
+          <label>
+            SPH Final
+          </label>
+
+          <input
+            type="number"
+            class="it-final"
+            data-path="${si}:${bi}:${ii}"
+            value="${it.sphFinal ?? ''}"
+            placeholder="0">
+
+        </div>
+
+
+        <div class="field">
+
+          <label>
+            PIC
+          </label>
+
+          <div class="pic-select">
+
+            ${team
+              .map(t => `
+                <div
+                  class="
+                    pic-opt
+                    ${it.picIds.includes(t) ? 'on' : ''}
+                  "
+                  data-pic="${si}:${bi}:${ii}:${escAttr(t)}">
+
+                  ${escAttr(t)}
+
+                </div>
+              `)
+              .join('')}
+
+          </div>
+
+        </div>
+
+      </div>
+
     </div>
-    <div class="grid3">
-      <div class="field"><label>SPH Awal item</label><input type="number" class="it-awal" data-path="${si}:${bi}:${ii}" value="${it.sphAwal??''}"></div>
-      <div class="field"><label>SPH Final item</label><input type="number" class="it-final" data-path="${si}:${bi}:${ii}" value="${it.sphFinal??''}"></div>
-      <div class="field"><label>PIC</label><div class="pic-select">${team.map(t=>`<div class="pic-opt ${it.picIds.includes(t)?'on':''}" data-pic="${si}:${bi}:${ii}:${escAttr(t)}">${escAttr(t)}</div>`).join('')}</div></div>
-    </div>
-  </div>`;
+  `;
 }
 
 function teamModalHtml(d){ return `<div class="overlay" id="ov" style="z-index: 100;"><div class="modal" style="max-width:480px;"><div class="modal-hd"><h3>Kelola tim</h3><button class="mini-btn" id="m-close">Tutup</button></div><div class="modal-body"><textarea id="m-team-names" rows="4">${escAttr(d.names)}</textarea></div><div class="modal-ft"><button class="btn-ghost" id="m-cancel">Batal</button><button class="btn-primary" id="m-save-team">Simpan</button></div></div></div>`; }
