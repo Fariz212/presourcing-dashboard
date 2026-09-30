@@ -177,40 +177,29 @@ function fmtPct(n){ return n==null ? '—' : n.toFixed(1)+'%'; }
 function render(){
   const app = document.getElementById('app');
 
-  const pageTitle =
-    activeTab === 'overview'
-      ? 'Presourcing Project Dashboard'
-      : activeTab === 'projects'
-      ? 'Project & BoQ Management'
-      : 'Team & Workload';
+  let headerHtml = '';
 
-  const pageSub =
-    activeTab === 'overview'
-      ? 'Pipeline, Progress, and Target RFS'
-      : activeTab === 'projects'
-      ? 'Detail project, BoQ, SPH, dan progress'
-      : 'Distribusi project dan beban kerja tim';
+  // HERO KHUSUS OVERVIEW
+  if(activeTab === 'overview'){
 
-  const now = new Date();
+    const now = new Date();
 
-  const dateText = now.toLocaleDateString('id-ID', {
-    day: '2-digit',
-    month: 'long',
-    year: 'numeric'
-  });
+    const dateText = now.toLocaleDateString('id-ID', {
+      day: '2-digit',
+      month: 'long',
+      year: 'numeric'
+    });
 
-  app.innerHTML = `
-    <div class="page-shell">
-
+    headerHtml = `
       <div class="page-hero">
 
         <div class="page-hero-main">
           <div class="page-hero-title">
-            ${pageTitle}
+            Presourcing Project Dashboard
           </div>
 
           <div class="page-hero-sub">
-            ${pageSub}
+            Pipeline, Progress, and Target RFS
           </div>
         </div>
 
@@ -220,7 +209,10 @@ function render(){
             <div class="objective-icon">◎</div>
 
             <div>
-              <div class="objective-label">Objective</div>
+              <div class="objective-label">
+                Objective
+              </div>
+
               <div class="objective-text">
                 Ensure project readiness &amp; competitive sourcing
                 through effective presourcing
@@ -236,39 +228,100 @@ function render(){
         </div>
 
       </div>
+    `;
+  }
+
+
+  // PAGE HEADER UNTUK PROJECTS / TEAM
+  if(activeTab === 'projects'){
+
+    headerHtml = `
+      <div class="simple-page-header">
+        <div>
+          <div class="simple-page-title">
+            Project &amp; BoQ Management
+          </div>
+
+          <div class="simple-page-sub">
+            Detail project, BoQ, SPH, dan progress
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+
+  if(activeTab === 'team'){
+
+    headerHtml = `
+      <div class="simple-page-header">
+        <div>
+          <div class="simple-page-title">
+            Team &amp; Workload
+          </div>
+
+          <div class="simple-page-sub">
+            Distribusi project dan beban kerja tim
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+
+  app.innerHTML = `
+    <div class="page-shell">
+
+      ${headerHtml}
 
       <div id="tabcontent"></div>
 
     </div>
   `;
 
-  const content = document.getElementById('tabcontent');
+
+  const content =
+    document.getElementById('tabcontent');
+
 
   if(activeTab === 'overview'){
-    content.innerHTML = renderOverview();
+    content.innerHTML =
+      renderOverview();
   }
+
 
   if(activeTab === 'projects'){
-    content.innerHTML = renderProjects();
+    content.innerHTML =
+      renderProjects();
   }
+
 
   if(activeTab === 'team'){
-    content.innerHTML = renderTeam();
+    content.innerHTML =
+      renderTeam();
   }
 
+
   wireEvents();
+
 
   if(modal){
     renderModal();
   }
 
-  document.querySelectorAll('.app-nav-item').forEach(el => {
-    el.classList.toggle(
-      'active',
-      el.dataset.tab === activeTab
-    );
-  });
+
+  document
+    .querySelectorAll('.app-nav-item')
+    .forEach(el => {
+
+      el.classList.toggle(
+        'active',
+        el.dataset.tab === activeTab
+      );
+
+    });
 }
+
 function switchDashboardTab(id){
   activeTab = id;
   openProjectId = null;
@@ -546,6 +599,30 @@ function renderOverview(){
       background:
         rgba(255,255,255,.08);
     }
+
+    .simple-page-header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+
+  padding:10px 2px 12px;
+
+  margin-bottom:8px;
+
+  border-bottom:1px solid #E2E8F0;
+}
+
+.simple-page-title{
+  font-size:18px;
+  font-weight:700;
+  color:#0F172A;
+}
+
+.simple-page-sub{
+  margin-top:3px;
+  font-size:10.5px;
+  color:#64748B;
+}
 
     .objective-icon{
       width:28px;
