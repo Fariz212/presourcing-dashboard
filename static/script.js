@@ -1701,138 +1701,53 @@ function closeRevisionPreview(){
 }
 
 
-async function confirmRevisionBoq(
-  projectId
-){
-
-  const file =
-    window.pendingRevisionFile;
-
+async function confirmRevisionBoq(projectId) {
+  const file = window.pendingRevisionFile;
   if(!file){
-
-    alert(
-      'File revision tidak ditemukan.'
-    );
-
+    alert('File revision tidak ditemukan.');
     return;
   }
 
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('ticket_id', projectId);
 
-  const formData =
-    new FormData();
-
-  formData.append(
-    'file',
-    file
-  );
-
-  formData.append(
-    'ticket_id',
-    projectId
-  );
-
-
-  const btn =
-    document.getElementById(
-      'btn-confirm-revision'
-    );
-
-
+  const btn = document.getElementById('btn-confirm-revision');
   if(btn){
-
     btn.disabled = true;
-
-    btn.innerText =
-      'Applying revision...';
+    btn.innerText = 'Applying revision...';
   }
 
-
   try{
+    const res = await fetch('/api/revisi_boq', { method:'POST', body:formData });
+    const result = await res.json();
 
-    const res =
-      await fetch(
-        '/api/revisi_boq',
-        {
-          method:'POST',
-          body:formData
-        }
-      );
-
-    const result =
-      await res.json();
-
-
-    if(
-      res.ok &&
-      result.success
-    ){
-
+    if(res.ok && result.success){
       closeRevisionPreview();
-
-      alert(
-        'BoQ berhasil direvisi.'
-      );
-
+      alert('BoQ berhasil direvisi.');
       await loadAll();
-
       return;
     }
 
+    const details = Array.isArray(result.issues)
+      ? '\n' + result.issues.slice(0, 5).map(x => `Row ${x.row}: ${x.message}`).join('\n')
+      : '';
 
-    const details =
-      Array.isArray(
-        result.issues
-      )
-        ? '\n' +
-          result
-            .issues
-            .slice(0, 5)
-            .map(
-              x =>
-                `Row ${x.row}: ${x.message}`
-            )
-            .join('\n')
-        : '';
-
-
-    alert(
-      `Gagal menerapkan revisi: ${
-        result.message || 'Error'
-      }${details}`
-    );
-
+    alert(`Gagal menerapkan revisi: ${result.message || 'Error'}${details}`);
 
     if(btn){
-
       btn.disabled = false;
-
-      btn.innerText =
-        'Confirm & Apply Revision';
+      btn.innerText = 'Confirm & Apply Revision';
     }
-
   }
   catch(error){
-
-    console.error(
-      'Apply revision error:',
-      error
-    );
-
-    alert(
-      'Terjadi kesalahan saat menerapkan revisi.'
-    );
-
-
+    console.error('Apply revision error:', error);
+    alert('Terjadi kesalahan saat menerapkan revisi.');
     if(btn){
-
       btn.disabled = false;
-
-      btn.innerText =
-        'Confirm & Apply Revision';
+      btn.innerText = 'Confirm & Apply Revision';
     }
-
   }
-
 }
 
 // ---------- Modals ----------
@@ -2813,18 +2728,33 @@ function syncModalData() {
   d.priority = val('m-priority'); d.status = val('m-status'); d.leadId = val('m-lead');
   d.targetRfs = val('m-target-rfs'); d.pipelineStage = val('m-pipeline-stage'); d.progressPct = numOrNull(val('m-progress')) || 0;
   d.sphMode = val('m-sphmode');
-  if(d.sphMode==='project'){
+  
+  if(d.sphMode === 'project'){
     d.projectSphAwal = numOrNull(document.getElementById('m-proj-awal').value);
     d.projectSphFinal = numOrNull(document.getElementById('m-proj-final').value);
   }
+
+  // Sinkronisasi SOW, BoQ, dan Item data
   document.querySelectorAll('.sow-name').forEach(el=> d.sows[+el.dataset.si].name = el.value);
   document.querySelectorAll('.boq-name').forEach(el=> d.sows[+el.dataset.si].boqs[+el.dataset.bi].name = el.value);
   document.querySelectorAll('.it-qty').forEach(el=>{ const [si,bi,ii]=el.dataset.path.split(':').map(Number); d.sows[si].boqs[bi].items[ii].qty = numOrNull(el.value); });
   document.querySelectorAll('.it-uom').forEach(el=>{ const [si,bi,ii]=el.dataset.path.split(':').map(Number); d.sows[si].boqs[bi].items[ii].uom = el.value; });
   document.querySelectorAll('.it-vendor').forEach(el=>{ const [si,bi,ii]=el.dataset.path.split(':').map(Number); d.sows[si].boqs[bi].items[ii].vendor = el.value; });
   document.querySelectorAll('.it-product').forEach(el=>{ const [si,bi,ii]=el.dataset.path.split(':').map(Number); d.sows[si].boqs[bi].items[ii].product = el.value; });
-  document.querySelectorAll('.it-awal').forEach(el=>{ const [si,bi,ii]=el.dataset.path.split(':').map(Number); d.sows[si].boqs[bi].items[ii].sphAwal = numOrNull(el.value); });
-  document.querySelectorAll('.it-final').forEach(el=>{ const [si,bi,ii]=el.dataset.path.split(':').map(Number); d.sows[si].boqs[bi].items[ii].sphFinal = numOrNull(el.value); });
+  
+  // Pastikan mapping SPH Awal dan Final item tersimpan aman
+  document.querySelectorAll('.it-awal').forEach(el=>{ 
+    const [si,bi,ii]=el.dataset.path.split(':').map(Number); 
+    const valNum = numOrNull(el.value);
+    d.sows[si].boqs[bi].items[ii].sphAwal = valNum;
+    d.sows[si].boqs[bi].items[ii].sphAwalUnit = valNum; // sinkron ke unit price
+  });
+  document.querySelectorAll('.it-final').forEach(el=>{ 
+    const [si,bi,ii]=el.dataset.path.split(':').map(Number); 
+    const valNum = numOrNull(el.value);
+    d.sows[si].boqs[bi].items[ii].sphFinal = valNum;
+    d.sows[si].boqs[bi].items[ii].sphFinalUnit = valNum; // sinkron ke unit price
+  });
 }
 
 function wireModalEvents(){

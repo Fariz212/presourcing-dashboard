@@ -367,7 +367,7 @@ modal.addEventListener('click', (e) => { if(e.target === modal) closeModal(); })
 // 3. Fungsionalitas Tombol Download Template
 function downloadTemplate() {
     // Menggunakan Flask url_for untuk mengambil path file statis secara dinamis
-    const downloadUrl = "{{ url_for('static', filename='Template_BoQ_Presourcing_Pro.xlsx') }}";
+    const downloadUrl = "{{ url_for('static', filename='Template_BoQ_Presourcing.xlsx') }}";
     
     // Memicu proses unduh otomatis di browser SA
     const link = document.createElement('a');
