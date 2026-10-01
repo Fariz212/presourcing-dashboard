@@ -21,7 +21,7 @@ DB_NAME = 'presourcing_db.sqlite'
 BOQ_CORE_COLUMNS = ["Item No", "Deskripsi Item", "Qty", "UoM", "Preferred Brand", "Delivery Time (RFS)"]
 BOQ_OPTIONAL_COLUMNS = ["Scope of Work (Opsional)", "Bill of Quantity (Opsional)", "Vendor (Opsional)"]
 BOQ_SYSTEM_COLUMN = "Item ID (System)"
-BOQ_TEMPLATE_FILENAME = "Template_BoQ_Presourcing_Final.xlsx"
+BOQ_TEMPLATE_FILENAME = "Template_BoQ_Presourcing.xlsx"
 
 # --- HELPER: EXCEL PARSER ---
 def _excel_text(value):
