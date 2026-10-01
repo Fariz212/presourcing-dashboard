@@ -7,124 +7,1040 @@
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 :root{
-  --ink:#12181F;
-  --panel:#1B232C;
-  --panel-2:#212B35;
-  --border:#2E3944;
-  --border-soft:#252F39;
-  --text:#E7E4DD;
-  --text-muted:#8B93A0;
-  --text-dim:#5E6A78;
-  --amber:#C98A3B;
-  --amber-soft:rgba(201,138,59,.14);
-  --green:#4C9A6A;
-  --green-soft:rgba(76,154,106,.14);
-  --red:#C1503D;
-  --red-soft:rgba(193,80,61,.14);
-  --slate:#5C7A94;
-  --slate-soft:rgba(92,122,148,.14);
+  --ink:#F8FAFC;          
+  --panel:#FFFFFF;        
+  --panel-2:#F1F5F9;      
+  --border:#CBD5E1;       
+  --border-soft:#E2E8F0;  
+  --text:#1E293B;         
+  --text-muted:#64748B;   
+  --text-dim:#94A3B8;     
+  
+  --primary:#2563EB;
+  --primary-hover:#1D4ED8;
+  --primary-soft:rgba(37,99,235,.08);
+  
+  --amber:#D97706;
+  --amber-soft:rgba(217,119,6,.1);
+  --green:#059669;
+  --green-soft:rgba(5,150,105,.1);
+  --red:#DC2626;
+  --red-soft:rgba(220,38,38,.1);
+  --slate:#475569;
+  --slate-soft:rgba(71,85,105,.1);
 }
+
 *{box-sizing:border-box;}
+
 body{
   margin:0; background:var(--ink); color:var(--text);
   font-family:'Space Grotesk',sans-serif; font-size:14px;
   -webkit-font-smoothing:antialiased;
 }
+
 .mono{font-family:'JetBrains Mono',monospace; font-variant-numeric:tabular-nums;}
-.app{max-width:1180px; margin:0 auto; padding:28px 24px 60px;}
+.app{max-width:1440px; width:calc(100% - 48px); margin:0 auto; padding:24px 0 48px;}
 
-/* header */
-.hdr{display:flex; align-items:flex-end; justify-content:space-between; border-bottom:1px solid var(--border); padding-bottom:16px; margin-bottom:20px; flex-wrap:wrap; gap:14px;}
-.hdr h1{font-size:20px; font-weight:600; margin:0 0 4px; letter-spacing:.01em;}
-.hdr .sub{color:var(--text-muted); font-size:12.5px;}
-.tabs{display:flex; gap:4px;}
-.tab{padding:8px 14px; border:1px solid var(--border); background:var(--panel); color:var(--text-muted); cursor:pointer; font-size:13px; font-family:inherit;}
-.tab.active{background:var(--amber-soft); border-color:var(--amber); color:var(--amber);}
-.tab:hover:not(.active){color:var(--text);}
-.btn-primary{padding:9px 16px; background:var(--amber); border:none; color:#12181F; font-weight:600; cursor:pointer; font-family:inherit; font-size:13px;}
-.btn-primary:hover{filter:brightness(1.08);}
-.btn-ghost{padding:8px 14px; background:transparent; border:1px solid var(--border); color:var(--text-muted); cursor:pointer; font-family:inherit; font-size:12.5px;}
-.btn-ghost:hover{border-color:var(--text-muted); color:var(--text);}
-
-/* kpi row */
-.kpirow{display:grid; grid-template-columns:repeat(4,1fr); gap:1px; background:var(--border); border:1px solid var(--border); margin-bottom:22px;}
-.kpi{background:var(--panel); padding:16px 18px;}
-.kpi .label{color:var(--text-muted); font-size:11.5px; margin-bottom:8px;}
-.kpi .val{font-family:'JetBrains Mono',monospace; font-size:26px; font-weight:600; font-variant-numeric:tabular-nums;}
-.kpi .unit{font-size:13px; color:var(--text-muted); margin-left:3px;}
-
-/* panel */
-.panel{border:1px solid var(--border); background:var(--panel); margin-bottom:22px;}
-.panel-hd{display:flex; justify-content:space-between; align-items:center; padding:12px 16px; border-bottom:1px solid var(--border); flex-wrap:wrap; gap:10px;}
-.panel-hd h2{font-size:13.5px; margin:0; font-weight:600; color:var(--text);}
-.panel-body{padding:14px 16px;}
-
-/* filters */
-.filters{display:flex; gap:8px; flex-wrap:wrap;}
-select, input, textarea{
-  background:var(--panel-2); border:1px solid var(--border); color:var(--text);
-  padding:7px 9px; font-family:inherit; font-size:12.5px;
+/* ======================================================
+   ENTERPRISE BLUE NAVBAR
+   ====================================================== */
+.navbar {
+  display: flex; justify-content: space-between; align-items: center;
+  background: linear-gradient(110deg, #0B4F91 0%, #1769C2 55%, #2382D9 100%);
+  border-bottom: 1px solid rgba(255,255,255,.15);
+  box-shadow: 0 4px 14px rgba(15,23,42,.12);
+  padding: 12px 32px; min-height: 68px;
+  position: sticky; top: 0; z-index: 40;
 }
-select:focus, input:focus, textarea:focus{outline:1px solid var(--amber);}
+.navbar .brand h2 { margin: 0; font-size: 18px; color: #FFFFFF !important; letter-spacing: -0.02em; line-height: 1.2; }
+.navbar .brand span { font-size: 12px; color: rgba(255,255,255,.72) !important; font-weight: 500; }
+.navbar .user-info { display: flex; align-items: center; gap: 16px; font-size: 13px; }
 
-/* table */
-table{width:100%; border-collapse:collapse;}
-th{text-align:left; font-size:11px; color:var(--text-dim); font-weight:500; padding:8px 10px; border-bottom:1px solid var(--border); text-transform:none;}
-td{padding:9px 10px; border-bottom:1px solid var(--border-soft); font-size:13px; vertical-align:top;}
-tr.proj-row{cursor:pointer;}
-tr.proj-row:hover{background:var(--panel-2);}
-.num{font-family:'JetBrains Mono',monospace; text-align:right; font-variant-numeric:tabular-nums;}
+/* MAIN NAV */
+.app-nav { display:flex; align-items:center; gap:4px; margin-left:40px; margin-right:auto; }
+.app-nav-item { border:1px solid transparent; background:transparent; color:rgba(255,255,255,.78); font-family:inherit; font-size:12.5px; font-weight:600; padding:8px 14px; border-radius:7px; cursor:pointer; transition: background .15s ease, color .15s ease, border-color .15s ease; }
+.app-nav-item:hover { color:#FFFFFF; background:rgba(255,255,255,.10); }
+.app-nav-item.active { background:#FFFFFF; border-color:#FFFFFF; color:#1458A6; box-shadow:0 2px 5px rgba(15,23,42,.10); }
 
-.tag{display:inline-block; padding:2px 8px; font-size:11px; border:1px solid; line-height:1.6;}
-.tag-medium{color:var(--slate); border-color:var(--slate); background:var(--slate-soft);}
-.tag-high{color:var(--amber); border-color:var(--amber); background:var(--amber-soft);}
-.tag-urgent{color:var(--red); border-color:var(--red); background:var(--red-soft);}
-.tag-win{color:var(--green); border-color:var(--green); background:var(--green-soft);}
-.tag-lose{color:var(--red); border-color:var(--red); background:var(--red-soft);}
-.tag-ongoing{color:var(--amber); border-color:var(--amber); background:var(--amber-soft);}
+/* USER */
+.nav-user { display:flex; flex-direction:column; align-items:flex-end; line-height:1.15; min-width:110px; }
+.nav-user-name { font-size:12px; font-weight:700; color:#FFFFFF !important; }
+.nav-user-role { margin-top:3px; font-size:10px; color:rgba(255,255,255,.68) !important; }
 
-.detail-block{background:var(--ink); border:1px solid var(--border); margin:6px 0 12px; padding:12px 14px;}
-.sow-title{font-size:12.5px; color:var(--amber); margin:10px 0 4px; font-weight:600;}
-.boq-title{font-size:12px; color:var(--text-muted); margin:6px 0 2px;}
-.item-row{display:grid; grid-template-columns:1.6fr .9fr .9fr .8fr 1.2fr; gap:8px; padding:5px 0; font-size:12.5px; border-bottom:1px solid var(--border-soft); align-items:center;}
-.item-row.hd{color:var(--text-dim); font-size:10.5px; border-bottom:1px solid var(--border);}
-.pic-chip{display:inline-block; background:var(--panel-2); border:1px solid var(--border); padding:1px 7px; font-size:11px; margin:1px 3px 1px 0; color:var(--text-muted);}
+/* INBOX & NAVBAR BUTTONS */
+.btn-nav-outline { background:rgba(255,255,255,.10) !important; border:1px solid rgba(255,255,255,.28) !important; color:#FFFFFF !important; padding: 7px 12px; border-radius: 6px; cursor: pointer; font-weight: 500; font-family: inherit; font-size: 12.5px; transition: all 0.15s ease; display: flex; align-items: center; gap: 6px; }
+.btn-nav-outline:hover { background:rgba(255,255,255,.18) !important; border-color:rgba(255,255,255,.45) !important; }
+.btn-danger-outline { background:transparent !important; border:1px solid rgba(255,255,255,.55) !important; color:#FFFFFF !important; padding: 7px 14px; border-radius: 6px; cursor: pointer; font-weight: 600; font-family: inherit; font-size: 12.5px; transition: all 0.15s ease; }
+.btn-danger-outline:hover { background:rgba(220,38,38,.18) !important; border-color:#FCA5A5 !important; }
 
-/* leaderboard bars */
-.lb-row{display:grid; grid-template-columns:110px 1fr 70px; gap:10px; align-items:center; padding:7px 0; border-bottom:1px solid var(--border-soft);}
-.lb-name{font-size:12.5px;}
-.lb-bar-track{background:var(--panel-2); height:8px; position:relative; border:1px solid var(--border);}
-.lb-bar-fill{position:absolute; left:0; top:0; bottom:0; background:var(--amber);}
-.lb-val{font-family:'JetBrains Mono',monospace; text-align:right; font-size:12px; color:var(--text-muted);}
+@media(max-width:900px) {
+  .navbar { flex-wrap:wrap; gap:12px; padding:12px 18px; }
+  .app-nav { order:3; width:100%; margin:0; border-top:1px solid #E2E8F0; padding-top:8px; }
+}
+@media(max-width:600px) {
+  .nav-user { display:none; }
+  .navbar .user-info { gap:7px; }
+}
 
-/* modal / form */
-.overlay{position:fixed; inset:0; background:rgba(0,0,0,.6); display:flex; align-items:flex-start; justify-content:center; padding:40px 20px; overflow:auto; z-index:50;}
-.modal{background:var(--panel); border:1px solid var(--border); width:100%; max-width:760px; max-height:90vh; overflow:auto;}
-.modal-hd{display:flex; justify-content:space-between; align-items:center; padding:14px 18px; border-bottom:1px solid var(--border); position:sticky; top:0; background:var(--panel);}
-.modal-hd h3{margin:0; font-size:14.5px;}
-.modal-body{padding:18px;}
-.field{margin-bottom:12px;}
-.field label{display:block; font-size:11.5px; color:var(--text-muted); margin-bottom:4px;}
-.field input, .field select, .field textarea{width:100%;}
-.grid2{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
-.grid3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px;}
-.sow-block{border:1px solid var(--border); padding:12px; margin-bottom:12px; background:var(--ink);}
-.boq-block{border:1px solid var(--border-soft); padding:10px; margin:8px 0; background:var(--panel-2);}
-.item-block{border-top:1px solid var(--border-soft); padding-top:8px; margin-top:8px;}
-.mini-btn{background:transparent; border:1px solid var(--border); color:var(--text-muted); font-size:11px; padding:4px 8px; cursor:pointer; font-family:inherit;}
-.mini-btn:hover{color:var(--text); border-color:var(--text-muted);}
-.mini-btn.danger{color:var(--red); border-color:var(--red);}
+/* GLOBAL BUTTONS & TAGS */
+.btn-primary{padding:9px 18px; background:var(--primary); border:none; color:#FFFFFF; font-weight:600; cursor:pointer; font-family:inherit; font-size:13px; border-radius:6px; transition:background .15s ease;}
+.btn-primary:hover{background:var(--primary-hover);}
+.btn-ghost{padding:8px 14px; background:transparent; border:1px solid var(--border); color:var(--text-muted); cursor:pointer; font-family:inherit; font-size:12.5px; border-radius:6px;}
+.btn-ghost:hover{border-color:var(--text-muted); color:var(--text); background:var(--panel-2);}
+
+.tag{display:inline-block; padding:3px 9px; font-size:11px; font-weight:500; border-radius:4px; line-height:1.4;}
+.tag-medium{color:var(--slate); border:1px solid var(--border); background:var(--slate-soft);}
+.tag-high{color:var(--amber); border:1px solid var(--border); background:var(--amber-soft);}
+.tag-urgent{color:var(--red); border:1px solid var(--border); background:var(--red-soft);}
+.tag-win{color:var(--green); border:1px solid var(--border); background:var(--green-soft);}
+.tag-lose{color:var(--red); border:1px solid var(--border); background:var(--red-soft);}
+.tag-ongoing{color:var(--primary); border:1px solid var(--border); background:var(--primary-soft);}
+
+/* --- PROJECT DETAIL BLOCK (Tabel) --- */
+.detail-block{background:#FAFAFA; border:1px solid var(--border); border-radius:6px; margin:8px 0 14px; padding:14px 16px;}
+.sow-title{font-size:13px; color:var(--primary); margin:12px 0 6px; font-weight:700;}
+.boq-title{font-size:12px; color:var(--text-muted); margin:8px 0 4px; font-weight:600;}
+.pic-chip{display:inline-block; background:#FFFFFF; border:1px solid var(--border); padding:2px 8px; font-size:11px; border-radius:4px; margin:1px 3px 1px 0; color:var(--text); font-weight:500;}
+
+/* --- MODAL / FORM --- */
+.overlay{position:fixed; inset:0; background:rgba(15,23,42,.4); backdrop-filter:blur(2px); display:flex; align-items:flex-start; justify-content:center; padding:40px 20px; overflow:auto; z-index:50;}
+.modal{background:var(--panel); border:1px solid var(--border); width:100%; max-width:760px; max-height:90vh; overflow:auto; border-radius:10px; box-shadow:0 20px 25px -5px rgba(0,0,0,.1), 0 10px 10px -5px rgba(0,0,0,.04);}
+.modal-hd{display:flex; justify-content:space-between; align-items:center; padding:16px 20px; border-bottom:1px solid var(--border-soft); position:sticky; top:0; background:var(--panel); z-index:2;}
+.modal-hd h3{margin:0; font-size:15px; font-weight:700; color:#0F172A;}
+.modal-body{padding:20px;}
+.field{margin-bottom:14px;}
+.field label{display:block; font-size:12px; font-weight:600; color:var(--text-muted); margin-bottom:5px;}
+.field input, .field select, .field textarea{width:100%; background:#FFFFFF; border:1px solid var(--border); color:var(--text); padding:7px 10px; font-family:inherit; font-size:12.5px; border-radius:6px;}
+.field input:focus, .field select:focus, .field textarea:focus{outline:2px solid var(--primary-soft); border-color:var(--primary);}
+.grid2{display:grid; grid-template-columns:1fr 1fr; gap:14px;}
+.grid3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px;}
+.sow-block{border:1px solid var(--border); padding:14px; margin-bottom:14px; background:#FAFAFA; border-radius:6px;}
+.boq-block{border:1px solid var(--border-soft); padding:12px; margin:10px 0; background:#FFFFFF; border-radius:6px;}
+.item-block{border-top:1px solid var(--border-soft); padding-top:10px; margin-top:10px;}
+.mini-btn{background:#FFFFFF; border:1px solid var(--border); color:var(--text-muted); font-size:11.5px; padding:5px 10px; cursor:pointer; font-family:inherit; border-radius:5px; transition:all .1s ease;}
+.mini-btn:hover{color:var(--text); border-color:var(--text-muted); background:var(--panel-2);}
+.mini-btn.danger{color:var(--red); border-color:var(--red); background:var(--red-soft);}
 .pic-select{display:flex; gap:6px; flex-wrap:wrap;}
-.pic-opt{padding:3px 9px; border:1px solid var(--border); font-size:11.5px; cursor:pointer; color:var(--text-muted);}
-.pic-opt.on{background:var(--amber-soft); border-color:var(--amber); color:var(--amber);}
-.modal-ft{display:flex; justify-content:flex-end; gap:8px; padding:14px 18px; border-top:1px solid var(--border); position:sticky; bottom:0; background:var(--panel);}
-.empty{color:var(--text-dim); font-size:12.5px; padding:20px 0; text-align:center;}
-.note{font-size:11px; color:var(--text-dim); margin-top:4px;}
+.pic-opt{padding:4px 10px; border:1px solid var(--border); font-size:11.5px; cursor:pointer; color:var(--text-muted); background:#FFFFFF; border-radius:4px; font-weight:500;}
+.pic-opt.on{background:var(--primary-soft); border-color:var(--primary); color:var(--primary); font-weight:600;}
+.modal-ft{display:flex; justify-content:flex-end; gap:8px; padding:16px 20px; border-top:1px solid var(--border-soft); position:sticky; bottom:0; background:var(--panel); z-index:2;}
+.empty{color:var(--text-dim); font-size:13px; padding:24px 0; text-align:center;}
+.note{font-size:11.5px; color:var(--text-muted); margin-top:6px; line-height:1.4;}
+
+/* --- NOTIFICATION BELL --- */
+.notif-wrapper { position: relative; display: inline-block; }
+.notif-btn { background: transparent; border: none; cursor: pointer; color: #FFFFFF !important; position: relative; padding: 6px; border-radius: 50%; transition: background 0.2s; display: flex; align-items: center; justify-content: center; }
+.notif-btn:hover { background: rgba(255,255,255,.12) !important; }
+.notif-badge { position: absolute; top: 0; right: 0; background: var(--red, #DC2626); color: white; font-size: 10px; font-weight: bold; padding: 2px 5px; border-radius: 10px; border: 2px solid var(--panel, #fff); line-height: 1; display: none; }
+.notif-dropdown { position: absolute; top: 130%; right: -10px; width: 320px; background: var(--panel, #fff); border: 1px solid var(--border, #e2e8f0); border-radius: 8px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); display: none; z-index: 100; overflow: hidden; text-align: left; }
+.notif-dropdown.active { display: block; }
+.notif-header { padding: 12px 16px; font-weight: 600; border-bottom: 1px solid var(--border, #e2e8f0); background: #FAFAFA; font-size: 13px; color: var(--text); }
+.notif-body { max-height: 320px; overflow-y: auto; }
+.notif-item { padding: 12px 16px; border-bottom: 1px solid var(--border-soft, #f1f5f9); font-size: 12.5px; cursor: pointer; transition: background 0.15s; }
+.notif-item:hover { background: #F8FAFC; }
+.notif-item.unread { background: #eff6ff; }
+.notif-item.unread:hover { background: #dbeafe; }
+.notif-time { font-size: 11px; color: var(--text-muted, #64748b); margin-top: 4px; }
+
+/* =========================================================
+   UNIFIED STYLING - PROJECTS & TEAM (Perbaikan UI Legacy dengan Executive)
+   ========================================================= */
+.page-shell .panel { margin-bottom: 0; border: 1px solid #DCE4EE; border-radius: 8px; background: #FFFFFF; box-shadow: 0 2px 4px rgba(15,23,42,.04); overflow: hidden; }
+.page-shell .panel .panel-hd { min-height: 46px; padding: 12px 18px; display: flex; align-items: center; justify-content: space-between; background: linear-gradient(90deg, #0F5CA8 0%, #1672C8 100%); border-bottom: 0; color: #FFFFFF; }
+.page-shell .panel .panel-hd h2 { margin: 0; font-size: 14px; line-height: 1.2; font-weight: 700; color: #FFFFFF; }
+.page-shell .panel .panel-hd .filters { display: flex; align-items: center; gap: 8px; }
+.page-shell .panel .panel-hd select { height: 32px; padding: 5px 9px; background: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 5px; color: #334155; font-size: 11.5px; }
+.page-shell .panel .panel-hd .btn-primary { height: 32px; padding: 0 14px; border: 1px solid rgba(255,255,255,.35); border-radius: 5px; background: #FFFFFF; color: #1458A6; font-size: 11.5px; font-weight: 700; box-shadow: none; }
+.page-shell .panel .panel-hd .btn-primary:hover { background: #EFF6FF; }
+.page-shell .panel .panel-body { padding: 0; background: #FFFFFF; }
+
+/* Tabel Utama */
+.page-shell .panel table { width: 100%; border-collapse: collapse; table-layout: auto; }
+.page-shell .panel table th { padding: 12px 14px; background: #F4F7FB; color: #64748B; border-bottom: 1px solid #DCE4EE; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; text-align: left; }
+.page-shell .panel table td { padding: 12px 14px; border-bottom: 1px solid #EEF2F6; color: #334155; font-size: 12px; line-height: 1.4; vertical-align: middle; }
+
+/* Baris Tabel */
+.page-shell .panel table tr.proj-row { cursor: pointer; transition: background .12s ease; }
+.page-shell .panel table tr.proj-row:hover { background: #F8FBFF; }
+.page-shell .panel table tr.proj-row td:first-child { font-weight: 600; color: #0F172A; }
+.page-shell .panel table .num { font-size: 11.5px; white-space: nowrap; text-align: right; }
+.page-shell .panel table .badge { font-size: 10.5px; padding: 4px 8px; display: inline-block; }
+.page-shell .panel table tr:not(.proj-row) td[colspan] { padding: 0; }
+
+/* Detail Ekstensi Project */
+.page-shell .detail-block { margin: 0; padding: 16px; background: #F8FAFC; border: 0; border-top: 1px solid #DCE4EE; }
+.page-shell .panel-body table tbody tr { transition: background .12s ease; }
+.page-shell .panel-body table tbody tr:hover { background: #F8FAFC; }
+
+@media(max-width:900px) {
+  .page-shell .panel .panel-hd { align-items: flex-start; flex-direction: column; gap: 12px; }
+  .page-shell .panel .panel-hd > div { width: 100%; }
+  .page-shell .panel .panel-hd .filters { width: 100%; flex-wrap: wrap; }
+}
+
+/* =========================================================
+   STATUS BADGES (Global untuk semua Tab)
+   ========================================================= */
+.badge { 
+  padding: 4px 8px; 
+  border-radius: 4px; 
+  font-size: 10.5px; 
+  font-weight: 600; 
+  display: inline-block; 
+  text-align: center;
+  line-height: 1;
+}
+.badge-on-track { background: #16A34A; color: #FFFFFF; }
+.badge-at-risk { background: #F59E0B; color: #FFFFFF; }
+.badge-overdue { background: #DC2626; color: #FFFFFF; }
+.badge-completed { background: #2563EB; color: #FFFFFF; }
+.badge-planned { background: #E2E8F0; color: #475569; }
+
+/* =========================================================
+   PAGE HERO (Header Utama untuk semua Tab)
+   ========================================================= */
+.page-hero { 
+  min-height: 76px; 
+  display: flex; 
+  align-items: center; 
+  justify-content: space-between; 
+  gap: 20px; 
+  padding: 16px 24px; 
+  margin-bottom: 20px; 
+  border-radius: 10px; 
+  color: #fff; 
+  background: linear-gradient(115deg, #0B4F91 0%, #1769C2 58%, #2583DA 100%); 
+  box-shadow: 0 4px 12px rgba(15,23,42,.12); 
+  position: relative; 
+  overflow: hidden; 
+}
+.page-hero::after { 
+  content: ''; 
+  position: absolute; 
+  width: 260px; 
+  height: 160px; 
+  right: -70px; 
+  top: -90px; 
+  background: rgba(255,255,255,.07); 
+  transform: rotate(28deg); 
+  pointer-events: none; 
+}
+.page-hero-main { position: relative; z-index: 1; min-width: 0; }
+.page-hero-title { font-size: 22px; line-height: 1.1; font-weight: 700; letter-spacing: .01em; margin-bottom: 4px; }
+.page-hero-sub { font-size: 11.5px; color: rgba(255,255,255,.85); }
+
+/* =========================================================
+   PROJECT MODAL - COMPACT ENTERPRISE FORM
+   UI ONLY - API / DATA STRUCTURE TIDAK BERUBAH
+   ========================================================= */
+
+.project-modal {
+  max-width: 900px !important;
+}
+
+.project-modal .modal-body {
+  padding: 16px 18px 90px;
+}
+
+.form-section {
+  margin-bottom: 14px;
+}
+
+.form-section:last-child {
+  margin-bottom: 0;
+}
+
+.form-section-head {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+
+  margin-bottom:8px;
+  padding-bottom:6px;
+
+  border-bottom:1px solid #E2E8F0;
+}
+
+.form-section-title {
+  font-size:11px;
+  font-weight:700;
+  color:#0F5CA8;
+  text-transform:uppercase;
+  letter-spacing:.05em;
+}
+
+.form-section-note {
+  font-size:9px;
+  color:#94A3B8;
+}
+
+.project-name-field {
+  margin-bottom:10px;
+}
+
+.project-name-field input {
+  height:38px !important;
+  font-size:13px !important;
+  font-weight:600;
+}
+
+.required-mark::after {
+  content:' *';
+  color:#DC2626;
+}
+
+.execution-box {
+  padding:10px;
+
+  background:#F8FAFC;
+
+  border:1px solid #DCE4EE;
+  border-radius:7px;
+}
+
+.execution-box .field {
+  margin-bottom:10px;
+}
+
+.execution-box .field:last-child {
+  margin-bottom:0;
+}
+
+.sph-summary-box {
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+
+  margin-top:8px;
+  padding:10px;
+
+  background:#F8FAFC;
+
+  border:1px solid #DCE4EE;
+  border-radius:7px;
+}
+
+.sph-summary-box .field {
+  margin-bottom:0;
+}
+
+.sow-block {
+  margin:0 0 10px !important;
+  padding:10px !important;
+
+  background:#F8FAFC !important;
+
+  border:1px solid #DCE4EE !important;
+  border-radius:7px !important;
+}
+
+.sow-head {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+
+  margin-bottom:8px;
+}
+
+.sow-index {
+  width:22px;
+  height:22px;
+
+  flex:0 0 22px;
+
+  display:flex;
+  align-items:center;
+  justify-content:center;
+
+  background:#E8F2FE;
+  color:#2563EB;
+
+  border-radius:50%;
+
+  font-size:9px;
+  font-weight:700;
+}
+
+.sow-heading {
+  display:flex;
+  align-items:center;
+  gap:7px;
+
+  flex:1;
+  min-width:0;
+}
+
+.sow-heading-text {
+  font-size:10.5px;
+  font-weight:700;
+  color:#334155;
+}
+
+.sow-actions {
+  display:flex;
+  gap:5px;
+}
+
+.boq-block {
+  margin:8px 0 0 !important;
+  padding:9px !important;
+
+  background:#FFFFFF !important;
+
+  border:1px solid #E2E8F0 !important;
+  border-radius:6px !important;
+}
+
+.boq-head {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+
+  margin-bottom:8px;
+}
+
+.boq-heading {
+  display:flex;
+  align-items:center;
+  gap:6px;
+
+  min-width:0;
+}
+
+.boq-number {
+  width:20px;
+  height:20px;
+
+  display:flex;
+  align-items:center;
+  justify-content:center;
+
+  border-radius:5px;
+
+  background:#F1F5F9;
+  color:#64748B;
+
+  font-size:8px;
+  font-weight:700;
+}
+
+.boq-title-text {
+  font-size:10px;
+  font-weight:700;
+  color:#475569;
+}
+
+.item-block {
+  margin:7px 0 0 !important;
+  padding:9px !important;
+
+  background:#FAFCFF;
+
+  border:1px solid #E5EAF0 !important;
+  border-radius:6px;
+
+  position:relative;
+}
+
+.item-head {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+
+  margin-bottom:7px;
+}
+
+.item-label {
+  font-size:9px;
+  font-weight:700;
+  color:#94A3B8;
+  text-transform:uppercase;
+  letter-spacing:.04em;
+}
+
+.item-grid-main {
+  display:grid;
+
+  grid-template-columns:
+    minmax(0,2.2fr)
+    .55fr
+    .7fr
+    minmax(0,1.4fr);
+
+  gap:8px;
+}
+
+.item-grid-finance {
+  display:grid;
+
+  grid-template-columns:
+    minmax(0,1fr)
+    minmax(0,1fr)
+    minmax(0,1.5fr);
+
+  gap:8px;
+
+  margin-top:7px;
+}
+
+.item-grid-main .field,
+.item-grid-finance .field {
+  margin-bottom:0;
+}
+
+.item-block label {
+  font-size:9px !important;
+  margin-bottom:4px !important;
+}
+
+.item-block input {
+  padding:6px 8px !important;
+  font-size:10.5px !important;
+}
+
+.pic-select {
+  gap:4px !important;
+}
+
+.pic-opt {
+  padding:4px 7px !important;
+
+  font-size:9.5px !important;
+
+  border-radius:4px !important;
+
+  background:#FFFFFF;
+}
+
+.add-row {
+  display:flex;
+  justify-content:flex-start;
+  gap:6px;
+
+  margin-top:8px;
+}
+
+.form-add-btn {
+  border:1px dashed #93C5FD !important;
+
+  background:#F8FBFF !important;
+
+  color:#2563EB !important;
+
+  font-size:9.5px !important;
+
+  padding:5px 9px !important;
+
+  border-radius:5px !important;
+}
+
+.form-add-btn:hover {
+  background:#EFF6FF !important;
+}
+
+.form-danger-btn {
+  font-size:9px !important;
+  padding:4px 7px !important;
+}
+
+.project-modal .modal-ft {
+  padding:11px 18px;
+
+  min-height:62px;
+
+  box-shadow:
+    0 -4px 12px
+    rgba(15,23,42,.06);
+}
+
+.modal-summary {
+  margin-right:auto;
+
+  display:flex;
+  align-items:center;
+  gap:12px;
+}
+
+.modal-summary-item {
+  display:flex;
+  flex-direction:column;
+  gap:1px;
+}
+
+.modal-summary-label {
+  font-size:8px;
+  color:#94A3B8;
+  text-transform:uppercase;
+}
+
+.modal-summary-value {
+  font-size:11px;
+  font-weight:700;
+  color:#334155;
+}
+
+.modal-summary-divider {
+  width:1px;
+  height:26px;
+  background:#E2E8F0;
+}
+
+@media(max-width:800px) {
+
+  .item-grid-main {
+    grid-template-columns:
+      1fr 80px 90px;
+  }
+
+  .item-grid-main .field:nth-child(1) {
+    grid-column:1 / -1;
+  }
+
+  .item-grid-main .field:nth-child(4) {
+    grid-column:1 / -1;
+  }
+
+  .item-grid-finance {
+    grid-template-columns:1fr 1fr;
+  }
+
+}
+
+@media(max-width:600px) {
+
+  .grid2,
+  .grid3 {
+    grid-template-columns:1fr !important;
+  }
+
+  .item-grid-main,
+  .item-grid-finance {
+    grid-template-columns:1fr;
+  }
+
+  .modal-summary-divider {
+    display:none;
+  }
+
+  .modal-summary {
+    gap:7px;
+  }
+
+}
+
+.revision-section{
+  margin-bottom:12px;
+}
+
+.revision-section-title{
+  padding-bottom:6px;
+  margin-bottom:4px;
+
+  font-size:9px;
+  font-weight:700;
+
+  text-transform:uppercase;
+  letter-spacing:.04em;
+
+  border-bottom:1px solid #E2E8F0;
+}
+
+.added-title{
+  color:#15803D;
+}
+
+.updated-title{
+  color:#2563EB;
+}
+
+.removed-title{
+  color:#DC2626;
+}
+
+.revision-row{
+  display:flex;
+  align-items:flex-start;
+  gap:8px;
+
+  padding:7px 8px;
+
+  border-bottom:1px solid #F1F5F9;
+}
+
+.revision-mark{
+  width:20px;
+  height:20px;
+
+  flex:0 0 20px;
+
+  display:flex;
+  align-items:center;
+  justify-content:center;
+
+  border-radius:4px;
+
+  font-size:11px;
+  font-weight:700;
+}
+
+.revision-row.added
+.revision-mark{
+  background:#DCFCE7;
+  color:#15803D;
+}
+
+.revision-row.updated
+.revision-mark{
+  background:#DBEAFE;
+  color:#2563EB;
+}
+
+.revision-row.removed
+.revision-mark{
+  background:#FEE2E2;
+  color:#DC2626;
+}
+
+.revision-row strong{
+  font-size:10.5px;
+  color:#334155;
+}
+
+.revision-meta{
+  margin-top:2px;
+
+  font-size:9px;
+  line-height:1.4;
+
+  color:#64748B;
+}
+
+.revision-empty{
+  padding:8px;
+
+  color:#94A3B8;
+
+  font-size:9.5px;
+}
+
 </style>
 </head>
 <body>
+
+<nav class="navbar">
+  <div class="brand">
+    <h2>Presourcing</h2>
+    <span>Presource Portal</span>
+  </div>
+
+  <div class="app-nav">
+    <button class="app-nav-item active" data-tab="overview" onclick="switchDashboardTab('overview')">Overview</button>
+    <button class="app-nav-item" data-tab="projects" onclick="switchDashboardTab('projects')">Projects</button>
+    <button class="app-nav-item" data-tab="team" onclick="switchDashboardTab('team')">Team</button>
+  </div>
+
+  <div class="user-info">
+    <div class="nav-user">
+      <div class="nav-user-name" id="display-name">Loading...</div>
+      <div class="nav-user-role" id="display-dept">...</div>
+    </div>
+    
+    <button class="btn-nav-outline" onclick="openGlobalInboxModal()">
+      📬 Inbox
+    </button>
+    
+    <div class="notif-wrapper">
+      <button class="notif-btn" onclick="toggleNotif(event)">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+          <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+        </svg>
+        <span class="notif-badge" id="notif-count">0</span>
+      </button>
+      
+      <div class="notif-dropdown" id="notif-dropdown">
+        <div class="notif-header">Notifikasi</div>
+        <div class="notif-body" id="notif-list">
+          <div style="padding: 20px; text-align: center; color: var(--text-muted); font-size: 12px;">Memuat...</div>
+        </div>
+      </div>
+    </div>
+    
+    <button class="btn-danger-outline" onclick="handleLogout()">Keluar</button>
+  </div>
+</nav>
+
+<!-- MODAL INBOX REQUEST -->
+<div class="overlay" id="global-inbox-modal" style="display: none; z-index: 99;">
+  <div class="modal" style="max-width: 900px;">
+    <div class="modal-hd">
+      <div style="display: flex; flex-direction: column;">
+          <h3>📬 Inbox Request (Dari Presales)</h3>
+          <span style="font-size: 12px; color: var(--text-muted); font-weight: normal; margin-top: 2px;">Tiket baru yang belum di-assign ke tim Presourcing.</span>
+      </div>
+      <div style="display: flex; gap: 8px;">
+          <button class="btn-ghost" style="padding: 6px 12px;" onclick="fetchInbox()">🔄 Refresh</button>
+          <button class="btn-ghost" style="padding: 6px 10px;" onclick="closeGlobalInboxModal()">&times;</button>
+      </div>
+    </div>
+    
+    <div class="modal-body" style="padding: 0; overflow-x: auto;">
+      <table style="width: 100%; border-collapse: collapse;">
+        <thead>
+          <tr>
+            <th>Ticket ID</th>
+            <th>Requester</th>
+            <th>Kebutuhan / Project</th>
+            <th>SLA Date</th>
+            <th>Status</th>
+            <th>Aksi</th>
+          </tr>
+        </thead>
+        <tbody id="inbox-body">
+          <tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 20px;">Memuat data...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- WADAH DASHBOARD UTAMA (Diinjeksi oleh script.js) -->
 <div class="app" id="app"></div>
-<!-- Memanggil JavaScript dari folder static Flask -->
+
+<!-- Memanggil JavaScript Utama -->
 <script src="{{ url_for('static', filename='script.js') }}"></script>
+
+<!-- Skrip Khusus Inbox & Notifikasi -->
+<script>
+  function openGlobalInboxModal() {
+      const modal = document.getElementById('global-inbox-modal');
+      if (modal) { modal.style.display = 'flex'; fetchInbox(); }
+  }
+
+  function closeGlobalInboxModal() {
+      const modal = document.getElementById('global-inbox-modal');
+      if (modal) modal.style.display = 'none';
+  }
+
+  document.getElementById('global-inbox-modal').addEventListener('click', function(e) {
+      if (e.target === this) closeGlobalInboxModal();
+  });
+
+  async function fetchInbox() {
+      try {
+          const res = await fetch('/api/requests?role=admin'); 
+          const result = await res.json();
+          if (result.success) renderInbox(result.data);
+      } catch (error) { console.error("Gagal menarik data inbox:", error); }
+  }
+
+  function renderInbox(data) {
+      const tbody = document.getElementById('inbox-body');
+      tbody.innerHTML = ''; 
+      const newRequests = data.filter(req => req.status === 'unassigned');
+
+      if (newRequests.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 40px 20px;">Tidak ada request baru. Inbox bersih! 🎉</td></tr>`;
+          return;
+      }
+      window.cachedRequests = data;
+      newRequests.forEach(req => {
+          const tr = document.createElement('tr');
+          const requesterDisplay = req.full_name || req.requester_username;
+          const deptDisplay = req.department || 'Presales Team';
+
+          tr.innerHTML = `
+              <td style="padding: 12px 16px;"><b style="color: var(--text); font-family: 'JetBrains Mono', monospace;">${req.ticket_id}</b></td>
+              <td style="padding: 12px 16px;">
+                  <div style="font-weight: 600; color: var(--text);">${requesterDisplay}</div>
+                  <div style="font-size: 11px; color: var(--text-muted);">@${req.requester_username} &middot; ${deptDisplay}</div>
+              </td>
+              <td style="padding: 12px 16px; font-weight: 500;">
+                  ${req.title}
+                  <div style="font-size: 11.5px; color: var(--text-muted);">Klien: ${req.client_name || '-'}</div>
+              </td>
+              <td style="padding: 12px 16px; color: var(--red); font-weight: 600;">${req.sla_date}</td>
+              <td style="padding: 12px 16px;"><span class="tag tag-high" style="font-weight: 700;">New Request</span></td>
+              <td style="padding: 12px 16px;">
+                  <button class="btn-primary" style="padding: 6px 12px; font-size: 12px;" onclick="openReviewModal('${req.ticket_id}')">Review & Assign</button>
+              </td>
+          `;
+          tbody.appendChild(tr);
+      });
+  }
+
+  document.addEventListener('DOMContentLoaded', () => { fetchInbox(); });
+
+  async function openReviewModal(ticketId) {
+      const list = window.cachedRequests || [];
+      const ticket = list.find(r => r.ticket_id === ticketId);
+      const teamList = (typeof team !== 'undefined' && Array.isArray(team)) ? team : ["Decki Okmal Pratama", "Ahmad Fauzi", "Siti Rahma", "Budi Santoso"];
+
+      const modalHtml = `
+          <div class="overlay" id="review-modal" style="z-index: 100;">
+              <div class="modal">
+                  <div class="modal-hd">
+                      <h3>Review & Assign Tiket: ${ticketId}</h3>
+                      <button class="btn-ghost" style="padding: 4px 8px;" onclick="closeReviewModal()">&times;</button>
+                  </div>
+                  <div class="modal-body">
+                      <div style="margin-bottom: 16px; background: #FAFAFA; padding: 12px 14px; border-radius: 6px; border: 1px solid var(--border);">
+                          <p style="margin: 0 0 6px 0;"><b>Project:</b> ${ticket ? ticket.title : '-'}</p>
+                          <p style="margin: 0 0 6px 0;"><b>Klien / End-User:</b> ${ticket && ticket.client_name ? ticket.client_name : '-'}</p>
+                          <p style="margin: 0 0 6px 0;"><b>Kompetitor:</b> ${ticket && ticket.competitor_info ? ticket.competitor_info : '-'}</p>
+                          <p style="margin: 0 0 6px 0;"><b>Target SLA:</b> ${ticket ? ticket.sla_date : '-'}</p>
+                          <p style="margin: 0;"><b>Catatan SA:</b> ${ticket && ticket.notes ? ticket.notes : '-'}</p>
+                      </div>
+                      <h4 style="margin: 16px 0 8px 0; font-size: 13px; font-weight: 600;">Daftar Item BoQ dari SA:</h4>
+                      <div id="modal-boq-items-container" style="border: 1px solid var(--border); border-radius: 6px; padding: 10px; font-size: 12.5px; background: #FFFFFF; max-height: 250px; overflow-y: auto;">
+                          Memuat rincian item BoQ...
+                      </div>
+                      <div class="field" style="margin-top: 20px;">
+                          <label>Tugaskan ke PIC Presourcing:</label>
+                          <select id="assign-pic-select">
+                              <option value="">-- Pilih Anggota Tim --</option>
+                              ${teamList.map(member => `<option value="${member}">${member}</option>`).join('')}
+                          </select>
+                      </div>
+                  </div>
+                  <div class="modal-ft">
+                      <button type="button" class="btn-ghost" onclick="closeReviewModal()">Batal</button>
+                      <button type="button" class="btn-primary" onclick="submitAssign('${ticketId}')">Simpan & Assign PIC</button>
+                  </div>
+              </div>
+          </div>
+      `;
+
+      let existing = document.getElementById('review-modal');
+      if (existing) existing.remove();
+      document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+      try {
+          const res = await fetch(`/api/request_items/${ticketId}`);
+          const result = await res.json();
+          const container = document.getElementById('modal-boq-items-container');
+
+          if (result.success && result.data.length > 0) {
+              let html = `
+                  <table style="width: 100%; border-collapse: collapse;">
+                      <thead><tr style="border-bottom: 1px solid var(--border); color: var(--text-muted); font-size: 11px;"><th style="padding: 6px; text-align: left;">No</th><th style="padding: 6px; text-align: left;">Deskripsi Item</th><th style="padding: 6px; text-align: right;">Qty</th><th style="padding: 6px; text-align: left;">Brand</th></tr></thead>
+                      <tbody>
+              `;
+              result.data.forEach((it, idx) => {
+                  html += `<tr style="border-bottom: 1px solid var(--border-soft);"><td style="padding: 6px;">${it.item_no || (idx + 1)}</td><td style="padding: 6px; font-weight: 500;">${it.description}</td><td style="padding: 6px; text-align: right;" class="mono">${it.quantity}</td><td style="padding: 6px;">${it.preferred_brand || '-'}</td></tr>`;
+              });
+              html += `</tbody></table>`;
+              container.innerHTML = html;
+          } else { container.innerHTML = `<p style="text-align: center; color: var(--text-muted); padding: 10px;">Tidak ada item BoQ tercatat.</p>`; }
+      } catch (err) {
+          console.error("Gagal mengambil item BoQ:", err);
+          document.getElementById('modal-boq-items-container').innerHTML = `<p style="color: var(--red);">Gagal memuat item dari server.</p>`;
+      }
+  }
+
+  function closeReviewModal() { const modal = document.getElementById('review-modal'); if (modal) modal.remove(); }
+
+  async function submitAssign(ticketId) {
+      const picSelect = document.getElementById('assign-pic-select');
+      const picUsername = picSelect ? picSelect.value : '';
+      
+      if (!picUsername) { alert("Silakan pilih salah satu anggota tim PIC terlebih dahulu!"); return; }
+
+      try {
+          const response = await fetch('/api/requests/assign', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ticket_id: ticketId, pic_username: picUsername }) });
+          const result = await response.json();
+
+          if (response.ok && result.success) {
+              alert(`Sukses! Tiket ${ticketId} berhasil ditugaskan ke ${picUsername}.`);
+              closeReviewModal();
+              fetchInbox(); 
+              if (typeof loadAll === 'function') { loadAll(); } else { location.reload(); }
+          } else { alert(`Gagal assign: ${result.message}`); }
+      } catch (error) { console.error("Error assigning ticket:", error); alert("Terjadi kesalahan jaringan saat menyimpan penugasan."); }
+  }
+
+// --- SISTEM NOTIFIKASI ---
+let isNotifOpen = false;
+
+function toggleNotif(event) {
+    event.stopPropagation();
+    const dropdown = document.getElementById('notif-dropdown');
+    isNotifOpen = !isNotifOpen;
+    dropdown.classList.toggle('active', isNotifOpen);
+    if (isNotifOpen) fetchNotifications();
+}
+
+document.addEventListener('click', (e) => {
+    const wrapper = document.querySelector('.notif-wrapper');
+    const dropdown = document.getElementById('notif-dropdown');
+    if (wrapper && !wrapper.contains(e.target) && dropdown.classList.contains('active')) {
+        dropdown.classList.remove('active');
+        isNotifOpen = false;
+    }
+});
+
+async function fetchNotifications() {
+    const userStr = localStorage.getItem('user');
+    if (!userStr) return;
+    const user = JSON.parse(userStr);
+    const targetId = user.role === 'admin' ? 'admin' : user.username;
+
+    try {
+        const res = await fetch(`/api/notifications?username=${targetId}`);
+        const result = await res.json();
+        if (result.success) renderNotifications(result.data);
+    } catch (err) { console.error("Gagal menarik notifikasi", err); }
+}
+
+function renderNotifications(data) {
+    const list = document.getElementById('notif-list');
+    const badge = document.getElementById('notif-count');
+    const unreadCount = data.filter(n => !n.is_read).length;
+    
+    if (unreadCount > 0) { badge.style.display = 'block'; badge.innerText = unreadCount > 99 ? '99+' : unreadCount; } 
+    else { badge.style.display = 'none'; }
+
+    if (data.length === 0) {
+        list.innerHTML = `<div style="padding: 24px 20px; text-align: center; color: var(--text-muted); font-size: 12px;">Belum ada notifikasi baru 🎉</div>`;
+        return;
+    }
+
+    list.innerHTML = data.map(n => `
+        <div class="notif-item ${n.is_read ? '' : 'unread'}" onclick="markNotifRead(${n.id})">
+            <div style="font-weight: 500; color: var(--text, #1e293b);">${n.message}</div>
+            <div class="notif-time">${n.created_at}</div>
+        </div>
+    `).join('');
+}
+
+async function markNotifRead(notifId) {
+    try { await fetch(`/api/notifications/${notifId}/read`, { method: 'POST' }); fetchNotifications(); } 
+    catch (err) { console.error("Gagal menandai notifikasi", err); }
+}
+
+setTimeout(fetchNotifications, 1000);
+setInterval(fetchNotifications, 30000);
+</script>
+
+<!-- Skrip Profil & Logout -->
+<script>
+    const activeUser = JSON.parse(localStorage.getItem('user'));
+    if (activeUser) {
+        const nameEl = document.getElementById('display-name');
+        const deptEl = document.getElementById('display-dept');
+        if(nameEl) nameEl.innerText = activeUser.full_name;
+        if(deptEl) deptEl.innerText = activeUser.role === 'admin' ? 'Administrator' : activeUser.department;
+    }
+
+    async function handleLogout() {
+        try { await fetch('/api/logout', { method: 'POST' }); } 
+        catch (err) { console.error("Gagal menghubungi server:", err); } 
+        finally { localStorage.removeItem('user'); window.location.href = '/login'; }
+    }
+</script>
+
 </body>
 </html>
