@@ -52,15 +52,36 @@ def _excel_qty(value, default=0):
     return number
 
 def optional_number(value):
-    if value is None: return None
+    """
+    Blank -> None
+    Valid number -> float
+    Invalid -> ValueError
+    """
+    if value is None:
+        return None
+
     try:
-        if pd.isna(value): return None
-    except (TypeError, ValueError): pass
+        if pd.isna(value):
+            return None
+    except (TypeError, ValueError):
+        pass
+
     text = _excel_text(value)
-    if text == "": return None
-    try: number = float(value)
-    except (TypeError, ValueError): raise ValueError("Nilai harga harus berupa angka.")
-    if number < 0: raise ValueError("Harga tidak boleh negatif.")
+
+    if text == "":
+        return None
+
+    # Membersihkan spasi tak terputus (\xa0) atau spasi tersembunyi dari Excel
+    cleaned_text = text.replace("\xa0", "").replace(" ", "").replace(",", ".")
+
+    try:
+        number = float(cleaned_text)
+    except (TypeError, ValueError):
+        raise ValueError(f"Nilai harga harus berupa angka (diterima: '{text}').")
+
+    if number < 0:
+        raise ValueError("Harga tidak boleh negatif.")
+
     return number
 
 def calculate_sph_total(qty, unit_price):
@@ -87,14 +108,37 @@ def resolve_sph_values(qty, unit_price, legacy_total=None):
     return (None, optional_number(legacy_total))
 
 def _read_boq_excel(file, require_system_id=False):
+    """
+    Membaca Sheet 1 / index 0 dengan deteksi baris header otomatis 
+    untuk melewati teks judul/instruksi di bagian atas template.
+    """
     file.stream.seek(0)
-    df = pd.read_excel(file, sheet_name=0)
+    
+    # Baca file mentah tanpa header untuk mencari baris header tabel secara dinamis
+    df_raw = pd.read_excel(file, sheet_name=0, header=None)
+    
+    header_row_idx = 0
+    for idx, row in df_raw.iterrows():
+        row_str_values = [str(val).strip() for val in row.values]
+        if "Deskripsi Item" in row_str_values or "Item No" in row_str_values:
+            header_row_idx = idx
+            break
+
+    # Baca ulang file Excel menggunakan baris header yang tepat
+    file.stream.seek(0)
+    df = pd.read_excel(file, sheet_name=0, header=header_row_idx)
+
+    # Normalisasi nama kolom
     df.columns = [_excel_text(col) for col in df.columns]
 
     required_columns = BOQ_CORE_COLUMNS + BOQ_DERIVED_COLUMNS
+
     missing = [col for col in required_columns if col not in df.columns]
     if missing:
-        raise ValueError("Format template tidak sesuai. Kolom wajib tidak ditemukan: " + ", ".join(missing))
+        raise ValueError(
+            "Format template tidak sesuai. Kolom wajib tidak ditemukan: "
+            + ", ".join(missing)
+        )
 
     if require_system_id and BOQ_SYSTEM_COLUMN not in df.columns:
         raise ValueError(f"Kolom '{BOQ_SYSTEM_COLUMN}' wajib ada untuk file revisi.")
