@@ -644,10 +644,12 @@ def download_report():
         )
 
     try:
-        with init_db() as conn:
-            projects = get_projects_relational(
-                conn.cursor()
-            )
+        with contextlib.closing(sqlite3.connect(DB_NAME)) as conn:
+             conn.row_factory = sqlite3.Row
+
+        projects = get_projects_relational(
+        conn.cursor()
+    )
 
         project = next(
             (
