@@ -366,13 +366,13 @@ modal.addEventListener('click', (e) => { if(e.target === modal) closeModal(); })
 
 // 3. Fungsionalitas Tombol Download Template
 function downloadTemplate() {
-    // Menggunakan Flask url_for untuk mengambil path file statis secara dinamis
-    const downloadUrl = "{{ url_for('static', filename='Template_BoQ_Presourcing.xlsx') }}";
+    // Memanggil API download langsung, tidak perlu url_for Jinja karena ini portal statis
+    const downloadUrl = "/api/download_template_boq";
     
     // Memicu proses unduh otomatis di browser SA
     const link = document.createElement('a');
     link.href = downloadUrl;
-    link.download = 'Template_BoQ_Presourcing_Pro.xlsx';
+    link.download = 'Template_BoQ_Presourcing.xlsx';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -424,7 +424,7 @@ function renderTable(data) {
         const safeTitle = req.title ? req.title.replace(/'/g, "\\'").replace(/"/g, '&quot;') : '';
         const safeTicketId = req.ticket_id || '';
         const safeStatus = req.status || 'unassigned';
-        const safeLeadId = req.pic_username || ''; // Memperbaiki pemanggilan pic username
+        const safeLeadId = req.pic_username || ''; 
         
         // Data Pipeline Baru
         const safePipeline = req.pipeline_stage ? req.pipeline_stage.replace(/'/g, "\\'") : 'Menunggu Assign';
@@ -673,7 +673,7 @@ document.addEventListener('click', (e) => {
 });
 
 async function fetchNotifications() {
-    // Ambil data user aktif (bisa activeUser atau currentUser tergantung nama variabel di file HTML-mu)
+    // Ambil data user aktif
     const userStr = localStorage.getItem('user');
     if (!userStr) return;
     const user = JSON.parse(userStr);
