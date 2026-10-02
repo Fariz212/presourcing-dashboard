@@ -622,32 +622,584 @@ def delete_project(project_id):
             return jsonify({"success": False, "message": "Project tidak ditemukan atau sudah terhapus."}), 404
     except Exception as e: return jsonify({"success": False, "message": str(e)}), 500
 
+# ============================================================================
+# PROJECT REPORT
+# ============================================================================
 @app.route("/api/download_report", methods=["GET"])
 def download_report():
-    if "username" not in session or session.get("role") != "admin": return jsonify({"success": False, "message": "Akses ditolak!"}), 403
-    target_project_id = request.args.get("project_id")
-    with contextlib.closing(sqlite3.connect(DB_NAME)) as conn:
-        conn.row_factory = sqlite3.Row
-        projects = get_projects_relational(conn.cursor())
-    
-    if target_project_id: projects = [p for p in projects if p.get("id") == target_project_id]
-    report_data = []
+    if not is_admin():
+        return json_response_error(
+            "Akses ditolak.",
+            403,
+        )
 
-    for p in projects:
-        for sow in p.get("sows", []):
-            for boq in sow.get("boqs", []):
-                for item in boq.get("items", []):
-                    report_data.append({
-                        "Ticket ID": p.get("id", ""), "Nama Project": p.get("name", ""), "Requestor": p.get("requestorName", ""), "PIC Assigned": p.get("leadId", ""), "Status": p.get("status", ""), "Tanggal Dibuat": p.get("createdAt", ""), "Target RFS": p.get("targetRfs", ""), "Pipeline Stage": p.get("pipelineStage", ""), "Item ID": item.get("id", ""), "Item No": item.get("itemNo", ""), "Scope of Work": sow.get("name", ""), "BoQ Section": boq.get("name", ""), "Deskripsi Item": item.get("product", ""), "Qty": item.get("qty", 0), "UoM": item.get("uom", ""), "Preferred Brand": item.get("preferredBrand", ""), "Delivery Time (RFS)": item.get("deliveryTime", ""), "Vendor": item.get("vendor", ""), "SPH Awal / Unit": item.get("sphAwalUnit", ""), "Total SPH Awal": item.get("sphAwal", ""), "SPH Final / Unit": item.get("sphFinalUnit", ""), "Total SPH Final": item.get("sphFinal", ""),
-                    })
+    target_project_id = str(
+        request.args.get("project_id") or ""
+    ).strip()
 
-    if not report_data: report_data.append({"Ticket ID": target_project_id or "-", "Nama Project": "Data tidak ditemukan"})
-    df = pd.DataFrame(report_data)
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine="openpyxl") as writer: df.to_excel(writer, index=False, sheet_name="Detail Project")
-    output.seek(0)
-    return send_file(output, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", as_attachment=True, download_name=f"Report_{target_project_id or 'All_Projects'}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx")
+    if not target_project_id:
+        return json_response_error(
+            "Project ID wajib diberikan.",
+            400,
+        )
 
+    try:
+        with db_connect() as conn:
+            projects = get_projects_relational(
+                conn.cursor()
+            )
+
+        project = next(
+            (
+                p for p in projects
+                if str(p.get("id") or "") == target_project_id
+            ),
+            None,
+        )
+
+        if project is None:
+            return json_response_error(
+                "Project tidak ditemukan.",
+                404,
+            )
+
+        # ------------------------------------------------------------------
+        # COLLECT ITEMS
+        # ------------------------------------------------------------------
+        items = []
+
+        for sow in project.get("sows") or []:
+            for boq in sow.get("boqs") or []:
+                for item in boq.get("items") or []:
+                    items.append(
+                        {
+                            "sow": sow.get("name", ""),
+                            "boq": boq.get("name", ""),
+                            **item,
+                        }
+                    )
+
+        # ------------------------------------------------------------------
+        # SPH CALCULATION
+        # ------------------------------------------------------------------
+        sph_mode = project.get("sphMode") or "item"
+
+        if sph_mode == "project":
+            total_sph_awal = project.get("projectSphAwal")
+            total_sph_final = project.get("projectSphFinal")
+        else:
+            total_sph_awal = 0
+            total_sph_final = 0
+
+            has_awal = False
+            has_final = True
+
+            for item in items:
+                awal = item.get("sphAwal")
+                final = item.get("sphFinal")
+
+                if awal is not None:
+                    total_sph_awal += float(awal)
+                    has_awal = True
+
+                if final is None:
+                    has_final = False
+                else:
+                    total_sph_final += float(final)
+
+            total_sph_awal = (
+                total_sph_awal
+                if has_awal
+                else None
+            )
+
+            total_sph_final = (
+                total_sph_final
+                if has_final and items
+                else None
+            )
+
+        efficiency = None
+
+        if (
+            total_sph_awal is not None
+            and total_sph_final is not None
+            and float(total_sph_awal) > 0
+        ):
+            efficiency = (
+                (
+                    float(total_sph_awal)
+                    - float(total_sph_final)
+                )
+                / float(total_sph_awal)
+            )
+
+        # ------------------------------------------------------------------
+        # PROJECT METRICS
+        # ------------------------------------------------------------------
+        total_qty = sum(
+            float(item.get("qty") or 0)
+            for item in items
+        )
+
+        vendors = sorted(
+            {
+                str(item.get("vendor") or "").strip()
+                for item in items
+                if str(item.get("vendor") or "").strip()
+            }
+        )
+
+        pics = sorted(
+            {
+                str(pic).strip()
+                for item in items
+                for pic in (item.get("picIds") or [])
+                if str(pic).strip()
+            }
+        )
+
+        lead_id = project.get("leadId") or ""
+
+        if lead_id and lead_id not in pics:
+            pics.insert(0, lead_id)
+
+        # ------------------------------------------------------------------
+        # WORKBOOK
+        # ------------------------------------------------------------------
+        wb = Workbook()
+
+        ws = wb.active
+        ws.title = "Project Summary"
+
+        detail_ws = wb.create_sheet("BoQ Detail")
+
+        # ------------------------------------------------------------------
+        # STYLES
+        # ------------------------------------------------------------------
+        title_fill = PatternFill(
+            "solid",
+            fgColor="1F4E78",
+        )
+
+        section_fill = PatternFill(
+            "solid",
+            fgColor="D9EAF7",
+        )
+
+        header_fill = PatternFill(
+            "solid",
+            fgColor="5B9BD5",
+        )
+
+        white_font = Font(
+            color="FFFFFF",
+            bold=True,
+            size=14,
+        )
+
+        section_font = Font(
+            bold=True,
+            size=11,
+        )
+
+        header_font = Font(
+            color="FFFFFF",
+            bold=True,
+        )
+
+        normal_font = Font(
+            size=10,
+        )
+
+        thin_side = Side(
+            style="thin",
+            color="D9E1F2",
+        )
+
+        border = Border(
+            left=thin_side,
+            right=thin_side,
+            top=thin_side,
+            bottom=thin_side,
+        )
+
+        currency_format = (
+            '"Rp" #,##0;'
+            '"-Rp" #,##0;'
+            '-'
+        )
+
+        number_format = '#,##0.##'
+
+        percent_format = '0.0%;-0.0%;-'
+
+        # ------------------------------------------------------------------
+        # SHEET 1: PROJECT SUMMARY
+        # ------------------------------------------------------------------
+        ws.merge_cells("A1:F1")
+        ws["A1"] = "PROJECT REPORT"
+        ws["A1"].fill = title_fill
+        ws["A1"].font = white_font
+        ws["A1"].alignment = Alignment(
+            horizontal="left",
+            vertical="center",
+        )
+        ws.row_dimensions[1].height = 26
+
+        ws.merge_cells("A2:F2")
+        ws["A2"] = project.get("name") or "-"
+        ws["A2"].font = Font(
+            bold=True,
+            size=13,
+        )
+        ws["A2"].alignment = Alignment(
+            vertical="center",
+        )
+
+        # Project Information
+        ws.merge_cells("A4:F4")
+        ws["A4"] = "PROJECT INFORMATION"
+        ws["A4"].fill = section_fill
+        ws["A4"].font = section_font
+
+        project_info = [
+            ("Ticket ID", project.get("id")),
+            ("Requestor / SA", project.get("requestorName")),
+            ("Department", project.get("requestorDept")),
+            ("PIC / Lead Presource", project.get("leadId")),
+            ("Outcome", project.get("status")),
+            ("Pipeline Stage", project.get("pipelineStage")),
+            ("Progress", project.get("progressPct")),
+            ("Target RFS", project.get("targetRfs")),
+            ("Created Date", project.get("createdAt")),
+            ("Priority", project.get("priority")),
+        ]
+
+        row = 5
+
+        for label, value in project_info:
+            ws.cell(row=row, column=1).value = label
+            ws.cell(row=row, column=1).font = Font(bold=True)
+
+            ws.cell(row=row, column=2).value = (
+                value if value not in (None, "") else "-"
+            )
+
+            ws.merge_cells(
+                start_row=row,
+                start_column=2,
+                end_row=row,
+                end_column=6,
+            )
+
+            if label == "Progress" and value is not None:
+                ws.cell(row=row, column=2).value = (
+                    float(value) / 100
+                )
+                ws.cell(row=row, column=2).number_format = (
+                    "0%"
+                )
+
+            row += 1
+
+        # Commercial Summary
+        row += 1
+
+        ws.merge_cells(
+            start_row=row,
+            start_column=1,
+            end_row=row,
+            end_column=6,
+        )
+
+        ws.cell(row=row, column=1).value = (
+            "COMMERCIAL SUMMARY"
+        )
+        ws.cell(row=row, column=1).fill = section_fill
+        ws.cell(row=row, column=1).font = section_font
+
+        row += 1
+
+        commercial = [
+            ("Total Item", len(items), None),
+            ("Total Qty", total_qty, number_format),
+            ("Total SPH Awal", total_sph_awal, currency_format),
+            ("Total SPH Final", total_sph_final, currency_format),
+            ("Efficiency", efficiency, percent_format),
+            (
+                "Vendor",
+                ", ".join(vendors) if vendors else "-",
+                None,
+            ),
+            (
+                "PIC Terlibat",
+                ", ".join(pics) if pics else "-",
+                None,
+            ),
+        ]
+
+        for label, value, fmt in commercial:
+            ws.cell(row=row, column=1).value = label
+            ws.cell(row=row, column=1).font = Font(
+                bold=True
+            )
+
+            ws.merge_cells(
+                start_row=row,
+                start_column=2,
+                end_row=row,
+                end_column=6,
+            )
+
+            ws.cell(row=row, column=2).value = (
+                value if value not in (None, "") else "-"
+            )
+
+            if fmt and value is not None:
+                ws.cell(row=row, column=2).number_format = fmt
+
+            row += 1
+
+        # Notes
+        row += 1
+
+        ws.merge_cells(
+            start_row=row,
+            start_column=1,
+            end_row=row,
+            end_column=6,
+        )
+
+        ws.cell(row=row, column=1).value = (
+            "REPORT SCOPE"
+        )
+        ws.cell(row=row, column=1).fill = section_fill
+        ws.cell(row=row, column=1).font = section_font
+
+        row += 1
+
+        ws.merge_cells(
+            start_row=row,
+            start_column=1,
+            end_row=row + 1,
+            end_column=6,
+        )
+
+        ws.cell(row=row, column=1).value = (
+            "Report ini berisi informasi project dan detail "
+            "BoQ berdasarkan data Presourcing saat report "
+            "dibuat."
+        )
+
+        ws.cell(row=row, column=1).alignment = Alignment(
+            wrap_text=True,
+            vertical="top",
+        )
+
+        # ------------------------------------------------------------------
+        # SHEET 2: BOQ DETAIL
+        # ------------------------------------------------------------------
+        detail_headers = [
+            "SoW",
+            "BoQ",
+            "Item No",
+            "Item ID",
+            "Description",
+            "Qty",
+            "UoM",
+            "Preferred Brand",
+            "Delivery Time (RFS)",
+            "Vendor",
+            "SPH Awal / Unit",
+            "Total SPH Awal",
+            "SPH Final / Unit",
+            "Total SPH Final",
+            "Efficiency",
+            "PIC",
+        ]
+
+        for col_idx, header in enumerate(
+            detail_headers,
+            start=1,
+        ):
+            cell = detail_ws.cell(
+                row=1,
+                column=col_idx,
+                value=header,
+            )
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(
+                horizontal="center",
+                vertical="center",
+                wrap_text=True,
+            )
+            cell.border = border
+
+        for row_idx, item in enumerate(
+            items,
+            start=2,
+        ):
+            awal_unit = item.get("sphAwalUnit")
+            awal_total = item.get("sphAwal")
+
+            final_unit = item.get("sphFinalUnit")
+            final_total = item.get("sphFinal")
+
+            item_efficiency = None
+
+            if (
+                awal_total is not None
+                and final_total is not None
+                and float(awal_total) > 0
+            ):
+                item_efficiency = (
+                    float(awal_total)
+                    - float(final_total)
+                ) / float(awal_total)
+
+            row_values = [
+                item.get("sow") or "-",
+                item.get("boq") or "-",
+                item.get("itemNo") or "-",
+                item.get("id") or "-",
+                item.get("product") or "-",
+                item.get("qty")
+                if item.get("qty") is not None
+                else "-",
+                item.get("uom") or "-",
+                item.get("preferredBrand") or "-",
+                item.get("deliveryTime") or "-",
+                item.get("vendor") or "-",
+                awal_unit,
+                awal_total,
+                final_unit,
+                final_total,
+                item_efficiency,
+                ", ".join(
+                    item.get("picIds") or []
+                ) or lead_id or "-",
+            ]
+
+            for col_idx, value in enumerate(
+                row_values,
+                start=1,
+            ):
+                cell = detail_ws.cell(
+                    row=row_idx,
+                    column=col_idx,
+                    value=value,
+                )
+                cell.border = border
+                cell.font = normal_font
+                cell.alignment = Alignment(
+                    vertical="top",
+                    wrap_text=True,
+                )
+
+            # Number formats
+            detail_ws.cell(
+                row=row_idx,
+                column=6,
+            ).number_format = number_format
+
+            for col_idx in (11, 12, 13, 14):
+                detail_ws.cell(
+                    row=row_idx,
+                    column=col_idx,
+                ).number_format = currency_format
+
+            detail_ws.cell(
+                row=row_idx,
+                column=15,
+            ).number_format = percent_format
+
+        # ------------------------------------------------------------------
+        # DETAIL SHEET FORMATTING
+        # ------------------------------------------------------------------
+        detail_ws.freeze_panes = "A2"
+        detail_ws.auto_filter.ref = detail_ws.dimensions
+        detail_ws.row_dimensions[1].height = 30
+
+        detail_widths = {
+            "A": 22,
+            "B": 24,
+            "C": 12,
+            "D": 22,
+            "E": 34,
+            "F": 10,
+            "G": 10,
+            "H": 22,
+            "I": 20,
+            "J": 25,
+            "K": 20,
+            "L": 20,
+            "M": 20,
+            "N": 20,
+            "O": 14,
+            "P": 24,
+        }
+
+        for column, width in detail_widths.items():
+            detail_ws.column_dimensions[column].width = width
+
+        # ------------------------------------------------------------------
+        # SUMMARY SHEET FORMATTING
+        # ------------------------------------------------------------------
+        summary_widths = {
+            "A": 25,
+            "B": 24,
+            "C": 18,
+            "D": 18,
+            "E": 18,
+            "F": 18,
+        }
+
+        for column, width in summary_widths.items():
+            ws.column_dimensions[column].width = width
+
+        ws.freeze_panes = "A5"
+
+        # Borders for information areas
+        for row_cells in ws.iter_rows(
+            min_row=5,
+            max_row=ws.max_row,
+            min_col=1,
+            max_col=6,
+        ):
+            for cell in row_cells:
+                cell.border = border
+
+        # ------------------------------------------------------------------
+        # OUTPUT
+        # ------------------------------------------------------------------
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+
+        safe_project_id = (
+            target_project_id
+            .replace("/", "_")
+            .replace("\\", "_")
+            .replace(" ", "_")
+        )
+
+        return send_file(
+            output,
+            mimetype=XLSX_MIMETYPE,
+            as_attachment=True,
+            download_name=(
+                f"Project_Report_{safe_project_id}_"
+                f"{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+            ),
+        )
+
+    except Exception as exc:
+        return json_response_error(
+            str(exc),
+            500,
+        )
 @app.route("/api/project_import_boq/preview", methods=["POST"])
 def preview_project_import_boq():
     if "file" not in request.files: return jsonify({"success": False, "message": "File Excel tidak ditemukan."}), 400
