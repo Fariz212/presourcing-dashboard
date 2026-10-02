@@ -1,5 +1,8 @@
 from flask import Flask, request, jsonify, render_template, session, redirect, url_for, send_file, send_from_directory
 from flask_cors import CORS
+from openpyxl import load_workbook, Workbook
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from copy import copy
 import pandas as pd
 import sqlite3
 import json
@@ -555,8 +558,6 @@ def api_presourcing():
 def download_project_boq_template(project_id):
     if "username" not in session: return jsonify({"success": False, "message": "Akses ditolak. Silakan login."}), 403
     try:
-        from openpyxl import load_workbook
-        from copy import copy
         template_path = os.path.join(app.static_folder, BOQ_TEMPLATE_FILENAME)
         if not os.path.isfile(template_path): return jsonify({"success": False, "message": "Template BoQ tidak ditemukan."}), 404
 
