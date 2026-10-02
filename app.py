@@ -638,13 +638,13 @@ def download_report():
     ).strip()
 
     if not target_project_id:
-        return json_response_error(
+        return jsonify (
             "Project ID wajib diberikan.",
             400,
         )
 
     try:
-        with db_connect() as conn:
+        with init_db() as conn:
             projects = get_projects_relational(
                 conn.cursor()
             )
@@ -658,7 +658,7 @@ def download_report():
         )
 
         if project is None:
-            return json_response_error(
+            return jsonify (
                 "Project tidak ditemukan.",
                 404,
             )
@@ -1187,7 +1187,7 @@ def download_report():
 
         return send_file(
             output,
-            mimetype=XLSX_MIMETYPE,
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             as_attachment=True,
             download_name=(
                 f"Project_Report_{safe_project_id}_"
@@ -1196,7 +1196,7 @@ def download_report():
         )
 
     except Exception as exc:
-        return json_response_error(
+        return jsonify (
             str(exc),
             500,
         )
