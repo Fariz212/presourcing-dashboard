@@ -627,11 +627,11 @@ def delete_project(project_id):
 # ============================================================================
 @app.route("/api/download_report", methods=["GET"])
 def download_report():
-    if not is_admin():
-        return json_response_error(
-            "Akses ditolak.",
-            403,
-        )
+    if 'username' not in session or session.get('role') != 'admin':
+        return jsonify({
+            "success": False,
+            "message": "Akses ditolak!"
+    }), 403
 
     target_project_id = str(
         request.args.get("project_id") or ""
