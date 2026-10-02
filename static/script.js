@@ -771,6 +771,158 @@ function renderTeam(){
 }
 
 // ============================================================================
+// MODAL & FORM RENDERER (PROJECT FORM)
+// ============================================================================
+function projectModalHtml(p, isNew) {
+  const sowsHtml = (p.sows || []).map((sow, si) => {
+    const boqsHtml = (sow.boqs || []).map((boq, bi) => {
+      const itemsHtml = (boq.items || []).map((it, ii) => itemBlockHtml(it, si, bi, ii)).join('');
+      return `
+        <div class="boq-block">
+          <div class="boq-head">
+            <div class="boq-heading">
+              <div class="boq-number">B${bi + 1}</div>
+              <input class="boq-name" data-si="${si}" data-bi="${bi}" value="${escAttr(boq.name)}" placeholder="Nama BoQ" style="max-width:200px;">
+            </div>
+            <button class="mini-btn danger form-danger-btn" data-del-boq="${si}:${bi}" type="button">Hapus BoQ</button>
+          </div>
+          ${itemsHtml}
+          <div class="add-row">
+            <button class="mini-btn form-add-btn" data-add-item="${si}:${bi}" type="button">+ Tambah Item</button>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    return `
+      <div class="sow-block">
+        <div class="sow-head">
+          <div class="sow-heading">
+            <div class="sow-index">S${si + 1}</div>
+            <input class="sow-name" data-si="${si}" value="${escAttr(sow.name)}" placeholder="Nama Scope of Work (SoW)" style="max-width:240px;">
+          </div>
+          <div class="sow-actions">
+            <button class="mini-btn form-add-btn" data-add-boq="${si}" type="button">+ BoQ</button>
+            <button class="mini-btn danger form-danger-btn" data-del-sow="${si}" type="button">Hapus SoW</button>
+          </div>
+        </div>
+        ${boqsHtml}
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <div class="overlay" id="ov">
+      <div class="modal project-modal">
+        <div class="modal-hd">
+          <h3>${isNew ? 'Buat Project Baru' : 'Edit Project'}</h3>
+          <button class="mini-btn" id="m-close" type="button">Tutup</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-section">
+            <div class="form-section-head"><div class="form-section-title">Informasi Utama</div></div>
+            <div class="field project-name-field">
+              <label class="required-mark">Nama Project</label>
+              <input id="m-name" value="${escAttr(p.name)}" placeholder="Contoh: Project Backbone Expansion">
+            </div>
+            <div class="grid3">
+              <div class="field"><label class="required-mark">Pemohon</label><input id="m-req-name" value="${escAttr(p.requestorName)}" placeholder="Nama pemohon"></div>
+              <div class="field"><label class="required-mark">Departemen</label><input id="m-req-dept" value="${escAttr(p.requestorDept)}" placeholder="Divisi/Dept"></div>
+              <div class="field"><label>Lead Presource</label><select id="m-lead">${team.map(t => `<option value="${escAttr(t)}" ${p.leadId === t ? 'selected' : ''}>${escAttr(t)}</option>`).join('')}</select></div>
+            </div>
+          </div>
+
+          <div class="form-section">
+            <div class="form-section-head"><div class="form-section-title">Status &amp; Timeline EWS</div></div>
+            <div class="grid3">
+              <div class="field">
+                <label>Prioritas</label>
+                <select id="m-priority">
+                  <option value="Urgent" ${p.priority === 'Urgent' ? 'selected' : ''}>Urgent</option>
+                  <option value="High" ${p.priority === 'High' ? 'selected' : ''}>High</option>
+                  <option value="Medium" ${p.priority === 'Medium' ? 'selected' : ''}>Medium</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Status</label>
+                <select id="m-status">
+                  <option value="ongoing" ${p.status === 'ongoing' ? 'selected' : ''}>Berjalan</option>
+                  <option value="win" ${p.status === 'win' ? 'selected' : ''}>Menang</option>
+                  <option value="lose" ${p.status === 'lose' ? 'selected' : ''}>Kalah</option>
+                </select>
+              </div>
+              <div class="field"><label>Target RFS</label><input type="date" id="m-target-rfs" value="${escAttr(p.targetRfs)}"></div>
+            </div>
+            <div class="grid2" style="margin-top:10px;">
+              <div class="field">
+                <label>Tahap Pipeline</label>
+                <select id="m-pipeline-stage">
+                  <option value="1 - Project Identification" ${p.pipelineStage === '1 - Project Identification' ? 'selected' : ''}>1 - Project Identification</option>
+                  <option value="2 - SPH Preparation" ${p.pipelineStage === '2 - SPH Preparation' ? 'selected' : ''}>2 - SPH Preparation</option>
+                  <option value="3 - Vendor Selection" ${p.pipelineStage === '3 - Vendor Selection' ? 'selected' : ''}>3 - Vendor Selection</option>
+                  <option value="4 - Negotiation" ${p.pipelineStage === '4 - Negotiation' ? 'selected' : ''}>4 - Negotiation</option>
+                  <option value="5 - Finalization" ${p.pipelineStage === '5 - Finalization' ? 'selected' : ''}>5 - Finalization</option>
+                  <option value="6 - RFS" ${p.pipelineStage === '6 - RFS' ? 'selected' : ''}>6 - RFS</option>
+                </select>
+              </div>
+              <div class="field"><label>Progress (%)</label><input type="number" id="m-progress" min="0" max="100" value="${p.progressPct ?? 0}"></div>
+            </div>
+          </div>
+
+          <div class="form-section">
+            <div class="form-section-head">
+              <div class="form-section-title">Scope of Work &amp; BoQ</div>
+              <button class="mini-btn form-add-btn" id="m-add-sow" type="button">+ Tambah SoW</button>
+            </div>
+            <div class="field">
+              <label>Mode SPH</label>
+              <select id="m-sphmode">
+                <option value="item" ${p.sphMode === 'item' ? 'selected' : ''}>Dari Item BoQ (Rinci)</option>
+                <option value="project" ${p.sphMode === 'project' ? 'selected' : ''}>Manual Total Project</option>
+              </select>
+            </div>
+            ${p.sphMode === 'project' ? `
+              <div class="sph-summary-box">
+                <div class="field"><label>Total SPH Awal (Project)</label><input type="number" id="m-proj-awal" value="${p.projectSphAwal ?? ''}"></div>
+                <div class="field"><label>Total SPH Final (Project)</label><input type="number" id="m-proj-final" value="${p.projectSphFinal ?? ''}"></div>
+              </div>
+            ` : sowsHtml}
+          </div>
+        </div>
+        <div class="modal-ft">
+          <button class="btn-ghost" id="m-cancel" type="button">Batal</button>
+          <button class="btn-primary" id="m-save" type="button">Simpan Project</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function teamModalHtml(d) {
+  return `
+    <div class="overlay" id="ov">
+      <div class="modal" style="max-width:440px;">
+        <div class="modal-hd">
+          <h3>Kelola Anggota Tim</h3>
+          <button class="mini-btn" id="m-close" type="button">Tutup</button>
+        </div>
+        <div class="modal-body">
+          <div class="field">
+            <label>Daftar Nama Anggota (Pisahkan dengan koma)</label>
+            <textarea id="m-team-names" rows="3">${escAttr(d.names)}</textarea>
+          </div>
+        </div>
+        <div class="modal-ft">
+          <button class="btn-ghost" id="m-cancel" type="button">Batal</button>
+          <button class="btn-primary" id="m-save-team" type="button">Simpan Tim</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+
+// ============================================================================
 // PROJECTS LIST & DETAIL
 // ============================================================================
 function renderProjects() {
