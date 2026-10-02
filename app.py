@@ -638,18 +638,26 @@ def download_report():
     ).strip()
 
     if not target_project_id:
-        return jsonify (
-            "Project ID wajib diberikan.",
-            400,
-        )
+        return jsonify({
+        "success": False,
+        "message": "Project ID wajib diberikan."
+        }), 400
 
     try:
         with contextlib.closing(sqlite3.connect(DB_NAME)) as conn:
-             conn.row_factory = sqlite3.Row
+            conn.row_factory = sqlite3.Row
 
-        projects = get_projects_relational(
-        conn.cursor()
-    )
+            projects = get_projects_relational(
+            conn.cursor()
+            )
+
+        project = next(
+            (
+            p for p in projects
+            if str(p.get("id") or "") == target_project_id
+            ),
+        None,
+        )
 
         project = next(
             (
@@ -660,10 +668,10 @@ def download_report():
         )
 
         if project is None:
-            return jsonify (
-                "Project tidak ditemukan.",
-                404,
-            )
+            return jsonify({
+            "success": False,
+            "message": "Project tidak ditemukan."
+        }), 404
 
         # ------------------------------------------------------------------
         # COLLECT ITEMS
