@@ -27,8 +27,8 @@ app.secret_key = "presourcing_secret_key_123"
 # Konfigurasi Koneksi PostgreSQL
 DB_HOST = "localhost"
 DB_NAME = "presourcing_db"
-DB_USER = "presourcing_admin"  # Pastikan ini sesuai dengan user yang Anda reset
-DB_PASS = "R1l1Dem0LdXks@"     # Pastikan ini sesuai dengan password yang Anda reset
+DB_USER = "presourcing_master"  # Pastikan ini sesuai dengan user yang Anda reset
+DB_PASS = "R1l1DemDldxks@"     # Pastikan ini sesuai dengan password yang Anda reset
 
 # Inisialisasi Connection Pool (Min 1, Max 20 koneksi secara bersamaan)
 db_pool = ThreadedConnectionPool(
