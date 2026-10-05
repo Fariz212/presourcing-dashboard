@@ -3,6 +3,7 @@ from flask_cors import CORS
 from openpyxl import load_workbook, Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from copy import copy
+from openpyxl.cell.cell import MergedCell
 import pandas as pd
 import sqlite3
 import json
@@ -678,9 +679,12 @@ def download_project_boq_template(project_id):
 
         wb = load_workbook(template_path)
         ws = wb["BoQ Request"]
+        
+        # PERBAIKAN 1: Lewati MergedCell saat mengosongkan template
         for row in ws.iter_rows(min_row=2, max_row=ws.max_row, max_col=14):
             for cell in row: 
-                cell.value = None
+                if not isinstance(cell, MergedCell):
+                    cell.value = None
 
         style_row = min(51, ws.max_row)
 
@@ -697,23 +701,32 @@ def download_project_boq_template(project_id):
             if excel_row > style_row:
                 for col in range(1, 15):
                     source, target = ws.cell(style_row, col), ws.cell(excel_row, col)
-                    if source.has_style: 
-                        target._style = copy(source._style)
-                    target.number_format = source.number_format
+                    # PERBAIKAN 2: Pastikan source & target bukan MergedCell saat copy style
+                    if not isinstance(source, MergedCell) and not isinstance(target, MergedCell):
+                        if source.has_style: 
+                            target._style = copy(source._style)
+                        target.number_format = source.number_format
 
             for col, value in values.items():
                 cell = ws.cell(excel_row, col)
-                if col == 6 and value:
-                    try:
-                        cell.value = datetime.strptime(str(value), "%Y-%m-%d").date()
-                        cell.number_format = "yyyy-mm-dd"
-                    except ValueError: 
+                # PERBAIKAN 3: Jangan masukkan nilai jika itu MergedCell
+                if not isinstance(cell, MergedCell):
+                    if col == 6 and value:
+                        try:
+                            cell.value = datetime.strptime(str(value), "%Y-%m-%d").date()
+                            cell.number_format = "yyyy-mm-dd"
+                        except ValueError: 
+                            cell.value = value
+                    else: 
                         cell.value = value
-                else: 
-                    cell.value = value
 
-            ws.cell(excel_row, 11).value = f'=IF(OR(C{excel_row}="",J{excel_row}=""),"",C{excel_row}*J{excel_row})'
-            ws.cell(excel_row, 13).value = f'=IF(OR(C{excel_row}="",L{excel_row}=""),"",C{excel_row}*L{excel_row})'
+            # Menulis formula secara spesifik
+            formula_cell_k = ws.cell(excel_row, 11)
+            formula_cell_m = ws.cell(excel_row, 13)
+            if not isinstance(formula_cell_k, MergedCell):
+                formula_cell_k.value = f'=IF(OR(C{excel_row}="",J{excel_row}=""),"",C{excel_row}*J{excel_row})'
+            if not isinstance(formula_cell_m, MergedCell):
+                formula_cell_m.value = f'=IF(OR(C{excel_row}="",L{excel_row}=""),"",C{excel_row}*L{excel_row})'
 
         if "BoQInputTable" in ws.tables: 
             ws.tables["BoQInputTable"].ref = f"A1:N{max(2, len(items) + 1)}"
@@ -724,6 +737,8 @@ def download_project_boq_template(project_id):
         return send_file(output, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", as_attachment=True, download_name=f"BoQ_Revisi_{project_id}.xlsx")
     
     except Exception as e: 
+        import traceback
+        traceback.print_exc() # Print error detail ke terminal agar lebih mudah didebug
         return jsonify({"success": False, "message": str(e)}), 500
 
 @app.route("/api/projects/<project_id>", methods=["DELETE"])
