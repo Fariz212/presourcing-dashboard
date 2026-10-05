@@ -80,13 +80,23 @@ async function loadAll() {
     if (!response.ok) throw new Error("Gagal terhubung ke Backend");
     
     const data = await response.json();
-    if (!data.projects || !data.team || (data.projects.length === 0 && data.team.length === 0)) {
-      seedData(); 
-      await saveAll(); 
-    } else {
-      projects = data.projects; 
+    projects = data.projects || [];
+    
+    // PERBAIKAN: Pisahkan pengecekan agar Team tidak ikut kosong
+    if (data.team && data.team.length > 0) {
       team = data.team;
+    } else {
+      // Jika kosong, masukkan tim default dan langsung simpan ke database
+      team = ['Decki Okmal Pratama', 'Ahmad Fauzi', 'Siti Rahma', 'Budi Santoso'];
+      saveAll(); 
     }
+
+    // Jika sama sekali tidak ada project dan team
+    if (projects.length === 0 && (!data.team || data.team.length === 0)) {
+      seedData();
+      await saveAll();
+    }
+    
     storageOk = true;
   } catch(e) {
     console.error("Backend error/offline:", e);
@@ -1435,7 +1445,31 @@ function wireModalEvents() {
   document.querySelectorAll('[data-del-sow]').forEach(el => el.onclick = () => { syncModalData(); modal.data.sows.splice(+el.dataset.delSow,1); render(); });
   document.querySelectorAll('[data-del-boq]').forEach(el => { const [si,bi] = el.dataset.delBoq.split(':').map(Number); el.onclick = () => { syncModalData(); modal.data.sows[si].boqs.splice(bi,1); render(); }; });
   document.querySelectorAll('[data-del-item]').forEach(el => { const [si,bi,ii] = el.dataset.delItem.split(':').map(Number); el.onclick = () => { syncModalData(); modal.data.sows[si].boqs[bi].items.splice(ii,1); render(); }; });
-  document.querySelectorAll('[data-pic]').forEach(el => { const [si,bi,ii,name] = el.dataset.pic.split(':'); el.onclick = () => { syncModalData(); const arr = modal.data.sows[+si].boqs[+bi].items[+ii].picIds; const idx = arr.indexOf(name); if(idx>=0) arr.splice(idx,1); else arr.push(name); render(); }; });
+  document.querySelectorAll('[data-pic]').forEach(el => { 
+    // Menggunakan teknik pemisahan yang lebih aman (robust parsing)
+    const parts = el.dataset.pic.split(':');
+    const si = parseInt(parts[0]);
+    const bi = parseInt(parts[1]);
+    const ii = parseInt(parts[2]);
+    const name = parts.slice(3).join(':'); // Berjaga-jaga jika ada titik dua di nama orang
+
+    el.onclick = () => { 
+      syncModalData(); 
+      
+      // Amankan array jika undefined dari database
+      let arr = modal.data.sows[si].boqs[bi].items[ii].picIds;
+      if (!Array.isArray(arr)) {
+        arr = [];
+        modal.data.sows[si].boqs[bi].items[ii].picIds = arr;
+      }
+
+      const idx = arr.indexOf(name); 
+      if (idx >= 0) arr.splice(idx, 1); 
+      else arr.push(name); 
+      
+      render(); 
+    }; 
+    });
 
   document.getElementById('m-save').onclick = () => { syncModalData(); const d = modal.data; const idx = projects.findIndex(p => p.id === d.id); if (idx >= 0) projects[idx] = d; else projects.push(d); document.getElementById('modal-root').innerHTML = ''; modal = null; render(); saveAll(); };
 }
