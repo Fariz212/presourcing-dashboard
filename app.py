@@ -617,7 +617,7 @@ def api_presourcing():
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cursor:
-                cursor.execute("REPLACE INTO dashboard_state (data_type, json_data) VALUES ('team', %s)", (json.dumps(data.get("team", [])),))
+                cursor.execute("INSERT INTO dashboard_state (data_type, json_data) VALUES ('team', %s) ON CONFLICT (data_type) DO UPDATE SET json_data = EXCLUDED.json_data", (json.dumps(data.get("team", [])),))
 
                 cursor.execute("SELECT id FROM projects")
                 existing_db_ids = {row[0] for row in cursor.fetchall()}
