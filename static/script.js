@@ -230,6 +230,12 @@ function switchDashboardTab(id) {
 }
 
 function render() {
+  // 1. TANGKAP POSISI SCROLL SEBELUM DOM DIHAPUS
+  const currentWindowScroll = window.scrollY;
+  // Tangkap scroll di dalam modal (mencari elemen dengan class .modal-body, .modal, atau .overlay)
+  const modalContainer = document.querySelector('.modal-body') || document.querySelector('.modal') || document.querySelector('.overlay');
+  const currentModalScroll = modalContainer ? modalContainer.scrollTop : 0;
+
   const app = document.getElementById('app');
   let headerHtml = '';
 
@@ -249,7 +255,7 @@ function render() {
               <div class="objective-text">Ensure project readiness &amp; competitive sourcing through effective presourcing</div>
             </div>
           </div>
-          <div class="data-date"><span>Data per:</span><strong>${dateText}</strong></div>
+          <div class="data-date"><span>Data per: </span><strong>${dateText}</strong></div>
         </div>
       </div>
     `;
@@ -259,6 +265,7 @@ function render() {
     headerHtml = `<div class="page-hero"><div class="page-hero-main"><div class="page-hero-title">Team &amp; Workload</div><div class="page-hero-sub">Distribusi project dan beban kerja tim</div></div></div>`;
   }
 
+  // Melukis ulang seluruh DOM
   app.innerHTML = `<div class="page-shell">${headerHtml}<div id="tabcontent"></div></div>`;
   const content = document.getElementById('tabcontent');
   
@@ -269,6 +276,18 @@ function render() {
   wireEvents();
   if (modal) renderModal();
   document.querySelectorAll('.app-nav-item').forEach(el => el.classList.toggle('active', el.dataset.tab === activeTab));
+
+  // 2. KEMBALIKAN POSISI SCROLL SETELAH RENDER SELESAI
+  // Menggunakan setTimeout(..., 0) agar dieksekusi tepat setelah antrean paint UI browser selesai
+  setTimeout(() => {
+    window.scrollTo(0, currentWindowScroll);
+    
+    // Cari kembali elemen modal yang baru saja di-render ulang, lalu setel scrollTop-nya
+    const newModalContainer = document.querySelector('.modal-body') || document.querySelector('.modal') || document.querySelector('.overlay');
+    if (newModalContainer) {
+      newModalContainer.scrollTop = currentModalScroll;
+    }
+  }, 0);
 }
 
 // ============================================================================
