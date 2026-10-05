@@ -27,7 +27,7 @@ app.secret_key = "presourcing_secret_key_123"
 DB_HOST = "localhost"
 DB_NAME = "presourcing_db"
 DB_USER = "presourcing_master"
-DB_PASS = "R1l1DemDldxks@"
+DB_PASS = "Super@12345"
 
 @contextlib.contextmanager
 def get_db_connection():
