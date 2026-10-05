@@ -210,7 +210,7 @@ function computePicStats() {
 }
 
 // ============================================================================
-// NAVIGATION & CORE RENDER (DENGAN SCROLL RESTORATION AMAN)
+// NAVIGATION & CORE RENDER
 // ============================================================================
 function switchDashboardTab(id) {
   activeTab = id;
@@ -456,7 +456,7 @@ function renderOverview(){
       <div class="exec-panel status">
         <div class="exec-panel-head">◉ <span>Project Status</span></div>
         <div class="exec-panel-body">
-          <div class="exec-donut">
+          <div class="exec-donut" style="position: relative; height: 220px; width: 100%;">
             <canvas id="chartStatus"></canvas>
             <div class="exec-donut-center">
               <div class="exec-donut-number">${totalProj}</div>
@@ -469,7 +469,7 @@ function renderOverview(){
       <div class="exec-panel pic">
         <div class="exec-panel-head">▥ <span>Project Value by PIC</span></div>
         <div class="exec-panel-body">
-          <div class="exec-chart"><canvas id="chartPicValue"></canvas></div>
+          <div class="exec-chart" style="position: relative; height: 220px; width: 100%;"><canvas id="chartPicValue"></canvas></div>
         </div>
       </div>
 
@@ -483,14 +483,14 @@ function renderOverview(){
       <div class="exec-panel rfs">
         <div class="exec-panel-head">▥ <span>Target RFS by Month</span></div>
         <div class="exec-panel-body">
-          <div class="exec-chart"><canvas id="chartRfsMonth"></canvas></div>
+          <div class="exec-chart" style="position: relative; height: 220px; width: 100%;"><canvas id="chartRfsMonth"></canvas></div>
         </div>
       </div>
 
       <div class="exec-panel top5">
         <div class="exec-panel-head">≡ <span>Top 5 Project Value</span></div>
         <div class="exec-panel-body">
-          <div class="exec-chart"><canvas id="chartTop5"></canvas></div>
+          <div class="exec-chart" style="position: relative; height: 220px; width: 100%;"><canvas id="chartTop5"></canvas></div>
         </div>
       </div>
 
@@ -1267,7 +1267,7 @@ function itemBlockHtml(it, si, bi, ii) {
         <div class="field">
           <label>PIC</label>
           <div class="pic-select">
-            ${team.map(t => `<div class="pic-opt ${(it.picIds ||[]).includes(t) ? 'on' : ''}" data-pic="${path}:${escAttr(t)}">${escAttr(t)}</div>`).join('')}
+            ${team.map(t => `<div class="pic-opt ${(it.picIds || []).includes(t) ? 'on' : ''}" data-pic="${path}:${escAttr(t)}">${escAttr(t)}</div>`).join('')}
           </div>
         </div>
       </div>
