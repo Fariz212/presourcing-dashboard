@@ -1,6 +1,8 @@
 import sqlite3
 import shutil
 import os
+import sqlite3
+import psycopg2
 
 # Nama database sudah disesuaikan
 DB_FILE = 'presourcing_db.sqlite' 
