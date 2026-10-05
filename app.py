@@ -6,6 +6,7 @@ from copy import copy
 from openpyxl.cell.cell import MergedCell
 import pandas as pd
 import psycopg2
+from psycopg2.pool import ThreadedConnectionPool
 from psycopg2.extras import RealDictCursor
 import json
 import os
@@ -26,22 +27,26 @@ app.secret_key = "presourcing_secret_key_123"
 # Konfigurasi Koneksi PostgreSQL
 DB_HOST = "localhost"
 DB_NAME = "presourcing_db"
-DB_USER = "presourcing_master"
-DB_PASS = "R1L1DemDldxks@"
+DB_USER = "presourcing_admin"  # Pastikan ini sesuai dengan user yang Anda reset
+DB_PASS = "R1l1Dem0LdXks@"     # Pastikan ini sesuai dengan password yang Anda reset
+
+# Inisialisasi Connection Pool (Min 1, Max 20 koneksi secara bersamaan)
+db_pool = ThreadedConnectionPool(
+    1, 20,
+    host=DB_HOST,
+    database=DB_NAME,
+    user=DB_USER,
+    password=DB_PASS
+)
 
 @contextlib.contextmanager
 def get_db_connection():
-    """Context manager untuk otomatis mengelola buka/tutup koneksi PostgreSQL"""
-    conn = psycopg2.connect(
-        host=DB_HOST,
-        database=DB_NAME,
-        user=DB_USER,
-        password=DB_PASS
-    )
+    """Mengambil koneksi yang sudah stand-by dari pool, lalu mengembalikannya"""
     try:
+        conn = db_pool.getconn()
         yield conn
     finally:
-        conn.close()
+        db_pool.putconn(conn)
 
 # ============================================================================
 # EXCEL TEMPLATE CONFIGURATION (14 KOLOM RIGID)
@@ -148,19 +153,20 @@ def resolve_sph_values(qty, unit_price, legacy_total=None):
     
     return (None, optional_number(legacy_total))
 
+# OPTIMASI: Membaca Excel 1 kali saja menggunakan pandas slicing
 def _read_boq_excel(file, require_system_id=False):
     file.stream.seek(0)
-    df_raw = pd.read_excel(file, sheet_name=0, header=None)
+    df = pd.read_excel(file, sheet_name=0, header=None)
     
     header_row_idx = 0
-    for idx, row in df_raw.iterrows():
+    for idx, row in df.iterrows():
         row_str_values = [str(val).strip() for val in row.values]
         if "Deskripsi Item" in row_str_values or "Item No" in row_str_values:
             header_row_idx = idx
             break
 
-    file.stream.seek(0)
-    df = pd.read_excel(file, sheet_name=0, header=header_row_idx)
+    df.columns = df.iloc[header_row_idx]
+    df = df.iloc[header_row_idx + 1:].reset_index(drop=True)
     df.columns = [_excel_text(col) for col in df.columns]
 
     required_columns = BOQ_CORE_COLUMNS + BOQ_DERIVED_COLUMNS
@@ -306,50 +312,70 @@ def init_db():
 init_db()
 
 # ============================================================================
-# RELATIONAL DATA HELPER
+# RELATIONAL DATA HELPER (OPTIMASI: Bulk Fetch - Mengatasi N+1 Query Problem)
 # ============================================================================
 def get_projects_relational(cursor):
     cursor.execute("SELECT * FROM projects")
-    projects_data = []
+    projects = [dict(row) for row in cursor.fetchall()]
+    if not projects: 
+        return []
     
-    for p_row in cursor.fetchall():
-        p = dict(p_row)
-        cursor.execute("SELECT vendor_name, offered_price, file_path FROM comparison_docs WHERE project_id = %s", (p["id"],))
-        p["comparison_docs"] = [dict(d) for d in cursor.fetchall()]
+    project_ids = tuple(p["id"] for p in projects)
 
-        cursor.execute("SELECT id, name FROM sows WHERE project_id = %s", (p["id"],))
-        sows = []
-        for s_row in cursor.fetchall():
-            s = dict(s_row)
-            cursor.execute("SELECT id, name FROM boqs WHERE sow_id = %s", (s["id"],))
-            boqs = []
-            for b_row in cursor.fetchall():
-                b = dict(b_row)
-                cursor.execute("SELECT * FROM items WHERE boq_id = %s", (b["id"],))
-                items = []
-                for i_row in cursor.fetchall():
-                    i = dict(i_row)
-                    i["picIds"] = json.loads(i["pic_ids"]) if i["pic_ids"] else []
-                    i["sphAwal"] = i.pop("sph_awal")
-                    i["sphFinal"] = i.pop("sph_final")
-                    i["sphAwalUnit"] = i.pop("sph_awal_unit", None)
-                    i["sphFinalUnit"] = i.pop("sph_final_unit", None)
-                    
-                    if i["sphAwalUnit"] is None: 
-                        i["sphAwalUnit"] = derive_unit_price(i.get("qty"), i.get("sphAwal"))
-                    if i["sphFinalUnit"] is None: 
-                        i["sphFinalUnit"] = derive_unit_price(i.get("qty"), i.get("sphFinal"))
+    cursor.execute("SELECT * FROM comparison_docs WHERE project_id IN %s", (project_ids,))
+    docs = [dict(row) for row in cursor.fetchall()]
 
-                    i["itemNo"] = i.pop("item_no", "")
-                    i["preferredBrand"] = i.pop("preferred_brand", "")
-                    i["deliveryTime"] = i.pop("delivery_time", "")
-                    items.append(i)
-                b["items"] = items
-                boqs.append(b)
-            s["boqs"] = boqs
-            sows.append(s)
-        p["sows"] = sows
+    cursor.execute("SELECT id, project_id, name FROM sows WHERE project_id IN %s", (project_ids,))
+    sows = [dict(row) for row in cursor.fetchall()]
+    sow_ids = tuple(s["id"] for s in sows)
 
+    boqs = []
+    if sow_ids:
+        cursor.execute("SELECT id, sow_id, name FROM boqs WHERE sow_id IN %s", (sow_ids,))
+        boqs = [dict(row) for row in cursor.fetchall()]
+    boq_ids = tuple(b["id"] for b in boqs)
+
+    items = []
+    if boq_ids:
+        cursor.execute("SELECT * FROM items WHERE boq_id IN %s", (boq_ids,))
+        raw_items = [dict(row) for row in cursor.fetchall()]
+        for i in raw_items:
+            i["picIds"] = json.loads(i["pic_ids"]) if i["pic_ids"] else []
+            i["sphAwal"] = i.pop("sph_awal")
+            i["sphFinal"] = i.pop("sph_final")
+            i["sphAwalUnit"] = i.pop("sph_awal_unit", None) or derive_unit_price(i.get("qty"), i["sphAwal"])
+            i["sphFinalUnit"] = i.pop("sph_final_unit", None) or derive_unit_price(i.get("qty"), i["sphFinal"])
+            i["itemNo"] = i.pop("item_no", "")
+            i["preferredBrand"] = i.pop("preferred_brand", "")
+            i["deliveryTime"] = i.pop("delivery_time", "")
+            items.append(i)
+
+    # Mapping data menggunakan dictionary di memory
+    items_by_boq = {}
+    for item in items: 
+        items_by_boq.setdefault(item["boq_id"], []).append(item)
+    for b in boqs: 
+        b["items"] = items_by_boq.get(b["id"], [])
+
+    boqs_by_sow = {}
+    for b in boqs: 
+        boqs_by_sow.setdefault(b["sow_id"], []).append(b)
+    for s in sows: 
+        s["boqs"] = boqs_by_sow.get(s["id"], [])
+
+    sows_by_project = {}
+    for s in sows: 
+        sows_by_project.setdefault(s["project_id"], []).append(s)
+    
+    docs_by_project = {}
+    for d in docs: 
+        docs_by_project.setdefault(d["project_id"], []).append(d)
+
+    # Susun ke array hasil akhir
+    for p in projects:
+        p["comparison_docs"] = docs_by_project.get(p["id"], [])
+        p["sows"] = sows_by_project.get(p["id"], [])
+        
         p["requestorName"] = p.pop("requestor_name")
         p["requestorDept"] = p.pop("requestor_dept")
         p["leadId"] = p.pop("lead_id")
@@ -361,9 +387,8 @@ def get_projects_relational(cursor):
         p["targetRfs"] = p.pop("target_rfs", None)
         p["pipelineStage"] = p.pop("pipeline_stage", None)
         p["progressPct"] = p.pop("progress_pct", None)
-        projects_data.append(p)
         
-    return projects_data
+    return projects
 
 # ============================================================================
 # AUTH & NOTIFICATIONS
@@ -1251,4 +1276,11 @@ def download_comparison(filename):
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5001))
+    
+    # PERHATIAN: 
+    # Untuk lingkungan Development, Anda bisa menggunakan app.run ini.
+    # Namun saat aplikasi sudah final (Production), 
+    # sangat direkomendasikan untuk menjalankannya dengan Gunicorn.
+    # Contoh perintah di terminal: 
+    # gunicorn -w 4 -b 0.0.0.0:5001 app:app
     app.run(host="0.0.0.0", port=port, debug=True)
