@@ -8,7 +8,6 @@ let team = [];
 let activeTab = 'overview';
 let openProjectId = null;
 let modal = null; 
-let modalScroll = 0;
 let filters = { priority: 'all', status: 'all' };
 let storageOk = true;
 let isSaving = false; 
@@ -63,12 +62,6 @@ function seedData() {
       priority: 'High', status: 'ongoing', leadId: 'Andi', sphMode: 'item', projectSphAwal: null, projectSphFinal: null,
       createdAt: '2026-07-02', closedAt: null, targetRfs: '2026-10-15', pipelineStage: '4 - Negotiation', progressPct: 85, comparison_docs: [],
       sows: [{ id: uid('sow'), name: 'SoW Core', boqs: [{ id: uid('boq'), name: 'BoQ Utama', items: [{ id: uid('item'), product: 'Router', qty: 1, picIds: ['Andi'], sphAwalUnit: 25000000000, sphAwal: 25000000000, sphFinalUnit: null, sphFinal: null }] }] }]
-    },
-    {
-      id: uid('proj'), name: 'Project Cloud Services', requestorName: 'Farizky', requestorDept: 'SA Digital',
-      priority: 'Urgent', status: 'ongoing', leadId: 'Fajar', sphMode: 'project', projectSphAwal: 30000000000, projectSphFinal: null,
-      createdAt: '2026-08-15', closedAt: null, targetRfs: todayStr(), pipelineStage: '2 - SPH Preparation', progressPct: 40, comparison_docs: [],
-      sows: [{ id: uid('sow'), name: 'SoW Cloud', boqs: [{ id: uid('boq'), name: 'BoQ AWS', items: [] }] }]
     }
   ];
 }
@@ -82,16 +75,13 @@ async function loadAll() {
     const data = await response.json();
     projects = data.projects || [];
     
-    // PERBAIKAN: Pisahkan pengecekan agar Team tidak ikut kosong
     if (data.team && data.team.length > 0) {
       team = data.team;
     } else {
-      // Jika kosong, masukkan tim default dan langsung simpan ke database
       team = ['Decki Okmal Pratama', 'Ahmad Fauzi', 'Siti Rahma', 'Budi Santoso'];
       saveAll(); 
     }
 
-    // Jika sama sekali tidak ada project dan team
     if (projects.length === 0 && (!data.team || data.team.length === 0)) {
       seedData();
       await saveAll();
@@ -220,7 +210,7 @@ function computePicStats() {
 }
 
 // ============================================================================
-// NAVIGATION & CORE RENDER
+// NAVIGATION & CORE RENDER (DENGAN SCROLL RESTORATION AMAN)
 // ============================================================================
 function switchDashboardTab(id) {
   activeTab = id;
@@ -230,9 +220,7 @@ function switchDashboardTab(id) {
 }
 
 function render() {
-  // 1. TANGKAP POSISI SCROLL SEBELUM DOM DIHAPUS
   const currentWindowScroll = window.scrollY;
-  // Tangkap scroll di dalam modal (mencari elemen dengan class .modal-body, .modal, atau .overlay)
   const modalContainer = document.querySelector('.modal-body') || document.querySelector('.modal') || document.querySelector('.overlay');
   const currentModalScroll = modalContainer ? modalContainer.scrollTop : 0;
 
@@ -265,7 +253,6 @@ function render() {
     headerHtml = `<div class="page-hero"><div class="page-hero-main"><div class="page-hero-title">Team &amp; Workload</div><div class="page-hero-sub">Distribusi project dan beban kerja tim</div></div></div>`;
   }
 
-  // Melukis ulang seluruh DOM
   app.innerHTML = `<div class="page-shell">${headerHtml}<div id="tabcontent"></div></div>`;
   const content = document.getElementById('tabcontent');
   
@@ -277,12 +264,8 @@ function render() {
   if (modal) renderModal();
   document.querySelectorAll('.app-nav-item').forEach(el => el.classList.toggle('active', el.dataset.tab === activeTab));
 
-  // 2. KEMBALIKAN POSISI SCROLL SETELAH RENDER SELESAI
-  // Menggunakan setTimeout(..., 0) agar dieksekusi tepat setelah antrean paint UI browser selesai
   setTimeout(() => {
     window.scrollTo(0, currentWindowScroll);
-    
-    // Cari kembali elemen modal yang baru saja di-render ulang, lalu setel scrollTop-nya
     const newModalContainer = document.querySelector('.modal-body') || document.querySelector('.modal') || document.querySelector('.overlay');
     if (newModalContainer) {
       newModalContainer.scrollTop = currentModalScroll;
@@ -331,81 +314,6 @@ function renderOverview(){
   } else {
     setTimeout(renderDashboardCharts, 80);
   }
-
-  const dashStyles = `
-  <style>
-    .page-shell{ width:100%; max-width:1420px; margin:0 auto; }
-    .exec-kpis{ display:grid; grid-template-columns: repeat(6, minmax(0,1fr)); gap:9px; margin-bottom:12px; }
-    .exec-kpi{ min-height:72px; padding:10px 11px; display:flex; align-items:center; gap:9px; border: 1px solid #dbe3ec; border-radius:8px; background:#fff; position:relative; overflow:hidden; box-shadow: 0 1px 3px rgba(15,23,42,.04); }
-    .exec-kpi::after{ content:''; position:absolute; left:0; right:0; bottom:0; height:3px; background:#2563EB; }
-    .exec-kpi.green::after{ background:#16A34A; }
-    .exec-kpi.yellow::after{ background:#F59E0B; }
-    .exec-kpi.red::after{ background:#DC2626; }
-    .exec-kpi.gray::after{ background:#64748B; }
-    .exec-kpi-icon{ width:31px; height:31px; flex:0 0 31px; display:flex; align-items:center; justify-content:center; border-radius:7px; font-size:15px; background:#F8FAFC; border: 1px solid #E2E8F0; }
-    .exec-kpi-label{ font-size:9px; font-weight:700; color:#64748B; text-transform:uppercase; letter-spacing:.03em; }
-    .exec-kpi-value{ margin-top:3px; font-size:18px; line-height:1; font-weight:700; color:#0F172A; }
-    .exec-kpi-value small{ font-size:9px; font-weight:500; color:#94A3B8; }
-    .exec-kpi-meta{ margin-top:3px; font-size:8.5px; color:#94A3B8; }
-    .exec-kpi-progress{ margin-top:5px; width:100%; height:4px; overflow:hidden; border-radius:8px; background:#E2E8F0; }
-    .exec-kpi-progress span{ display:block; height:100%; border-radius:8px; background:#2563EB; }
-    .exec-kpi.green .exec-kpi-progress span{ background:#16A34A; }
-    .exec-kpi.yellow .exec-kpi-progress span{ background:#F59E0B; }
-    .exec-kpi.red .exec-kpi-progress span{ background:#DC2626; }
-
-    .exec-grid{ display:grid; grid-template-columns: minmax(0,2fr) minmax(0,1fr) minmax(0,1fr); grid-template-areas: "overview status pic" "pipeline rfs rfs" "top5 top5 warning"; gap:10px; align-items:stretch; }
-    .exec-panel{ min-width:0; background:#fff; border: 1px solid #dbe3ec; border-radius:8px; overflow:hidden; box-shadow: 0 1px 3px rgba(15,23,42,.04); display:flex; flex-direction:column; }
-    .exec-panel.overview{ grid-area:overview; }
-    .exec-panel.status{ grid-area:status; }
-    .exec-panel.pic{ grid-area:pic; }
-    .exec-panel.pipeline{ grid-area:pipeline; }
-    .exec-panel.rfs{ grid-area:rfs; }
-    .exec-panel.top5{ grid-area:top5; }
-    .exec-panel.warning{ grid-area:warning; }
-    .exec-panel-head{ min-height:31px; padding: 8px 11px; display:flex; align-items:center; gap:7px; background: linear-gradient(90deg, #0F5CA8, #1672C8); color:#fff; font-size:10.5px; font-weight:700; letter-spacing:.01em; }
-    .exec-panel-head.warning-head{ background: linear-gradient(90deg, #B91C1C, #DC2626); }
-    .exec-panel-sub{ margin-left:auto; font-size:8px; font-weight:400; opacity:.75; white-space:nowrap; }
-    .exec-panel-body{ flex:1; min-height:0; padding:9px; }
-
-    .exec-table-wrap{ height:100%; max-height:220px; overflow:auto; }
-    table.exec-table{ width:100%; border-collapse:collapse; font-size:9.5px; }
-    table.exec-table th{ position:sticky; top:0; z-index:2; padding:6px 5px; text-align:left; white-space:nowrap; background:#F4F7FB; color:#475569; border-bottom: 1px solid #DCE4EE; font-size:8px; font-weight:700; text-transform:uppercase; letter-spacing:.02em; }
-    table.exec-table td{ padding:6px 5px; border-bottom: 1px solid #EEF2F6; color:#334155; vertical-align:middle; }
-    table.exec-table tbody tr:hover{ background:#F8FAFC; }
-    .exec-project-name{ max-width:135px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; color:#0F172A; }
-    .exec-project-pic{ margin-top:2px; color:#94A3B8; font-size:8px; }
-    .exec-progress{ display:flex; align-items:center; gap:4px; }
-    .exec-progress-value{ width:25px; text-align:right; font-size:8.5px; font-weight:600; }
-    .exec-progress-bg{ width:38px; height:4px; border-radius:8px; overflow:hidden; background:#E2E8F0; }
-    .exec-progress-fill{ height:100%; background:#2583DA; border-radius:8px; }
-
-    .exec-chart{ height:155px; position:relative; width:100%; }
-    .exec-donut{ height:170px; position:relative; }
-    .exec-donut-center{ position:absolute; left:37%; top:50%; transform: translate(-50%,-50%); text-align:center; pointer-events:none; }
-    .exec-donut-number{ font-size:22px; line-height:1; font-weight:700; color:#0F172A; }
-    .exec-donut-label{ margin-top:2px; font-size:8px; color:#64748B; }
-
-    .warning-summary{ display:grid; grid-template-columns:1fr 1fr; gap:6px; padding:7px; background:#FFFBEB; border-bottom: 1px solid #FDE68A; }
-    .warning-box{ padding:5px 7px; background:#fff; border: 1px solid #FDE68A; border-radius:5px; }
-    .warning-label{ font-size:7.5px; color:#92400E; font-weight:700; text-transform:uppercase; }
-    .warning-value{ margin-top:1px; font-size:15px; line-height:1; font-weight:700; color:#78350F; }
-
-    .pipeline-flow{ display:grid; grid-template-columns: repeat(6,minmax(0,1fr)); gap:2px; margin-top:1px; }
-    .pipeline-step{ position:relative; min-width:0; min-height:105px; padding: 9px 7px 8px; background:#F2F7FD; border: 1px solid #BFD7F3; text-align:center; clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%, 10px 50%); }
-    .pipeline-step:first-child{ clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%); }
-    .pipeline-step:last-child{ clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 10px 50%); }
-    .pipeline-step.active{ background:#E8F2FE; border-color:#93C5FD; }
-    .pipeline-step.final{ background:#F0FDF4; border-color:#86EFAC; }
-    .pipeline-number{ width:22px; height:22px; margin:0 auto 6px; border-radius:50%; display:flex; align-items:center; justify-content:center; background:#2563EB; color:#fff; font-size:9px; font-weight:700; }
-    .pipeline-step.final .pipeline-number{ background:#16A34A; }
-    .pipeline-name{ min-height:25px; font-size:8px; line-height:1.2; font-weight:600; color:#334155; }
-    .pipeline-count{ margin-top:5px; font-size:15px; line-height:1; font-weight:700; color:#0F172A; }
-    .pipeline-count-label{ margin-top:2px; font-size:7.5px; color:#94A3B8; }
-    .pipeline-progress{ margin-top:6px; height:4px; background:#DCE5EF; border-radius:8px; overflow:hidden; }
-    .pipeline-progress span{ display:block; height:100%; background:#2681D8; border-radius:8px; }
-    .pipeline-step.final .pipeline-progress span{ background:#16A34A; }
-  </style>
-  `;
 
   const sortedProjects = [...projects].sort((a,b) => new Date(a.targetRfs || '2099-12-31') - new Date(b.targetRfs || '2099-12-31'));
   let overviewRows = '';
@@ -482,7 +390,7 @@ function renderOverview(){
     `;
   });
 
-  return dashStyles + `
+  return `
     <div class="exec-kpis">
       <div class="exec-kpi">
         <div class="exec-kpi-icon" style="color:#0284C7;">▣</div>
@@ -950,7 +858,6 @@ function teamModalHtml(d) {
   `;
 }
 
-
 // ============================================================================
 // PROJECTS LIST & DETAIL
 // ============================================================================
@@ -1298,7 +1205,7 @@ async function confirmRevisionBoq(projectId) {
 }
 
 // ============================================================================
-// MODALS LOGIC (RESTORED SPH PER UNIT)
+// MODALS LOGIC & FORM RENDERER
 // ============================================================================
 function blankProject() {
   return {
@@ -1309,14 +1216,12 @@ function blankProject() {
 }
 
 function openProjectModal(id) {
-  modalScroll = 0; 
   const existing = id ? JSON.parse(JSON.stringify(projects.find(p => p.id === id))) : blankProject();
   modal = { type: 'project', data: existing, isNew: !id };
   render();
 }
 
 function openTeamModal() { 
-  modalScroll = 0; 
   modal = { type: 'team', data: { names: team.join(', ') } }; 
   render(); 
 }
@@ -1329,12 +1234,7 @@ function renderModal() {
   if (modal.type === 'team') root.innerHTML = teamModalHtml(modal.data);
   
   wireModalEvents();
-  const m = document.querySelector('.modal');
-  if (m) m.scrollTop = modalScroll;
 }
-
-// ... (Gunakan fungsi projectModalHtml() persis dari kode Anda, namun fungsi itemBlockHtml di bawah INI 
-// telah diperbaiki agar kembali mendukung SPH per Unit & auto-calculate) ...
 
 function itemBlockHtml(it, si, bi, ii) {
   const path = `${si}:${bi}:${ii}`;
@@ -1394,8 +1294,6 @@ function updateItemFinancialPreview(input) {
 
 function syncModalData() {
   if (!modal || modal.type !== 'project') return;
-  const m = document.querySelector('.modal');
-  if (m) modalScroll = m.scrollTop;
   
   const d = modal.data;
   d.name = val('m-name'); d.requestorName = val('m-req-name'); d.requestorDept = val('m-req-dept');
@@ -1423,7 +1321,6 @@ function syncModalData() {
   syncPathField('.it-uom', (item, value) => { item.uom = value; });
   syncPathField('.it-vendor', (item, value) => { item.vendor = value; });
 
-  // PENGEMBALIAN LOGIKA UNIT PRICE YANG BENAR
   syncPathField('.it-awal-unit', (item, value) => {
     item.sphAwalUnit = numOrNull(value);
     item.sphAwal = calculateUiSphTotal(item.qty, item.sphAwalUnit);
@@ -1451,31 +1348,79 @@ function wireModalEvents() {
   const sphmode = document.getElementById('m-sphmode');
   if (sphmode) sphmode.onchange = () => { syncModalData(); modal.data.sphMode = sphmode.value; render(); };
 
-  // Trigger update real-time preview (Harga * Qty) saat mengetik
   document.querySelectorAll('.it-qty, .it-awal-unit, .it-final-unit').forEach(el => {
     el.addEventListener('input', () => updateItemFinancialPreview(el));
   });
 
-  // (Kode Import BoQ di dalam wireModalEvents dari file Anda tetap berlaku di sini, jangan dihapus)
+  const btnAddSow = document.getElementById('m-add-sow');
+  if (btnAddSow) {
+    btnAddSow.onclick = (e) => { 
+      e.preventDefault(); 
+      syncModalData(); 
+      modal.data.sows.push({id:uid('sow'), name:'', boqs:[{id:uid('boq'), name:'', items:[{id:uid('item'), product:'', qty:1, vendor:'', picIds:[], sphAwalUnit:null, sphFinalUnit:null, sphAwal:null, sphFinal:null}]}]}); 
+      render(); 
+    };
+  }
 
-  document.getElementById('m-add-sow').onclick = () => { syncModalData(); modal.data.sows.push({id:uid('sow'), name:'', boqs:[{id:uid('boq'), name:'', items:[{id:uid('item'), product:'', qty:1, vendor:'', picIds:[], sphAwalUnit:null, sphFinalUnit:null, sphAwal:null, sphFinal:null}]}]}); render(); };
-  document.querySelectorAll('[data-add-boq]').forEach(el => el.onclick = () => { syncModalData(); modal.data.sows[+el.dataset.addBoq].boqs.push({id:uid('boq'), name:'', items:[{id:uid('item'), product:'', qty:1, vendor:'', picIds:[], sphAwalUnit:null, sphFinalUnit:null, sphAwal:null, sphFinal:null}]}); render(); });
-  document.querySelectorAll('[data-add-item]').forEach(el => { const [si,bi] = el.dataset.addItem.split(':').map(Number); el.onclick = () => { syncModalData(); modal.data.sows[si].boqs[bi].items.push({id:uid('item'), product:'', qty:1, vendor:'', picIds:[], sphAwalUnit:null, sphFinalUnit:null, sphAwal:null, sphFinal:null}); render(); }; });
-  document.querySelectorAll('[data-del-sow]').forEach(el => el.onclick = () => { syncModalData(); modal.data.sows.splice(+el.dataset.delSow,1); render(); });
-  document.querySelectorAll('[data-del-boq]').forEach(el => { const [si,bi] = el.dataset.delBoq.split(':').map(Number); el.onclick = () => { syncModalData(); modal.data.sows[si].boqs.splice(bi,1); render(); }; });
-  document.querySelectorAll('[data-del-item]').forEach(el => { const [si,bi,ii] = el.dataset.delItem.split(':').map(Number); el.onclick = () => { syncModalData(); modal.data.sows[si].boqs[bi].items.splice(ii,1); render(); }; });
+  document.querySelectorAll('[data-add-boq]').forEach(el => {
+    el.onclick = (e) => { 
+      e.preventDefault(); 
+      syncModalData(); 
+      modal.data.sows[+el.dataset.addBoq].boqs.push({id:uid('boq'), name:'', items:[{id:uid('item'), product:'', qty:1, vendor:'', picIds:[], sphAwalUnit:null, sphFinalUnit:null, sphAwal:null, sphFinal:null}]}); 
+      render(); 
+    };
+  });
+
+  document.querySelectorAll('[data-add-item]').forEach(el => { 
+    const [si, bi] = el.dataset.addItem.split(':').map(Number); 
+    el.onclick = (e) => { 
+      e.preventDefault(); 
+      syncModalData(); 
+      modal.data.sows[si].boqs[bi].items.push({id:uid('item'), product:'', qty:1, vendor:'', picIds:[], sphAwalUnit:null, sphFinalUnit:null, sphAwal:null, sphFinal:null}); 
+      render(); 
+    }; 
+  });
+
+  document.querySelectorAll('[data-del-sow]').forEach(el => {
+    el.onclick = (e) => {
+      e.preventDefault();
+      syncModalData();
+      modal.data.sows.splice(+el.dataset.delSow, 1);
+      render();
+    };
+  });
+
+  document.querySelectorAll('[data-del-boq]').forEach(el => { 
+    const [si, bi] = el.dataset.delBoq.split(':').map(Number); 
+    el.onclick = (e) => { 
+      e.preventDefault(); 
+      syncModalData(); 
+      modal.data.sows[si].boqs.splice(bi, 1); 
+      render(); 
+    }; 
+  });
+
+  document.querySelectorAll('[data-del-item]').forEach(el => { 
+    const [si, bi, ii] = el.dataset.delItem.split(':').map(Number); 
+    el.onclick = (e) => { 
+      e.preventDefault(); 
+      syncModalData(); 
+      modal.data.sows[si].boqs[bi].items.splice(ii, 1); 
+      render(); 
+    }; 
+  });
+
   document.querySelectorAll('[data-pic]').forEach(el => { 
-    // Menggunakan teknik pemisahan yang lebih aman (robust parsing)
     const parts = el.dataset.pic.split(':');
     const si = parseInt(parts[0]);
     const bi = parseInt(parts[1]);
     const ii = parseInt(parts[2]);
-    const name = parts.slice(3).join(':'); // Berjaga-jaga jika ada titik dua di nama orang
+    const name = parts.slice(3).join(':');
 
-    el.onclick = () => { 
+    el.onclick = (e) => { 
+      e.preventDefault();
       syncModalData(); 
       
-      // Amankan array jika undefined dari database
       let arr = modal.data.sows[si].boqs[bi].items[ii].picIds;
       if (!Array.isArray(arr)) {
         arr = [];
@@ -1488,9 +1433,24 @@ function wireModalEvents() {
       
       render(); 
     }; 
-    });
+  });
 
-  document.getElementById('m-save').onclick = () => { syncModalData(); const d = modal.data; const idx = projects.findIndex(p => p.id === d.id); if (idx >= 0) projects[idx] = d; else projects.push(d); document.getElementById('modal-root').innerHTML = ''; modal = null; render(); saveAll(); };
+  const saveBtn = document.getElementById('m-save');
+  if (saveBtn) {
+    saveBtn.onclick = (e) => { 
+      e.preventDefault();
+      syncModalData(); 
+      const d = modal.data; 
+      const idx = projects.findIndex(p => p.id === d.id); 
+      if (idx >= 0) projects[idx] = d; 
+      else projects.push(d); 
+      
+      document.getElementById('modal-root').innerHTML = ''; 
+      modal = null; 
+      render(); 
+      saveAll(); 
+    };
+  }
 }
 
 function openUploadPembandingModal(projectId) {
@@ -1515,6 +1475,7 @@ function openUploadPembandingModal(projectId) {
   `;
   document.body.insertAdjacentHTML('beforeend', modalHtml);
 }
+
 function closeUploadPembandingModal() { const m = document.getElementById('upload-pembanding-modal'); if (m) m.remove(); }
 
 async function submitUploadPembanding(projectId) {
@@ -1547,4 +1508,5 @@ async function submitUploadPembanding(projectId) {
     document.body.style.cursor = 'default'; 
   }
 }
+
 loadAll();

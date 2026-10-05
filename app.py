@@ -7,7 +7,7 @@ from openpyxl.cell.cell import MergedCell
 import pandas as pd
 import psycopg2
 from psycopg2.pool import ThreadedConnectionPool
-from psycopg2.extras import RealDictCursor
+from psycopg2.extras import RealDictCursor, execute_values
 import json
 import os
 import io
@@ -27,8 +27,8 @@ app.secret_key = "presourcing_secret_key_123"
 # Konfigurasi Koneksi PostgreSQL
 DB_HOST = "localhost"
 DB_NAME = "presourcing_db"
-DB_USER = "presourcing_master"  # Pastikan ini sesuai dengan user yang Anda reset
-DB_PASS = "R1L1DemDldxks@"     # Pastikan ini sesuai dengan password yang Anda reset
+DB_USER = "presourcing_master"  
+DB_PASS = "R1L1DemDldxks@"     
 
 # Inisialisasi Connection Pool (Min 1, Max 20 koneksi secara bersamaan)
 db_pool = ThreadedConnectionPool(
@@ -153,7 +153,6 @@ def resolve_sph_values(qty, unit_price, legacy_total=None):
     
     return (None, optional_number(legacy_total))
 
-# OPTIMASI: Membaca Excel 1 kali saja menggunakan pandas slicing
 def _read_boq_excel(file, require_system_id=False):
     file.stream.seek(0)
     df = pd.read_excel(file, sheet_name=0, header=None)
@@ -282,7 +281,7 @@ def sa_portal():
     return render_template("sa-portal.html")
 
 # ============================================================================
-# DATABASE INITIALIZATION (POSTGRESQL)
+# DATABASE INITIALIZATION
 # ============================================================================
 def init_db():
     with get_db_connection() as conn:
@@ -312,7 +311,7 @@ def init_db():
 init_db()
 
 # ============================================================================
-# RELATIONAL DATA HELPER (OPTIMASI: Bulk Fetch - Mengatasi N+1 Query Problem)
+# RELATIONAL DATA HELPER (Bulk Fetch)
 # ============================================================================
 def get_projects_relational(cursor):
     cursor.execute("SELECT * FROM projects")
@@ -350,7 +349,6 @@ def get_projects_relational(cursor):
             i["deliveryTime"] = i.pop("delivery_time", "")
             items.append(i)
 
-    # Mapping data menggunakan dictionary di memory
     items_by_boq = {}
     for item in items: 
         items_by_boq.setdefault(item["boq_id"], []).append(item)
@@ -371,11 +369,9 @@ def get_projects_relational(cursor):
     for d in docs: 
         docs_by_project.setdefault(d["project_id"], []).append(d)
 
-    # Susun ke array hasil akhir
     for p in projects:
         p["comparison_docs"] = docs_by_project.get(p["id"], [])
         p["sows"] = sows_by_project.get(p["id"], [])
-        
         p["requestorName"] = p.pop("requestor_name")
         p["requestorDept"] = p.pop("requestor_dept")
         p["leadId"] = p.pop("lead_id")
@@ -518,7 +514,6 @@ def upload_boq():
                 issues.append({"row": item["excelRow"], "severity": "error", "message": f"'{BOQ_SYSTEM_COLUMN}' harus kosong untuk Initial Request."})
         
         errors = [x for x in issues if x["severity"] == "error"]
-        
         if errors: 
             with get_db_connection() as conn:
                 with conn.cursor() as cursor:
@@ -529,8 +524,14 @@ def upload_boq():
         with get_db_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute("DELETE FROM request_items WHERE ticket_id = %s", (ticket_id,))
-                for item in rows:
-                    cursor.execute("INSERT INTO request_items (ticket_id, sow_name, boq_section, item_no, description, preferred_brand, quantity, uom, delivery_time, vendor, sph_awal_unit, sph_final_unit) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)", (ticket_id, item["sowName"], item["boqName"], item["itemNo"], item["product"], item["preferredBrand"], item["qty"], item["uom"], item["deliveryTime"], item["vendor"] or None, item["sphAwalUnit"], item["sphFinalUnit"]))
+                
+                # OPTIMASI: Bulk Insert untuk request_items
+                items_data = [
+                    (ticket_id, item["sowName"], item["boqName"], item["itemNo"], item["product"], item["preferredBrand"], item["qty"], item["uom"], item["deliveryTime"], item["vendor"] or None, item["sphAwalUnit"], item["sphFinalUnit"])
+                    for item in rows
+                ]
+                if items_data:
+                    execute_values(cursor, "INSERT INTO request_items (ticket_id, sow_name, boq_section, item_no, description, preferred_brand, quantity, uom, delivery_time, vendor, sph_awal_unit, sph_final_unit) VALUES %s", items_data)
                 conn.commit()
             
         return jsonify({"success": True, "message": "File BoQ berhasil diunggah.", "summary": {"items": len(rows), "warnings": sum(1 for x in issues if x["severity"] == "warning")}}), 200
@@ -579,17 +580,26 @@ def assign_ticket():
                         for it in cursor.fetchall():
                             grouped_data.setdefault(it["sow_name"] or "General Scope of Work", {}).setdefault(it["boq_section"] or "General Items", []).append(it)
                         
+                        # OPTIMASI: Bulk Insert untuk proses Assign
+                        sows_data, boqs_data, items_data = [], [], []
                         for s_name, boqs in grouped_data.items():
                             sow_id = f"sow_{uuid.uuid4().hex[:8]}"
-                            cursor.execute("INSERT INTO sows (id, project_id, name) VALUES (%s, %s, %s)", (sow_id, ticket_id, s_name))
+                            sows_data.append((sow_id, ticket_id, s_name))
                             for b_name, items_list in boqs.items():
                                 boq_id = f"boq_{uuid.uuid4().hex[:8]}"
-                                cursor.execute("INSERT INTO boqs (id, sow_id, name) VALUES (%s, %s, %s)", (boq_id, sow_id, b_name))
+                                boqs_data.append((boq_id, sow_id, b_name))
                                 for it in items_list:
-                                    cursor.execute(
-                                        "INSERT INTO items (id, boq_id, product, qty, uom, vendor, sph_awal, sph_final, notes, pic_ids, item_no, preferred_brand, delivery_time, sph_awal_unit, sph_final_unit) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)", 
-                                        (f"item_{uuid.uuid4().hex[:8]}", boq_id, it["description"], it["quantity"], it["uom"], it["vendor"] or "", calculate_sph_total(it["quantity"], it["sph_awal_unit"]), calculate_sph_total(it["quantity"], it["sph_final_unit"]), "", json.dumps([pic_username]), it["item_no"] or "", it["preferred_brand"] or "", it["delivery_time"] or "", it["sph_awal_unit"], it["sph_final_unit"])
-                                    )
+                                    items_data.append((
+                                        f"item_{uuid.uuid4().hex[:8]}", boq_id, it["description"], it["quantity"], it["uom"], 
+                                        it["vendor"] or "", calculate_sph_total(it["quantity"], it["sph_awal_unit"]), 
+                                        calculate_sph_total(it["quantity"], it["sph_final_unit"]), "", json.dumps([pic_username]), 
+                                        it["item_no"] or "", it["preferred_brand"] or "", it["delivery_time"] or "", 
+                                        it["sph_awal_unit"], it["sph_final_unit"]
+                                    ))
+                        
+                        if sows_data: execute_values(cursor, "INSERT INTO sows (id, project_id, name) VALUES %s", sows_data)
+                        if boqs_data: execute_values(cursor, "INSERT INTO boqs (id, sow_id, name) VALUES %s", boqs_data)
+                        if items_data: execute_values(cursor, "INSERT INTO items (id, boq_id, product, qty, uom, vendor, sph_awal, sph_final, notes, pic_ids, item_no, preferred_brand, delivery_time, sph_awal_unit, sph_final_unit) VALUES %s", items_data)
                         
                         cursor.execute("INSERT INTO notifications (target_user, message) VALUES (%s, %s)", (req["requester_username"], f"Tiket {ticket_id} sudah di-assign ke PIC: {pic_username}"))
                 conn.commit()
@@ -598,7 +608,7 @@ def assign_ticket():
         return jsonify({"success": False, "message": str(e)}), 500
 
 # ============================================================================
-# PRESOURCING API
+# PRESOURCING API (TEROPTIMASI: BULK INSERT / BATCH EXECUTION)
 # ============================================================================
 @app.route("/api/presourcing", methods=["GET", "POST"])
 def api_presourcing():
@@ -617,40 +627,73 @@ def api_presourcing():
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cursor:
+                # 1. Simpan konfigurasi Tim (Upsert 1 Baris)
                 cursor.execute("INSERT INTO dashboard_state (data_type, json_data) VALUES ('team', %s) ON CONFLICT (data_type) DO UPDATE SET json_data = EXCLUDED.json_data", (json.dumps(data.get("team", [])),))
 
+                incoming_projects = data.get("projects", [])
+                
+                # 2. Persiapan Data Hapus Massal (Bulk Delete)
                 cursor.execute("SELECT id FROM projects")
                 existing_db_ids = {row[0] for row in cursor.fetchall()}
-                incoming_ids = {p["id"] for p in data.get("projects", [])}
+                incoming_ids = {p["id"] for p in incoming_projects}
                 
-                for del_id in (existing_db_ids - incoming_ids):
-                    cursor.execute("DELETE FROM projects WHERE id = %s", (del_id,))
-                    cursor.execute("DELETE FROM request_items WHERE ticket_id = %s", (del_id,))
-                    cursor.execute("DELETE FROM requests WHERE ticket_id = %s", (del_id,))
+                del_ids = tuple(existing_db_ids - incoming_ids)
+                if del_ids:
+                    # Menghapus parent project otomatis menghapus SOW, BoQ, dll via ON DELETE CASCADE PostgreSQL
+                    cursor.execute("DELETE FROM projects WHERE id IN %s", (del_ids,))
+                    cursor.execute("DELETE FROM request_items WHERE ticket_id IN %s", (del_ids,))
+                    cursor.execute("DELETE FROM requests WHERE ticket_id IN %s", (del_ids,))
 
-                for p in data.get("projects", []):
-                    cursor.execute("DELETE FROM projects WHERE id = %s", (p["id"],))
-                    cursor.execute(
-                        "INSERT INTO projects (id, name, requestor_name, requestor_dept, priority, status, lead_id, sph_mode, project_sph_awal, project_sph_final, created_at, closed_at, target_rfs, pipeline_stage, progress_pct) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)", 
-                        (p["id"], p.get("name"), p.get("requestorName"), p.get("requestorDept"), p.get("priority"), p.get("status"), p.get("leadId"), p.get("sphMode"), p.get("projectSphAwal"), p.get("projectSphFinal"), p.get("createdAt"), p.get("closedAt"), p.get("targetRfs"), p.get("pipelineStage"), p.get("progressPct"))
-                    )
+                # Hapus project yang diupdate untuk ditimpa ulang (bersih)
+                incoming_tuple = tuple(incoming_ids)
+                if incoming_tuple:
+                    cursor.execute("DELETE FROM projects WHERE id IN %s", (incoming_tuple,))
+
+                # 3. Penyusunan Array untuk Bulk Insert
+                projects_data, sows_data, boqs_data, items_data, docs_data = [], [], [], [], []
+                
+                for p in incoming_projects:
+                    projects_data.append((
+                        p["id"], p.get("name"), p.get("requestorName"), p.get("requestorDept"), 
+                        p.get("priority"), p.get("status"), p.get("leadId"), p.get("sphMode"), 
+                        p.get("projectSphAwal"), p.get("projectSphFinal"), p.get("createdAt"), 
+                        p.get("closedAt"), p.get("targetRfs"), p.get("pipelineStage"), p.get("progressPct")
+                    ))
 
                     for sow in p.get("sows", []):
-                        cursor.execute("INSERT INTO sows (id, project_id, name) VALUES (%s, %s, %s)", (sow["id"], p["id"], sow.get("name")))
+                        sows_data.append((sow["id"], p["id"], sow.get("name")))
                         for boq in sow.get("boqs", []):
-                            cursor.execute("INSERT INTO boqs (id, sow_id, name) VALUES (%s, %s, %s)", (boq["id"], sow["id"], boq.get("name")))
+                            boqs_data.append((boq["id"], sow["id"], boq.get("name")))
                             for it in boq.get("items", []):
                                 sph_awal_unit, sph_awal_total = resolve_sph_values(it.get("qty"), optional_number(it.get("sphAwalUnit")), it.get("sphAwal"))
                                 sph_final_unit, sph_final_total = resolve_sph_values(it.get("qty"), optional_number(it.get("sphFinalUnit")), it.get("sphFinal"))
 
-                                cursor.execute(
-                                    "INSERT INTO items (id, boq_id, product, qty, uom, vendor, sph_awal, sph_final, notes, pic_ids, item_no, preferred_brand, delivery_time, sph_awal_unit, sph_final_unit) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)", 
-                                    (it["id"], boq["id"], it.get("product"), it.get("qty"), it.get("uom"), it.get("vendor"), sph_awal_total, sph_final_total, it.get("notes"), json.dumps(it.get("picIds", [])), it.get("itemNo", ""), it.get("preferredBrand", ""), it.get("deliveryTime", ""), sph_awal_unit, sph_final_unit)
-                                )
+                                items_data.append((
+                                    it["id"], boq["id"], it.get("product"), it.get("qty"), it.get("uom"), it.get("vendor"), 
+                                    sph_awal_total, sph_final_total, it.get("notes"), json.dumps(it.get("picIds", [])), 
+                                    it.get("itemNo", ""), it.get("preferredBrand", ""), it.get("deliveryTime", ""), 
+                                    sph_awal_unit, sph_final_unit
+                                ))
 
                     for doc in p.get("comparison_docs", []):
-                        cursor.execute("INSERT INTO comparison_docs (project_id, vendor_name, offered_price, file_path) VALUES (%s, %s, %s, %s)", (p["id"], doc.get("vendor_name"), doc.get("offered_price"), doc.get("file_path")))
+                        docs_data.append((p["id"], doc.get("vendor_name"), doc.get("offered_price"), doc.get("file_path")))
+
+                # 4. Eksekusi Masif (Hanya 5 Query untuk Seluruh Tabel)
+                if projects_data:
+                    execute_values(cursor, "INSERT INTO projects (id, name, requestor_name, requestor_dept, priority, status, lead_id, sph_mode, project_sph_awal, project_sph_final, created_at, closed_at, target_rfs, pipeline_stage, progress_pct) VALUES %s", projects_data)
                 
+                if sows_data:
+                    execute_values(cursor, "INSERT INTO sows (id, project_id, name) VALUES %s", sows_data)
+                
+                if boqs_data:
+                    execute_values(cursor, "INSERT INTO boqs (id, sow_id, name) VALUES %s", boqs_data)
+                
+                if items_data:
+                    execute_values(cursor, "INSERT INTO items (id, boq_id, product, qty, uom, vendor, sph_awal, sph_final, notes, pic_ids, item_no, preferred_brand, delivery_time, sph_awal_unit, sph_final_unit) VALUES %s", items_data)
+                
+                if docs_data:
+                    execute_values(cursor, "INSERT INTO comparison_docs (project_id, vendor_name, offered_price, file_path) VALUES %s", docs_data)
+
                 conn.commit()
         return jsonify({"success": True}), 200
     except Exception as e: 
