@@ -514,7 +514,15 @@ def upload_boq():
                 issues.append({"row": item["excelRow"], "severity": "error", "message": f"'{BOQ_SYSTEM_COLUMN}' harus kosong untuk Initial Request."})
         
         errors = [x for x in issues if x["severity"] == "error"]
+        
+        # SKENARIO GAGAL 1: Jika Excel formatnya salah / ada error validasi
         if errors: 
+            # --- TAMBAHAN CLEANUP ---
+            with contextlib.closing(sqlite3.connect(DB_NAME)) as conn:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM requests WHERE ticket_id = ?", (ticket_id,)) # Asumsi nama tabel tiket adalah 'requests'
+                conn.commit()
+            # ------------------------
             return jsonify({"success": False, "message": "Excel memiliki error. Perbaiki file terlebih dahulu.", "issues": issues[:50]}), 400
 
         with contextlib.closing(sqlite3.connect(DB_NAME)) as conn:
@@ -525,7 +533,15 @@ def upload_boq():
             conn.commit()
             
         return jsonify({"success": True, "message": "File BoQ berhasil diunggah.", "summary": {"items": len(rows), "warnings": sum(1 for x in issues if x["severity"] == "warning")}}), 200
+        
     except Exception as e: 
+        # SKENARIO GAGAL 2: Jika sistem crash / gagal membaca file
+        # --- TAMBAHAN CLEANUP ---
+        with contextlib.closing(sqlite3.connect(DB_NAME)) as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM requests WHERE ticket_id = ?", (ticket_id,))
+            conn.commit()
+        # ------------------------
         return jsonify({"success": False, "message": str(e)}), 400
 
 @app.route("/api/request_items/<ticket_id>", methods=["GET"])
