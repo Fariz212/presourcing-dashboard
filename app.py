@@ -26,7 +26,7 @@ app.secret_key = "presourcing_secret_key_123"
 # Konfigurasi Koneksi PostgreSQL
 DB_HOST = "localhost"
 DB_NAME = "presourcing_db"
-DB_USER = "presourcing_admin"
+DB_USER = "presourcing_master"
 DB_PASS = "R1l1Dem0LdXks@"
 
 @contextlib.contextmanager
