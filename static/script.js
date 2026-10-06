@@ -1,376 +1,679 @@
-// ---------- storage keys & setup ----------
-const API_URL = 'http://3.107.94.65:5000/api/presourcing';
+// ============================================================================
+// STATE & CONFIGURATION
+// ============================================================================
+const API_URL = '/api/presourcing';
 
 let projects = [];
 let team = [];
 let activeTab = 'overview';
 let openProjectId = null;
 let modal = null; 
-let modalScroll = 0;
-let filters = { priority:'all', status:'all' };
+let filters = { priority: 'all', status: 'all' };
 let storageOk = true;
+let isSaving = false; 
+let dCharts = {}; 
 
-function uid(p){ return p + '_' + Math.random().toString(36).slice(2,9); }
-function todayStr(){ return new Date().toISOString().slice(0,10); }
+// ============================================================================
+// UTILITIES & HELPERS
+// ============================================================================
+function uid(p) { return p + '_' + Math.random().toString(36).slice(2, 9); }
+function todayStr() { return new Date().toISOString().slice(0, 10); }
 
-// ---------- seed data (Fallback jika server mati) ----------
-function seedData(){
-  team = ['Budi','Sari','Andi','Rahma','Fajar'];
+function escAttr(s) { 
+  if (s === null || s === undefined) return '';
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+}
+
+function val(id) { 
+  const el = document.getElementById(id); 
+  return el ? el.value : ''; 
+}
+
+function numOrNull(v) { 
+  return (v === '' || v == null) ? null : Number(v); 
+}
+
+function fmtIdr(n) { 
+  return n == null ? '—' : 'Rp ' + Math.round(n).toLocaleString('id-ID'); 
+}
+
+function fmtPct(n) { 
+  return n == null ? '—' : n.toFixed(1) + '%'; 
+}
+
+function valToM(val) {
+  return ((val || 0) / 1000000000).toFixed(1);
+}
+
+function calculateUiSphTotal(qty, unitPrice) {
+  const q = numOrNull(qty);
+  const unit = numOrNull(unitPrice);
+  return (q != null && unit != null) ? q * unit : null;
+}
+
+// ============================================================================
+// DATA PERSISTENCE
+// ============================================================================
+function seedData() {
+  team = ['Budi', 'Sari', 'Andi', 'Rahma', 'Fajar'];
   projects = [
     {
-      id: uid('proj'), name:'Project Pertamina — Security & Monitoring',
-      requestorName:'Marcel', requestorDept:'SA G&P',
-      priority:'High', status:'win', leadId:'Budi',
-      sphMode:'item', projectSphAwal:null, projectSphFinal:null,
-      createdAt:'2026-07-02', closedAt:'2026-07-22',
-      sows:[{
-        id:uid('sow'), name:'SoW Security & Monitoring',
-        boqs:[{
-          id:uid('boq'), name:'BoQ Utama',
-          items:[
-            {id:uid('item'), product:'CCTV', picIds:['Budi','Sari'], sphAwal:520000000, sphFinal:452000000},
-            {id:uid('item'), product:'SDWAN', picIds:['Andi'], sphAwal:310000000, sphFinal:298000000},
-            {id:uid('item'), product:'License Security', picIds:['Rahma'], sphAwal:145000000, sphFinal:145000000},
-            {id:uid('item'), product:'Monitoring System', picIds:['Budi','Fajar'], sphAwal:210000000, sphFinal:187000000}
-          ]
-        }]
-      }]
-    },
-    {
-      id: uid('proj'), name:'Project Jakarta Commerce — Network Upgrade',
-      requestorName:'Megati', requestorDept:'SA Jakarta Commerce',
-      priority:'Urgent', status:'ongoing', leadId:'Andi',
-      sphMode:'project', projectSphAwal:680000000, projectSphFinal:null,
-      createdAt:'2026-08-15', closedAt:null,
-      sows:[{
-        id:uid('sow'), name:'SoW Network Upgrade',
-        boqs:[{
-          id:uid('boq'), name:'BoQ Core',
-          items:[
-            {id:uid('item'), product:'Router & Switching', picIds:['Andi'], sphAwal:null, sphFinal:null},
-            {id:uid('item'), product:'Wifi Access Point', picIds:['Sari','Fajar'], sphAwal:null, sphFinal:null}
-          ]
-        }]
-      }]
+      id: uid('proj'), name: 'Project Backbone Expansion', requestorName: 'Marcel', requestorDept: 'SA G&P',
+      priority: 'High', status: 'ongoing', leadId: 'Andi', sphMode: 'item', projectSphAwal: null, projectSphFinal: null,
+      createdAt: '2026-07-02', closedAt: null, targetRfs: '2026-10-15', pipelineStage: '4 - Negotiation', progressPct: 85, comparison_docs: [],
+      sows: [{ id: uid('sow'), name: 'SoW Core', boqs: [{ id: uid('boq'), name: 'BoQ Utama', items: [{ id: uid('item'), product: 'Router', qty: 1, picIds: ['Andi'], sphAwalUnit: 25000000000, sphAwal: 25000000000, sphFinalUnit: null, sphFinal: null }] }] }]
     }
   ];
 }
 
-// ---------- persistence ----------
-async function loadAll(){
+async function loadAll() {
   try {
-    const response = await fetch(API_URL);
+    const timestamp = new Date().getTime();
+    const response = await fetch(`${API_URL}?t=${timestamp}`, { cache: 'no-store' });
     if (!response.ok) throw new Error("Gagal terhubung ke Backend");
     
     const data = await response.json();
+    projects = data.projects || [];
     
-    if (!data.projects || !data.team || (data.projects.length === 0 && data.team.length === 0)) {
-      seedData();
-      await saveAll(); 
-    } else {
-      projects = data.projects;
+    if (data.team && data.team.length > 0) {
       team = data.team;
+    } else {
+      team = ['Decki Okmal Pratama', 'Ahmad Fauzi', 'Siti Rahma', 'Budi Santoso'];
+      saveAll(); 
     }
+
+    if (projects.length === 0 && (!data.team || data.team.length === 0)) {
+      seedData();
+      await saveAll();
+    }
+    
     storageOk = true;
   } catch(e) {
     console.error("Backend error/offline:", e);
     storageOk = false;
-    if(projects.length === 0) seedData();
+    if (projects.length === 0) seedData();
   }
   render();
 }
 
-async function saveAll(){
+async function saveAll() {
+  if (isSaving) return;
+  isSaving = true;
+  document.body.style.cursor = 'wait';
+
   try {
     const response = await fetch(API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projects: projects, team: team })
+      body: JSON.stringify({ projects, team })
     });
-    
     if (!response.ok) throw new Error("Gagal menyimpan ke Backend");
     storageOk = true;
   } catch(e) {
     console.error("Gagal menyimpan data:", e);
     storageOk = false; 
+  } finally {
+    isSaving = false; 
+    document.body.style.cursor = 'default';
   }
   render(); 
 }
 
-// ---------- computations ----------
-function allItems(proj){
-  const out=[];
-  (proj.sows||[]).forEach(s=> (s.boqs||[]).forEach(b=> (b.items||[]).forEach(it=> out.push(it))));
+// ============================================================================
+// COMPUTATIONS
+// ============================================================================
+function allItems(proj) {
+  const out = []; 
+  (proj.sows || []).forEach(s => (s.boqs || []).forEach(b => (b.items || []).forEach(it => out.push(it)))); 
   return out;
 }
-function projectSph(proj){
-  if(proj.sphMode==='project'){
-    return { awal: proj.projectSphAwal, final: proj.projectSphFinal };
-  }
+
+function projectSph(proj) {
+  if (proj.sphMode === 'project') return { awal: proj.projectSphAwal, final: proj.projectSphFinal };
+  
   const items = allItems(proj);
-  let awal=0, final=0, hasAwal=false, hasFinal=true;
-  items.forEach(it=>{
-    if(it.sphAwal!=null){ awal += Number(it.sphAwal); hasAwal=true; }
-    if(it.sphFinal==null){ hasFinal=false; } else { final += Number(it.sphFinal); }
+  let awal = 0, final = 0, hasAwal = false, hasFinal = true;
+  
+  items.forEach(it => {
+    if (it.sphAwal != null) { awal += Number(it.sphAwal); hasAwal = true; }
+    if (it.sphFinal == null) { hasFinal = false; } else { final += Number(it.sphFinal); }
   });
-  return { awal: hasAwal?awal:null, final: (hasFinal && items.length)?final:null };
+  
+  return { awal: hasAwal ? awal : null, final: (hasFinal && items.length) ? final : null };
 }
-function efficiencyPct(awal, final){
-  if(awal==null || final==null || awal<=0) return null;
-  return (awal-final)/awal*100;
+
+function efficiencyPct(awal, final) {
+  if (awal == null || final == null || awal <= 0) return null;
+  return ((awal - final) / awal) * 100;
 }
-function durationDays(proj){
+
+function durationDays(proj) {
   const start = new Date(proj.createdAt);
   const end = proj.closedAt ? new Date(proj.closedAt) : new Date();
-  return Math.max(0, Math.round((end-start)/(1000*60*60*24)));
+  return Math.max(0, Math.round((end - start) / (1000 * 60 * 60 * 24)));
 }
-function uniquePicsInProject(proj){
+
+function uniquePicsInProject(proj) {
   const set = new Set();
-  if(proj.leadId) set.add(proj.leadId);
-  allItems(proj).forEach(it=> (it.picIds||[]).forEach(p=>set.add(p)));
+  if (proj.leadId) set.add(proj.leadId);
+  allItems(proj).forEach(it => (it.picIds || []).forEach(p => set.add(p)));
   return [...set];
 }
-function computePicStats(){
+
+function getDynamicStatus(proj) {
+  if (proj.status === 'win' || proj.status === 'lose') return 'Completed';
+  if (!proj.targetRfs) return 'Planned';
+  
+  const today = new Date(todayStr());
+  const rfs = new Date(proj.targetRfs);
+  const diffDays = Math.ceil((rfs - today) / (1000 * 60 * 60 * 24));
+  
+  if (diffDays < 0) return 'Overdue';
+  if (diffDays <= 14) return 'At Risk';
+  return 'On Track';
+}
+
+function badgeStatus(stat) {
+  return `<span class="badge badge-${stat.toLowerCase().replace(' ', '-')}">${stat}</span>`;
+}
+
+function computePicStats() {
   const stats = {};
-  team.forEach(m=> stats[m] = { leadCount:0, supportLoad:0, participationShare:0, winShare:0, effSum:0, effWeight:0 });
-  projects.forEach(proj=>{
-    if(proj.leadId && stats[proj.leadId]) stats[proj.leadId].leadCount++;
+  team.forEach(m => stats[m] = { leadCount: 0, supportLoad: 0, participationShare: 0, winShare: 0, effSum: 0, effWeight: 0 });
+  
+  projects.forEach(proj => {
+    if (proj.leadId && stats[proj.leadId]) stats[proj.leadId].leadCount++;
     const uniq = uniquePicsInProject(proj);
-    if(proj.status!=='ongoing' && uniq.length){
-      const share = 1/uniq.length;
-      uniq.forEach(p=>{
-        if(!stats[p]) return;
+    
+    if (proj.status !== 'ongoing' && uniq.length) {
+      const share = 1 / uniq.length;
+      uniq.forEach(p => {
+        if (!stats[p]) return;
         stats[p].participationShare += share;
-        if(proj.status==='win') stats[p].winShare += share;
+        if (proj.status === 'win') stats[p].winShare += share;
       });
     }
-    if(proj.sphMode==='item'){
-      allItems(proj).forEach(it=>{
-        const pics = it.picIds && it.picIds.length ? it.picIds : [];
-        if(!pics.length) return;
-        const share = 1/pics.length;
-        const eff = efficiencyPct(it.sphAwal, it.sphFinal);
-        pics.forEach(p=>{
-          if(!stats[p]) return;
-          stats[p].supportLoad += share;
-          if(eff!=null){ stats[p].effSum += eff*share; stats[p].effWeight += share; }
-        });
+    
+    const eff = efficiencyPct(projectSph(proj).awal, projectSph(proj).final);
+    allItems(proj).forEach(it => {
+      const pics = it.picIds?.length ? it.picIds : [];
+      if (!pics.length) return;
+      const share = 1 / pics.length;
+      pics.forEach(p => {
+        if (!stats[p]) return;
+        stats[p].supportLoad += share;
+        if (eff != null) { stats[p].effSum += eff * share; stats[p].effWeight += share; }
       });
-    } else {
-      const eff = efficiencyPct(proj.projectSphAwal, proj.projectSphFinal);
-      allItems(proj).forEach(it=>{
-        const pics = it.picIds && it.picIds.length ? it.picIds : [];
-        if(!pics.length) return;
-        const share = 1/pics.length;
-        pics.forEach(p=>{
-          if(!stats[p]) return;
-          stats[p].supportLoad += share;
-          if(eff!=null){ stats[p].effSum += eff*share; stats[p].effWeight += share; }
-        });
-      });
-    }
+    });
   });
   return stats;
 }
-function overallKpis(){
-  const active = projects.filter(p=>p.status==='ongoing').length;
-  const closed = projects.filter(p=>p.status!=='ongoing');
-  const wins = closed.filter(p=>p.status==='win').length;
-  const winRate = closed.length ? (wins/closed.length*100) : null;
-  const effs = projects.map(p=>{ const s=projectSph(p); return efficiencyPct(s.awal,s.final); }).filter(e=>e!=null);
-  const avgEff = effs.length ? effs.reduce((a,b)=>a+b,0)/effs.length : null;
-  const durs = closed.map(p=>durationDays(p));
-  const avgDur = durs.length ? Math.round(durs.reduce((a,b)=>a+b,0)/durs.length) : null;
-  return { active, winRate, avgEff, avgDur, total: projects.length };
-}
-function fmtIdr(n){
-  if(n==null) return '—';
-  return 'Rp ' + Math.round(n).toLocaleString('id-ID');
-}
-function fmtPct(n){ return n==null ? '—' : n.toFixed(1)+'%'; }
-function tagPriority(p){
-  const cls = p==='Urgent'?'tag-urgent':p==='High'?'tag-high':'tag-medium';
-  return `<span class="tag ${cls}">${p}</span>`;
-}
-function tagStatus(s){
-  const cls = s==='win'?'tag-win':s==='lose'?'tag-lose':'tag-ongoing';
-  const label = s==='win'?'Menang':s==='lose'?'Kalah':'Berjalan';
-  return `<span class="tag ${cls}">${label}</span>`;
+
+// ============================================================================
+// NAVIGATION & CORE RENDER
+// ============================================================================
+function switchDashboardTab(id) {
+  activeTab = id;
+  openProjectId = null;
+  document.querySelectorAll('.app-nav-item').forEach(el => el.classList.toggle('active', el.dataset.tab === id));
+  render();
 }
 
-// ---------- render ----------
-function render(){
+function render() {
+  const currentWindowScroll = window.scrollY;
+  const modalContainer = document.querySelector('.modal-body') || document.querySelector('.modal') || document.querySelector('.overlay');
+  const currentModalScroll = modalContainer ? modalContainer.scrollTop : 0;
+
   const app = document.getElementById('app');
-  const k = overallKpis();
-  app.innerHTML = `
-    <div class="hdr">
-      <div>
-        <h1>Presourcing Control</h1>
-        <div class="sub">Monitoring beban, efisiensi, dan win rate tim presourcing lintas project${storageOk?' · <span style="color:var(--green)">Online (tersinkronisasi)</span>':' · <span style="color:var(--red)">Offline (koneksi database terputus)</span>'}</div>
-      </div>
-      <div class="tabs">
-        ${tabBtn('overview','Overview')}
-        ${tabBtn('projects','Project')}
-        ${tabBtn('team','Tim &amp; Load')}
-      </div>
-    </div>
+  let headerHtml = '';
 
-    <div class="kpirow">
-      <div class="kpi"><div class="label">Project Aktif</div><div class="val">${k.active}</div></div>
-      <div class="kpi"><div class="label">Win Rate Project</div><div class="val">${k.winRate==null?'—':k.winRate.toFixed(0)}<span class="unit">${k.winRate==null?'':'%'}</span></div></div>
-      <div class="kpi"><div class="label">Rata-rata Efficiency</div><div class="val">${k.avgEff==null?'—':k.avgEff.toFixed(1)}<span class="unit">${k.avgEff==null?'':'%'}</span></div></div>
-      <div class="kpi"><div class="label">Rata-rata Durasi (closed)</div><div class="val">${k.avgDur==null?'—':k.avgDur}<span class="unit">${k.avgDur==null?'':'hari'}</span></div></div>
-    </div>
+  if (activeTab === 'overview') {
+    const dateText = new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' });
+    headerHtml = `
+      <div class="page-hero">
+        <div class="page-hero-main">
+          <div class="page-hero-title">Presourcing Project Dashboard</div>
+          <div class="page-hero-sub">Pipeline, Progress, and Target RFS</div>
+        </div>
+        <div class="page-hero-side">
+          <div class="objective-box">
+            <div class="objective-icon">◎</div>
+            <div>
+              <div class="objective-label">Objective</div>
+              <div class="objective-text">Ensure project readiness &amp; competitive sourcing through effective presourcing</div>
+            </div>
+          </div>
+          <div class="data-date"><span>Data per: </span><strong>${dateText}</strong></div>
+        </div>
+      </div>
+    `;
+  } else if (activeTab === 'projects') {
+    headerHtml = `<div class="page-hero"><div class="page-hero-main"><div class="page-hero-title">Project &amp; BoQ Management</div><div class="page-hero-sub">Detail project, BoQ, SPH, dan progress</div></div></div>`;
+  } else if (activeTab === 'team') {
+    headerHtml = `<div class="page-hero"><div class="page-hero-main"><div class="page-hero-title">Team &amp; Workload</div><div class="page-hero-sub">Distribusi project dan beban kerja tim</div></div></div>`;
+  }
 
-    <div id="tabcontent"></div>
-  `;
+  app.innerHTML = `<div class="page-shell">${headerHtml}<div id="tabcontent"></div></div>`;
   const content = document.getElementById('tabcontent');
-  if(activeTab==='overview') content.innerHTML = renderOverview();
-  if(activeTab==='projects') content.innerHTML = renderProjects();
-  if(activeTab==='team') content.innerHTML = renderTeam();
   
+  if (activeTab === 'overview') content.innerHTML = renderOverview();
+  else if (activeTab === 'projects') content.innerHTML = renderProjects();
+  else if (activeTab === 'team') content.innerHTML = renderTeam();
+
   wireEvents();
-  if(modal) renderModal();
+  if (modal) renderModal();
+  document.querySelectorAll('.app-nav-item').forEach(el => el.classList.toggle('active', el.dataset.tab === activeTab));
+
+  setTimeout(() => {
+    window.scrollTo(0, currentWindowScroll);
+    const newModalContainer = document.querySelector('.modal-body') || document.querySelector('.modal') || document.querySelector('.overlay');
+    if (newModalContainer) {
+      newModalContainer.scrollTop = currentModalScroll;
+    }
+  }, 0);
 }
 
-function tabBtn(id,label){
-  return `<div class="tab ${activeTab===id?'active':''}" data-tab="${id}">${label}</div>`;
-}
-
+// ============================================================================
+// RENDER OVERVIEW: EXECUTIVE DASHBOARD
+// ============================================================================
 function renderOverview(){
-  const byPriority = {Urgent:0, High:0, Medium:0};
-  projects.forEach(p=> byPriority[p.priority] = (byPriority[p.priority]||0)+1);
-  const urgentActive = projects.filter(p=>p.priority==='Urgent' && p.status==='ongoing');
-  return `
-    <div class="panel">
-      <div class="panel-hd"><h2>Distribusi prioritas</h2></div>
-      <div class="panel-body">
-        <div class="lb-row"><div class="lb-name">Urgent</div><div class="lb-bar-track"><div class="lb-bar-fill" style="width:${pct(byPriority.Urgent,projects.length)}%; background:var(--red)"></div></div><div class="lb-val">${byPriority.Urgent}</div></div>
-        <div class="lb-row"><div class="lb-name">High</div><div class="lb-bar-track"><div class="lb-bar-fill" style="width:${pct(byPriority.High,projects.length)}%"></div></div><div class="lb-val">${byPriority.High}</div></div>
-        <div class="lb-row"><div class="lb-name">Medium</div><div class="lb-bar-track"><div class="lb-bar-fill" style="width:${pct(byPriority.Medium,projects.length)}%; background:var(--slate)"></div></div><div class="lb-val">${byPriority.Medium}</div></div>
-      </div>
-    </div>
-    <div class="panel">
-      <div class="panel-hd"><h2>Perlu perhatian — project urgent yang masih berjalan</h2></div>
-      <div class="panel-body">
-        ${urgentActive.length===0 ? '<div class="empty">Tidak ada project urgent yang masih berjalan.</div>' :
-          urgentActive.map(p=>`<div style="padding:6px 0; border-bottom:1px solid var(--border-soft); font-size:13px;">
-            <strong>${p.name}</strong> · ${p.requestorName} (${p.requestorDept}) · berjalan ${durationDays(p)} hari
-          </div>`).join('')}
-      </div>
-    </div>
-  `;
-}
+  const totalProj = projects.length;
+  let totalVal = 0;
+  
+  const sCount = { 'On Track': 0, 'At Risk': 0, 'Overdue': 0, 'Completed': 0, 'Planned': 0 };
+  const pCount = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
 
-function pct(n,total){ return total? (n/total*100).toFixed(0) : 0; }
-
-function renderProjects(){
-  const filtered = projects.filter(p=>{
-    if(filters.priority!=='all' && p.priority!==filters.priority) return false;
-    if(filters.status!=='all' && p.status!==filters.status) return false;
-    return true;
+  projects.forEach(p => {
+    totalVal += (projectSph(p).awal || 0);
+    const status = getDynamicStatus(p);
+    if(sCount[status] !== undefined) sCount[status]++;
   });
-  return `
-    <div class="panel">
-      <div class="panel-hd">
-        <h2>Daftar Project</h2>
-        <div style="display:flex; gap:8px; align-items:center;">
-          <div class="filters">
-            <select id="f-priority">
-              <option value="all">Semua prioritas</option>
-              <option value="Urgent">Urgent</option>
-              <option value="High">High</option>
-              <option value="Medium">Medium</option>
-            </select>
-            <select id="f-status">
-              <option value="all">Semua status</option>
-              <option value="ongoing">Berjalan</option>
-              <option value="win">Menang</option>
-              <option value="lose">Kalah</option>
-            </select>
+
+  const activeProjectsData = projects.filter(p => p.status === 'ongoing');
+  const activeProjects = activeProjectsData.length;
+
+  activeProjectsData.forEach(p => {
+    let stage = parseInt(String(p.pipelineStage || '').charAt(0));
+    if(isNaN(stage) || stage < 1 || stage > 6){ stage = 1; }
+    pCount[stage]++;
+  });
+
+  const efficiencies = projects.map(p => efficiencyPct(projectSph(p).awal, projectSph(p).final)).filter(v => v != null && isFinite(v));
+  const avgEfficiency = efficiencies.length ? efficiencies.reduce((a,b) => a+b, 0) / efficiencies.length : null;
+  const getPct = val => totalProj ? Math.round((val / totalProj) * 100) : 0;
+  
+  const atRisk = sCount['At Risk'];
+  const overdue = sCount['Overdue'];
+
+  if(!window.Chart && !document.getElementById('chartjs-script')){
+    const script = document.createElement('script');
+    script.id = 'chartjs-script';
+    script.src = 'https://cdn.jsdelivr.net/npm/chart.js';
+    script.onload = () => setTimeout(renderDashboardCharts, 100);
+    document.head.appendChild(script);
+  } else {
+    setTimeout(renderDashboardCharts, 80);
+  }
+
+  const sortedProjects = [...projects].sort((a,b) => new Date(a.targetRfs || '2099-12-31') - new Date(b.targetRfs || '2099-12-31'));
+  let overviewRows = '';
+
+  sortedProjects.forEach((p, idx) => {
+    const sph = projectSph(p);
+    const progress = Math.max(0, Math.min(100, Number(p.progressPct) || 0));
+    const rfs = p.targetRfs ? new Date(p.targetRfs).toLocaleDateString('id-ID', {day:'2-digit', month:'short', year:'numeric'}) : '—';
+
+    overviewRows += `
+      <tr class="proj-row">
+        <td>${idx + 1}</td>
+        <td>
+          <div style="font-weight: 600; color: #0F172A; margin-bottom: 2px;" title="${escAttr(p.name)}">${escAttr(p.name)}</div>
+          <div style="font-size: 10.5px; color: #64748B;">${escAttr(p.requestorDept || '—')}</div>
+        </td>
+        <td class="num mono">${valToM(sph.awal)} M</td>
+        <td>${escAttr(p.leadId || '—')}</td>
+        <td style="white-space:nowrap">${rfs}</td>
+        <td>${badgeStatus(getDynamicStatus(p))}</td>
+        <td>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 11px; font-weight: 600; width: 32px; text-align: right; color: #475569;">${progress}%</span>
+            <div style="flex: 1; height: 6px; background: #E2E8F0; border-radius: 3px; overflow: hidden; min-width: 60px;">
+              <div style="height: 100%; background: #3B82F6; border-radius: 3px; width:${progress}%"></div>
+            </div>
           </div>
-          <button class="btn-primary" id="btn-new-project">+ Project baru</button>
+        </td>
+      </tr>
+    `;
+  });
+
+  if(!overviewRows) overviewRows = `<tr><td colspan="7" style="text-align:center; padding:25px; color:#94A3B8;">Belum ada project.</td></tr>`;
+
+  const warningProjects = sortedProjects.filter(p => ['Overdue','At Risk'].includes(getDynamicStatus(p)));
+  let warningRows = '';
+
+  warningProjects.slice(0,5).forEach(p => {
+    const progress = Number(p.progressPct) || 0;
+    const rfs = p.targetRfs ? new Date(p.targetRfs).toLocaleDateString('id-ID', {day:'2-digit', month:'short'}) : '—';
+    warningRows += `
+      <tr class="proj-row">
+        <td>
+          <div style="font-weight: 600; color: #0F172A; margin-bottom: 2px;">${escAttr(p.name)}</div>
+          <div style="font-size: 10.5px; color: #64748B;">PIC: ${escAttr(p.leadId || '—')}</div>
+        </td>
+        <td style="white-space:nowrap">${rfs}</td>
+        <td><strong>${progress}%</strong></td>
+        <td>${badgeStatus(getDynamicStatus(p))}</td>
+      </tr>
+    `;
+  });
+
+  if(!warningRows) warningRows = `<tr><td colspan="4" style="text-align:center; padding:18px; color:#15803D;">✓ Tidak ada project yang perlu perhatian</td></tr>`;
+
+  const pNames = ['Project Identification', 'SPH Preparation', 'Vendor Selection', 'Negotiation', 'Finalization', 'RFS'];
+  let pipelineHtml = '';
+
+  pNames.forEach((name, i) => {
+    const n = i + 1;
+    const count = pCount[n];
+    const pct = activeProjects ? Math.round((count / activeProjects) * 100) : 0;
+    const activeClass = count > 0 ? 'active' : '';
+    const finalClass = n === 6 ? 'final' : '';
+
+    pipelineHtml += `
+      <div class="pipeline-step ${activeClass} ${finalClass}">
+        <div class="pipeline-number">${n}</div>
+        <div class="pipeline-name">${name}</div>
+        <div class="pipeline-count">${count}</div>
+        <div class="pipeline-count-label">${count === 1 ? 'Project' : 'Projects'}</div>
+        <div class="pipeline-progress"><span style="width:${pct}%"></span></div>
+      </div>
+    `;
+  });
+
+return `
+    <!-- 6 KPI TOP CARDS -->
+    <div class="exec-kpis">
+      <div class="exec-kpi"><div class="exec-kpi-icon" style="color:#0284C7;">▣</div><div><div class="exec-kpi-label">Total Project</div><div class="exec-kpi-value">${totalProj}</div><div class="exec-kpi-meta">${activeProjects} active projects</div></div></div>
+      <div class="exec-kpi"><div class="exec-kpi-icon" style="color:#4F46E5;">◉</div><div><div class="exec-kpi-label">Total Project Value</div><div class="exec-kpi-value" style="font-size:15px;">Rp ${valToM(totalVal)} M</div><div class="exec-kpi-meta">Est. project value</div></div></div>
+      <div class="exec-kpi green"><div class="exec-kpi-icon" style="color:#16A34A; background:#F0FDF4;">✓</div><div style="width:100%;"><div class="exec-kpi-label">On Track</div><div class="exec-kpi-value">${sCount['On Track']} <small>${getPct(sCount['On Track'])}%</small></div><div class="exec-kpi-progress"><span style="width:${getPct(sCount['On Track'])}%; background:#16A34A;"></span></div></div></div>
+      <div class="exec-kpi yellow"><div class="exec-kpi-icon" style="color:#D97706; background:#FFFBEB;">!</div><div style="width:100%;"><div class="exec-kpi-label">At Risk</div><div class="exec-kpi-value">${atRisk} <small style="color:#D97706;">${getPct(atRisk)}%</small></div><div class="exec-kpi-progress"><span style="width:${getPct(atRisk)}%; background:#F59E0B;"></span></div></div></div>
+      <div class="exec-kpi red"><div class="exec-kpi-icon" style="color:#DC2626; background:#FEF2F2;">!</div><div style="width:100%;"><div class="exec-kpi-label">Overdue</div><div class="exec-kpi-value">${overdue} <small style="color:#DC2626;">${getPct(overdue)}%</small></div><div class="exec-kpi-progress"><span style="width:${getPct(overdue)}%; background:#DC2626;"></span></div></div></div>
+      <div class="exec-kpi gray"><div class="exec-kpi-icon" style="color:#475569; background:#F8FAFC;">↗</div><div><div class="exec-kpi-label">Avg Efficiency</div><div class="exec-kpi-value">${fmtPct(avgEfficiency)}</div><div class="exec-kpi-meta">${efficiencies.length} project with data</div></div></div>
+    </div>
+
+    <!-- GRID LAYOUT 50:50 -->
+    <div class="dash-grid">
+      
+      <!-- KOLOM KIRI (50%) -->
+      <div class="dash-col">
+        <div class="panel">
+          <div class="panel-hd">
+            <h2>▣ Project Presourcing Overview</h2>
+            <span class="tag tag-medium" style="color:#fff; border-color:rgba(255,255,255,0.3); background:rgba(255,255,255,0.1);">${totalProj} Projects</span>
+          </div>
+          <div class="panel-body">
+            <div style="overflow-x: auto;">
+              <table>
+                <thead><tr><th>No</th><th>Project Name</th><th>Value</th><th>PIC</th><th>Target RFS</th><th>Status</th><th>Progress</th></tr></thead>
+                <tbody>${overviewRows}</tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-hd">
+            <h2>⇢ Presourcing Progress Pipeline</h2>
+            <span class="tag tag-medium" style="color:#fff; border-color:rgba(255,255,255,0.3); background:rgba(255,255,255,0.1);">${activeProjects} active</span>
+          </div>
+          <div class="panel-body" style="padding: 16px;">
+            <div class="pipeline-flow">${pipelineHtml}</div>
+          </div>
+        </div>
+        
+        <div class="panel">
+          <div class="panel-hd"><h2>≡ Top 5 Project Value</h2></div>
+          <div class="panel-body" style="padding: 16px;">
+            <div style="position: relative; height: 220px; width: 100%;"><canvas id="chartTop5"></canvas></div>
+          </div>
         </div>
       </div>
-      <div class="panel-body">
-        <table>
-          <thead><tr>
-            <th>Project</th><th>Pemohon</th><th>Prioritas</th><th>Status</th>
-            <th class="num">SPH Awal</th><th class="num">SPH Final</th><th class="num">Efficiency</th><th class="num">Durasi</th>
-          </tr></thead>
-          <tbody>
-          ${filtered.map(p=>{
-            const s = projectSph(p); const eff = efficiencyPct(s.awal,s.final);
-            return `<tr class="proj-row" data-open="${p.id}">
-              <td>${p.name}</td>
-              <td>${p.requestorName}<br><span style="color:var(--text-muted); font-size:11.5px;">${p.requestorDept}</span></td>
-              <td>${tagPriority(p.priority)}</td>
-              <td>${tagStatus(p.status)}</td>
-              <td class="num mono">${fmtIdr(s.awal)}</td>
-              <td class="num mono">${fmtIdr(s.final)}</td>
-              <td class="num mono">${fmtPct(eff)}</td>
-              <td class="num mono">${durationDays(p)}h</td>
-            </tr>
-            ${openProjectId===p.id ? `<tr><td colspan="8">${renderProjectDetail(p)}</td></tr>` : ''}
-            `;
-          }).join('')}
-          </tbody>
-        </table>
-        ${filtered.length===0?'<div class="empty">Tidak ada project yang cocok dengan filter ini.</div>':''}
+
+      <!-- KOLOM KANAN (50%) -->
+      <div class="dash-col">
+        
+        <!-- SUB-GRID UNTUK STATUS & PIC (Berdampingan) -->
+        <div class="dash-sub-grid">
+          <div class="panel">
+            <div class="panel-hd"><h2>◉ Project Status</h2></div>
+            <div class="panel-body" style="padding: 16px;">
+              <div style="position: relative; height: 215px; width: 100%;">
+                <canvas id="chartStatus"></canvas>
+                <div class="exec-donut-center">
+                  <div class="exec-donut-number">${totalProj}</div>
+                  <div class="exec-donut-label">Projects</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-hd"><h2>▥ Project Value by PIC</h2></div>
+            <div class="panel-body" style="padding: 16px;">
+              <div style="position: relative; height: 215px; width: 100%;"><canvas id="chartPicValue"></canvas></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TARGET RFS & EARLY WARNING (Lebar Penuh di Kolom Kanan) -->
+        <div class="panel">
+          <div class="panel-hd"><h2>▥ Target RFS by Month</h2></div>
+          <div class="panel-body" style="padding: 16px;">
+            <div style="position: relative; height: 230px; width: 100%;"><canvas id="chartRfsMonth"></canvas></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-hd" style="background: #DC2626;">
+            <h2>! Early Warning</h2>
+            <span class="tag" style="background: rgba(255,255,255,0.2); color: #fff; border: none;">Need Attention</span>
+          </div>
+          <div class="panel-body">
+            <div class="warning-summary">
+              <div class="warning-box"><div class="warning-label">Overdue</div><div class="warning-value">${overdue}</div></div>
+              <div class="warning-box"><div class="warning-label">At Risk</div><div class="warning-value">${atRisk}</div></div>
+            </div>
+            <div style="overflow-x: auto;">
+              <table>
+                <thead><tr><th>Project</th><th>RFS</th><th>Progress</th><th>Status</th></tr></thead>
+                <tbody>${warningRows}</tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   `;
 }
 
-function renderProjectDetail(p){
-  const uniq = uniquePicsInProject(p);
-  return `
-    <div class="detail-block">
-      <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
-        <div style="font-size:12px; color:var(--text-muted);">Lead Presource: <strong style="color:var(--text);">${p.leadId||'—'}</strong> · PIC terlibat: ${uniq.join(', ')||'—'}</div>
-        <div style="display:flex; gap:6px;">
-          <button class="mini-btn" data-edit-project="${p.id}">Edit</button>
-          <button class="mini-btn danger" data-delete-project="${p.id}">Hapus</button>
-        </div>
-      </div>
-      ${(p.sows||[]).map(sow=>`
-        <div class="sow-title">SoW: ${sow.name}</div>
-        ${(sow.boqs||[]).map(boq=>`
-          <div class="boq-title">BoQ: ${boq.name}</div>
-          <div style="display:grid; grid-template-columns: 2fr 0.4fr 1fr 1fr 1fr 0.8fr 1.5fr; gap:8px; padding:5px 0; font-size:10.5px; color:var(--text-dim); border-bottom:1px solid var(--border);">
-            <div>Produk</div><div>Qty</div><div>Vendor</div><div class="num">SPH Awal</div><div class="num">SPH Final</div><div class="num">Efficiency</div><div>PIC</div>
-          </div>
-          ${(boq.items||[]).map(it=>{
-            const eff = p.sphMode==='item' ? efficiencyPct(it.sphAwal,it.sphFinal) : null;
-            return `<div style="display:grid; grid-template-columns: 2fr 0.4fr 1fr 1fr 1fr 0.8fr 1.5fr; gap:8px; padding:7px 0; font-size:12.5px; border-bottom:1px solid var(--border-soft); align-items:start;">
-              <div>
-                <div style="font-weight:500;">${it.product || '—'}</div>
-                ${it.notes ? `<div style="font-size:11px; color:var(--text-muted); margin-top:3px;">📝 ${it.notes}</div>` : ''}
-              </div>
-              <div style="color:var(--text-muted);">${it.qty || '-'}</div>
-              <div style="color:var(--text-muted);">${it.vendor || '-'}</div>
-              <div class="num mono">${p.sphMode==='item'?fmtIdr(it.sphAwal):'—'}</div>
-              <div class="num mono">${p.sphMode==='item'?fmtIdr(it.sphFinal):'—'}</div>
-              <div class="num mono">${p.sphMode==='item'?fmtPct(eff):'—'}</div>
-              <div>${(it.picIds||[]).map(x=>`<span class="pic-chip">${x}</span>`).join('')}</div>
-            </div>`;
-          }).join('')}
-        `).join('')}
-      `).join('')}
-      ${p.sphMode==='project' ? `<div class="note">SPH dicatat di level total project (tidak dipecah per item).</div>` : ''}
-    </div>
-  `;
+function renderDashboardCharts() {
+    if (typeof Chart === 'undefined') return;
+
+    const chartFont = { family: "'Inter', 'Segoe UI', Arial, sans-serif", size: 10 };
+    const axisColor = '#64748b';
+    const gridColor = '#eef2f7';
+    const primarySoft = '#93c5fd';
+    const dark = '#0f172a';
+
+    const destroyChart = (key) => {
+        if (dCharts[key]) { dCharts[key].destroy(); dCharts[key] = null; }
+    };
+    const fmtRpM = (value) => `Rp ${(Number(value) || 0).toLocaleString('id-ID', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} M`;
+
+    const statusLabels = ['On Track', 'At Risk', 'Overdue', 'Completed', 'Planned'];
+    const statusColors = ['#16a34a', '#f59e0b', '#dc2626', '#2563eb', '#cbd5e1'];
+    const sCount = { 'On Track': 0, 'At Risk': 0, 'Overdue': 0, 'Completed': 0, 'Planned': 0 };
+
+    projects.forEach(p => {
+        const status = getDynamicStatus(p);
+        if (sCount[status] !== undefined) sCount[status]++;
+    });
+
+    const statusData = statusLabels.map(label => sCount[label]);
+    const ctxStatus = document.getElementById('chartStatus');
+
+    if (ctxStatus) {
+        destroyChart('status');
+        const hasStatusData = statusData.some(v => v > 0);
+        dCharts.status = new Chart(ctxStatus, {
+            type: 'doughnut',
+            data: {
+                labels: hasStatusData ? statusLabels : ['Belum ada data'],
+                datasets: [{
+                    data: hasStatusData ? statusData : [1],
+                    backgroundColor: hasStatusData ? statusColors : ['#e2e8f0'],
+                    borderWidth: 0, hoverOffset: 4
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false, cutout: '72%',
+                layout: { padding: 4 },
+                plugins: {
+                    legend: {
+                        position: 'right',
+                        labels: { usePointStyle: true, pointStyle: 'circle', boxWidth: 7, boxHeight: 7, padding: 12, color: axisColor, font: chartFont }
+                    },
+                    tooltip: {
+                        padding: 10,
+                        callbacks: {
+                            label: function(ctx) {
+                                if (!hasStatusData) return ' Belum ada data';
+                                const value = ctx.raw || 0;
+                                const total = statusData.reduce((a, b) => a + b, 0);
+                                const pct = total ? Math.round((value / total) * 100) : 0;
+                                return ` ${ctx.label}: ${value} project (${pct}%)`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    const rfsData = {};
+    projects.forEach(p => {
+        if (!p.targetRfs) return;
+        const d = new Date(p.targetRfs);
+        if (isNaN(d.getTime())) return;
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des'];
+        const key = `${months[d.getMonth()]} ${d.getFullYear()}`;
+        const sortK = d.getFullYear() * 100 + d.getMonth();
+
+        if (!rfsData[key]) rfsData[key] = { count: 0, val: 0, sortK };
+        rfsData[key].count += 1;
+        rfsData[key].val += (projectSph(p).awal || 0);
+    });
+
+    const rfsKeys = Object.keys(rfsData).sort((a, b) => rfsData[a].sortK - rfsData[b].sortK);
+    const ctxRfs = document.getElementById('chartRfsMonth');
+
+    if (ctxRfs) {
+        destroyChart('rfsMonth');
+        dCharts.rfsMonth = new Chart(ctxRfs, {
+            type: 'bar',
+            data: {
+                labels: rfsKeys,
+                datasets: [
+                    { type: 'bar', label: 'Jumlah Project', data: rfsKeys.map(k => rfsData[k].count), backgroundColor: primarySoft, borderColor: primarySoft, borderWidth: 0, borderRadius: 5, barPercentage: 0.6, categoryPercentage: 0.7, yAxisID: 'y' },
+                    { type: 'line', label: 'Project Value', data: rfsKeys.map(k => Number((rfsData[k].val / 1000000000).toFixed(1))), borderColor: dark, backgroundColor: dark, borderWidth: 2, pointRadius: 3, pointHoverRadius: 5, tension: 0.3, fill: false, yAxisID: 'y1' }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                scales: {
+                    x: { grid: { display: false }, border: { display: false }, ticks: { color: axisColor, font: chartFont, maxRotation: 0, autoSkip: true } },
+                    y: { beginAtZero: true, ticks: { color: axisColor, font: chartFont, precision: 0, stepSize: 1 }, grid: { color: gridColor }, border: { display: false } },
+                    y1: { beginAtZero: true, position: 'right', ticks: { color: axisColor, font: chartFont, callback: value => `Rp ${value} M` }, grid: { drawOnChartArea: false }, border: { display: false } }
+                },
+                plugins: {
+                    legend: { position: 'bottom', labels: { usePointStyle: true, pointStyle: 'circle', boxWidth: 7, boxHeight: 7, padding: 14, color: axisColor, font: chartFont } },
+                    tooltip: { padding: 10, callbacks: { label: function(ctx) { return ctx.dataset.label === 'Jumlah Project' ? ` ${ctx.raw} project` : ` ${fmtRpM(ctx.raw)}`; } } }
+                }
+            }
+        });
+    }
+
+    const top5 = [...projects]
+        .filter(p => p.status !== 'lose')
+        .map(p => ({ name: p.name || 'Unnamed Project', val: Number(((projectSph(p).awal || 0) / 1000000000).toFixed(1)) }))
+        .sort((a, b) => b.val - a.val)
+        .slice(0, 5);
+
+    const ctxTop5 = document.getElementById('chartTop5');
+    if (ctxTop5) {
+        destroyChart('top5');
+        dCharts.top5 = new Chart(ctxTop5, {
+            type: 'bar',
+            data: {
+                labels: top5.map(t => t.name.length > 24 ? t.name.substring(0, 24) + '...' : t.name),
+                datasets: [{ label: 'Project Value', data: top5.map(t => t.val), backgroundColor: '#2563EB', borderWidth: 0, borderRadius: 5, barPercentage: 0.55, categoryPercentage: 0.72 }]
+            },
+            options: {
+                indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+                layout: { padding: { left: 4, right: 10, top: 4, bottom: 2 } },
+                scales: {
+                    x: { beginAtZero: true, grid: { color: '#EEF2F7' }, border: { display: false }, ticks: { color: '#94A3B8', font: { family: "'Space Grotesk', sans-serif", size: 9 }, callback: value => `Rp ${value} M` } },
+                    y: { grid: { display: false }, border: { display: false }, ticks: { color: '#475569', font: { family: "'Space Grotesk', sans-serif", size: 9.5, weight: '500' } } }
+                },
+                plugins: { legend: { display: false }, tooltip: { padding: 9, callbacks: { label: ctx => ` Rp ${Number(ctx.raw).toLocaleString('id-ID')} M` } } }
+            }
+        });
+    }
+
+    const picValData = {};
+    team.forEach(m => picValData[m] = 0);
+    projects.forEach(p => {
+        if (!p.leadId) return;
+        if (picValData[p.leadId] === undefined) picValData[p.leadId] = 0;
+        picValData[p.leadId] += ((projectSph(p).awal || 0) / 1000000000);
+    });
+
+    const picData = Object.entries(picValData)
+        .map(([name, value]) => ({ name, value: Number(value.toFixed(1)) }))
+        .filter(x => x.value > 0)
+        .sort((a, b) => b.value - a.value);
+
+    const ctxPic = document.getElementById('chartPicValue');
+    if (ctxPic) {
+        destroyChart('picVal');
+        dCharts.picVal = new Chart(ctxPic, {
+            type: 'bar',
+            data: {
+                labels: picData.map(x => x.name),
+                datasets: [{ label: 'Project Value', data: picData.map(x => x.value), backgroundColor: '#3b82f6', borderWidth: 0, borderRadius: 5, barPercentage: 0.58, categoryPercentage: 0.72 }]
+            },
+            options: {
+                indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+                scales: {
+                    x: { beginAtZero: true, grid: { color: gridColor }, border: { display: false }, ticks: { color: axisColor, font: chartFont, callback: value => `Rp ${value} M` } },
+                    y: { grid: { display: false }, border: { display: false }, ticks: { color: '#334155', font: { ...chartFont, weight: '500' } } }
+                },
+                plugins: { legend: { display: false }, tooltip: { padding: 10, callbacks: { label: ctx => ` ${fmtRpM(ctx.raw)}` } } }
+            }
+        });
+    }
 }
 
 function renderTeam(){
   const stats = computePicStats();
   const rows = team.map(m=>{
     const s = stats[m];
-    const winRate = s.participationShare>0 ? (s.winShare/s.participationShare*100) : null;
-    const avgEff = s.effWeight>0 ? (s.effSum/s.effWeight) : null;
-    return {name:m, ...s, winRate, avgEff};
-  }).sort((a,b)=>b.supportLoad-a.supportLoad);
-  const maxLoad = Math.max(1, ...rows.map(r=>r.supportLoad));
+    const winRate = s.participationShare > 0 ? (s.winShare / s.participationShare * 100) : null;
+    const avgEff = s.effWeight > 0 ? (s.effSum / s.effWeight) : null;
+    return { name: m, ...s, winRate, avgEff };
+  }).sort((a,b) => b.supportLoad - a.supportLoad);
+  
   return `
     <div class="panel">
       <div class="panel-hd">
@@ -379,338 +682,816 @@ function renderTeam(){
       </div>
       <div class="panel-body">
         <table>
-          <thead><tr>
-            <th>Anggota</th><th class="num">Lead Count</th><th class="num">Support Load</th><th class="num">Win Rate</th><th class="num">Avg Efficiency</th>
-          </tr></thead>
+          <thead><tr><th>Anggota</th><th class="num">Lead Count</th><th class="num">Support Load</th><th class="num">Win Rate</th><th class="num">Avg Efficiency</th></tr></thead>
           <tbody>
-          ${rows.map(r=>`<tr>
-            <td>${r.name}</td>
-            <td class="num mono">${r.leadCount}</td>
-            <td class="num mono">${r.supportLoad.toFixed(2)}</td>
-            <td class="num mono">${fmtPct(r.winRate)}</td>
-            <td class="num mono">${fmtPct(r.avgEff)}</td>
-          </tr>`).join('')}
+          ${rows.map(r => `<tr><td>${escAttr(r.name)}</td><td class="num mono">${r.leadCount}</td><td class="num mono">${r.supportLoad.toFixed(2)}</td><td class="num mono">${fmtPct(r.winRate)}</td><td class="num mono">${fmtPct(r.avgEff)}</td></tr>`).join('')}
           </tbody>
         </table>
-      </div>
-    </div>
-    <div class="panel">
-      <div class="panel-hd"><h2>Support Load per anggota</h2></div>
-      <div class="panel-body">
-        ${rows.map(r=>`<div class="lb-row">
-          <div class="lb-name">${r.name}</div>
-          <div class="lb-bar-track"><div class="lb-bar-fill" style="width:${(r.supportLoad/maxLoad*100).toFixed(0)}%"></div></div>
-          <div class="lb-val">${r.supportLoad.toFixed(2)}</div>
-        </div>`).join('')}
-      </div>
-      <div class="panel-body" style="padding-top:0;">
-        <div class="note">Support Load = jumlah kredit fractional dari item yang ditangani (1 ÷ jumlah PIC per item). Lead Count dihitung terpisah, tidak fractional.</div>
       </div>
     </div>
   `;
 }
 
-// ---------- events & wire ----------
-function wireEvents(){
-  document.querySelectorAll('[data-tab]').forEach(el=> el.onclick = ()=>{ activeTab = el.dataset.tab; openProjectId=null; render(); });
-  const fp = document.getElementById('f-priority'); if(fp){ fp.value=filters.priority; fp.onchange=()=>{filters.priority=fp.value; render();}; }
-  const fs = document.getElementById('f-status'); if(fs){ fs.value=filters.status; fs.onchange=()=>{filters.status=fs.value; render();}; }
-  document.querySelectorAll('[data-open]').forEach(el=> el.onclick = ()=>{ const id=el.dataset.open; openProjectId = openProjectId===id?null:id; render(); });
-  const btnNew = document.getElementById('btn-new-project'); if(btnNew) btnNew.onclick = ()=> openProjectModal(null);
-  document.querySelectorAll('[data-edit-project]').forEach(el=> el.onclick=(e)=>{ e.stopPropagation(); openProjectModal(el.dataset.editProject); });
-  document.querySelectorAll('[data-delete-project]').forEach(el=> el.onclick=(e)=>{ e.stopPropagation(); if(confirm('Hapus project ini?')){ projects = projects.filter(p=>p.id!==el.dataset.deleteProject); saveAll(); render(); } });
-  const btnTeam = document.getElementById('btn-manage-team'); if(btnTeam) btnTeam.onclick = ()=> openTeamModal();
+// ============================================================================
+// MODAL & FORM RENDERER (PROJECT FORM)
+// ============================================================================
+function projectModalHtml(p, isNew) {
+  const sowsHtml = (p.sows || []).map((sow, si) => {
+    const boqsHtml = (sow.boqs || []).map((boq, bi) => {
+      const itemsHtml = (boq.items || []).map((it, ii) => itemBlockHtml(it, si, bi, ii)).join('');
+      return `
+        <div class="boq-block">
+          <div class="boq-head">
+            <div class="boq-heading">
+              <div class="boq-number">B${bi + 1}</div>
+              <input class="boq-name" data-si="${si}" data-bi="${bi}" value="${escAttr(boq.name)}" placeholder="Nama BoQ" style="max-width:200px;">
+            </div>
+            <button class="mini-btn danger form-danger-btn" data-del-boq="${si}:${bi}" type="button">Hapus BoQ</button>
+          </div>
+          ${itemsHtml}
+          <div class="add-row">
+            <button class="mini-btn form-add-btn" data-add-item="${si}:${bi}" type="button">+ Tambah Item</button>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    return `
+      <div class="sow-block">
+        <div class="sow-head">
+          <div class="sow-heading">
+            <div class="sow-index">S${si + 1}</div>
+            <input class="sow-name" data-si="${si}" value="${escAttr(sow.name)}" placeholder="Nama Scope of Work (SoW)" style="max-width:240px;">
+          </div>
+          <div class="sow-actions">
+            <button class="mini-btn form-add-btn" data-add-boq="${si}" type="button">+ BoQ</button>
+            <button class="mini-btn danger form-danger-btn" data-del-sow="${si}" type="button">Hapus SoW</button>
+          </div>
+        </div>
+        ${boqsHtml}
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <div class="overlay" id="ov">
+      <div class="modal project-modal">
+        <div class="modal-hd">
+          <h3>${isNew ? 'Buat Project Baru' : 'Edit Project'}</h3>
+          <button class="mini-btn" id="m-close" type="button">Tutup</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-section">
+            <div class="form-section-head"><div class="form-section-title">Informasi Utama</div></div>
+            <div class="field project-name-field">
+              <label class="required-mark">Nama Project</label>
+              <input id="m-name" value="${escAttr(p.name)}" placeholder="Contoh: Project Backbone Expansion">
+            </div>
+            <div class="grid3">
+              <div class="field"><label class="required-mark">Pemohon</label><input id="m-req-name" value="${escAttr(p.requestorName)}" placeholder="Nama pemohon"></div>
+              <div class="field"><label class="required-mark">Departemen</label><input id="m-req-dept" value="${escAttr(p.requestorDept)}" placeholder="Divisi/Dept"></div>
+              <div class="field"><label>Lead Presource</label><select id="m-lead">${team.map(t => `<option value="${escAttr(t)}" ${p.leadId === t ? 'selected' : ''}>${escAttr(t)}</option>`).join('')}</select></div>
+            </div>
+          </div>
+
+          <div class="form-section">
+            <div class="form-section-head"><div class="form-section-title">Status &amp; Timeline EWS</div></div>
+            <div class="grid3">
+              <div class="field">
+                <label>Prioritas</label>
+                <select id="m-priority">
+                  <option value="Urgent" ${p.priority === 'Urgent' ? 'selected' : ''}>Urgent</option>
+                  <option value="High" ${p.priority === 'High' ? 'selected' : ''}>High</option>
+                  <option value="Medium" ${p.priority === 'Medium' ? 'selected' : ''}>Medium</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Status</label>
+                <select id="m-status">
+                  <option value="ongoing" ${p.status === 'ongoing' ? 'selected' : ''}>Berjalan</option>
+                  <option value="win" ${p.status === 'win' ? 'selected' : ''}>Menang</option>
+                  <option value="lose" ${p.status === 'lose' ? 'selected' : ''}>Kalah</option>
+                </select>
+              </div>
+              <div class="field"><label>Target RFS</label><input type="date" id="m-target-rfs" value="${escAttr(p.targetRfs)}"></div>
+            </div>
+            <div class="grid2" style="margin-top:10px;">
+              <div class="field">
+                <label>Tahap Pipeline</label>
+                <select id="m-pipeline-stage">
+                  <option value="1 - Project Identification" ${p.pipelineStage === '1 - Project Identification' ? 'selected' : ''}>1 - Project Identification</option>
+                  <option value="2 - SPH Preparation" ${p.pipelineStage === '2 - SPH Preparation' ? 'selected' : ''}>2 - SPH Preparation</option>
+                  <option value="3 - Vendor Selection" ${p.pipelineStage === '3 - Vendor Selection' ? 'selected' : ''}>3 - Vendor Selection</option>
+                  <option value="4 - Negotiation" ${p.pipelineStage === '4 - Negotiation' ? 'selected' : ''}>4 - Negotiation</option>
+                  <option value="5 - Finalization" ${p.pipelineStage === '5 - Finalization' ? 'selected' : ''}>5 - Finalization</option>
+                  <option value="6 - RFS" ${p.pipelineStage === '6 - RFS' ? 'selected' : ''}>6 - RFS</option>
+                </select>
+              </div>
+              <div class="field"><label>Progress (%)</label><input type="number" id="m-progress" min="0" max="100" value="${p.progressPct ?? 0}"></div>
+            </div>
+          </div>
+
+          <div class="form-section">
+            <div class="form-section-head">
+              <div class="form-section-title">Scope of Work &amp; BoQ</div>
+              <button class="mini-btn form-add-btn" id="m-add-sow" type="button">+ Tambah SoW</button>
+            </div>
+            <div class="field">
+              <label>Mode SPH</label>
+              <select id="m-sphmode">
+                <option value="item" ${p.sphMode === 'item' ? 'selected' : ''}>Dari Item BoQ (Rinci)</option>
+                <option value="project" ${p.sphMode === 'project' ? 'selected' : ''}>Manual Total Project</option>
+              </select>
+            </div>
+            ${p.sphMode === 'project' ? `
+              <div class="sph-summary-box">
+                <div class="field"><label>Total SPH Awal (Project)</label><input type="number" id="m-proj-awal" value="${p.projectSphAwal ?? ''}"></div>
+                <div class="field"><label>Total SPH Final (Project)</label><input type="number" id="m-proj-final" value="${p.projectSphFinal ?? ''}"></div>
+              </div>
+            ` : sowsHtml}
+          </div>
+        </div>
+        <div class="modal-ft">
+          <button class="btn-ghost" id="m-cancel" type="button">Batal</button>
+          <button class="btn-primary" id="m-save" type="button">Simpan Project</button>
+        </div>
+      </div>
+    </div>
+  `;
 }
 
-// ---------- modal functions ----------
-function blankProject(){
+function teamModalHtml(d) {
+  return `
+    <div class="overlay" id="ov">
+      <div class="modal" style="max-width:440px;">
+        <div class="modal-hd">
+          <h3>Kelola Anggota Tim</h3>
+          <button class="mini-btn" id="m-close" type="button">Tutup</button>
+        </div>
+        <div class="modal-body">
+          <div class="field">
+            <label>Daftar Nama Anggota (Pisahkan dengan koma)</label>
+            <textarea id="m-team-names" rows="3">${escAttr(d.names)}</textarea>
+          </div>
+        </div>
+        <div class="modal-ft">
+          <button class="btn-ghost" id="m-cancel" type="button">Batal</button>
+          <button class="btn-primary" id="m-save-team" type="button">Simpan Tim</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ============================================================================
+// PROJECTS LIST & DETAIL
+// ============================================================================
+function renderProjects() {
+  const filtered = projects.filter(p => {
+    if (filters.priority !== 'all' && p.priority !== filters.priority) return false;
+    if (filters.status !== 'all' && p.status !== filters.status) return false;
+    return true;
+  });
+
+  let tbodyHtml = '';
+  if (filtered.length === 0) {
+    tbodyHtml = '<tr><td colspan="7"><div class="empty">Tidak ada project yang cocok.</div></td></tr>';
+  } else {
+    filtered.forEach(p => {
+      const s = projectSph(p); 
+      const eff = efficiencyPct(s.awal, s.final);
+      const pipelineText = escAttr(p.pipelineStage) || '-'; 
+      const pct = p.progressPct || 0;
+
+      tbodyHtml += `
+        <tr class="proj-row" data-open="${p.id}">
+          <td>${escAttr(p.name)}</td>
+          <td>${escAttr(p.requestorName)}<br><span style="color:var(--text-muted); font-size:11.5px;">${escAttr(p.requestorDept)}</span></td>
+          <td>${badgeStatus(getDynamicStatus(p))}</td>
+          <td><span style="font-size:12px;">${pipelineText} (${pct}%)</span></td>
+          <td class="num mono">${fmtIdr(s.awal)}</td>
+          <td class="num mono">${fmtPct(eff)}</td>
+          <td class="num mono">${durationDays(p)} hari</td>
+        </tr>
+      `;
+      if (openProjectId === p.id) tbodyHtml += `<tr><td colspan="7">${renderProjectDetail(p)}</td></tr>`;
+    });
+  }
+
+  return `
+    <div class="panel">
+      <div class="panel-hd">
+        <h2>Daftar Detail Project & BoQ</h2>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <div class="filters">
+            <select id="f-priority"><option value="all">Semua prioritas</option><option value="Urgent">Urgent</option><option value="High">High</option><option value="Medium">Medium</option></select>
+            <select id="f-status"><option value="all">Semua status</option><option value="ongoing">Berjalan</option><option value="win">Menang</option><option value="lose">Kalah</option></select>
+          </div>
+          <button class="btn-primary" id="btn-new-project">+ Project baru</button>
+        </div>
+      </div>
+      <div class="panel-body">
+        <table>
+          <thead><tr><th>Project</th><th>Pemohon</th><th>Status EWS</th><th>Tahap Pipeline</th><th class="num">SPH Awal</th><th class="num">Efficiency</th><th class="num">Durasi</th></tr></thead>
+          <tbody>${tbodyHtml}</tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function renderProjectDetail(p) {
+  const uniq = uniquePicsInProject(p);
+  const docsHtml = `
+    <div style="margin: 12px 0; padding: 12px; background: #FFFFFF; border: 1px dashed var(--border); border-radius: 6px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
+            <strong style="font-size: 12.5px; color: var(--text);">📄 Dokumen SPH Pembanding (Audit Trail)</strong>
+            <button class="mini-btn" onclick="openUploadPembandingModal('${p.id}')">+ Upload Pembanding</button>
+        </div>
+        ${p.comparison_docs && p.comparison_docs.length > 0 ? 
+            p.comparison_docs.map(doc => `
+                <div style="display:flex; justify-content:space-between; font-size: 12px; padding: 6px 0; border-bottom: 1px solid var(--border-soft);">
+                    <div><span style="font-weight:600; color:var(--text);">${escAttr(doc.vendor_name)}</span> <span style="color:var(--text-muted);"> — Penawaran: <span class="mono">${fmtIdr(doc.offered_price)}</span></span></div>
+                    <a href="${doc.file_path}" target="_blank" style="color: var(--primary); text-decoration: none; font-weight:500;">Lihat File</a>
+                </div>
+            `).join('') : '<div style="font-size:11.5px; color:var(--text-muted);">Belum ada dokumen pembanding yang diunggah.</div>'
+        }
+    </div>
+  `;
+
+  let sowsHtml = '';
+  (p.sows || []).forEach(sow => {
+    sowsHtml += `<div class="sow-title">Scope of Work: ${escAttr(sow.name)}</div>`;
+    (sow.boqs || []).forEach(boq => {
+      sowsHtml += `
+        <div class="boq-title">Bill of Quantity: ${escAttr(boq.name)}</div>
+        <div style="display:grid; grid-template-columns: 2fr 0.4fr 0.5fr 1fr 1fr 1fr 0.8fr 1.5fr; gap:8px; padding:5px 0; font-size:10.5px; color:var(--text-dim); border-bottom:1px solid var(--border);">
+          <div>Item</div><div>Qty</div><div>UoM</div><div>Vendor</div><div class="num">SPH Awal</div><div class="num">SPH Final</div><div class="num">Efficiency</div><div>PIC</div>
+        </div>
+      `;
+      (boq.items || []).forEach(it => {
+        const eff = p.sphMode === 'item' ? efficiencyPct(it.sphAwal, it.sphFinal) : null;
+        const notesHtml = it.notes ? `<div style="font-size:11px; color:var(--text-muted); margin-top:3px;">📝 ${escAttr(it.notes)}</div>` : '';
+        const picsHtml = (it.picIds || []).map(x => `<span class="pic-chip">${escAttr(x)}</span>`).join('');
+        sowsHtml += `
+          <div style="display:grid; grid-template-columns: 2fr 0.4fr 0.5fr 1fr 1fr 1fr 0.8fr 1.5fr; gap:8px; padding:7px 0; font-size:12.5px; border-bottom:1px solid var(--border-soft); align-items:start;">
+            <div><div style="font-weight:500;">${escAttr(it.product) || '—'}</div>${notesHtml}</div>
+            <div style="color:var(--text-muted);">${it.qty || '-'}</div>
+            <div style="color:var(--text-muted);">${escAttr(it.uom) || '-'}</div>
+            <div style="color:var(--text-muted);">${escAttr(it.vendor) || '-'}</div>
+            <div class="num mono">${p.sphMode === 'item' ? fmtIdr(it.sphAwal) : '—'}</div>
+            <div class="num mono">${p.sphMode === 'item' ? fmtIdr(it.sphFinal) : '—'}</div>
+            <div class="num mono">${p.sphMode === 'item' ? fmtPct(eff) : '—'}</div>
+            <div>${picsHtml}</div>
+          </div>
+        `;
+      });
+    });
+  });
+
+  return `
+    <div class="detail-block">
+      <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+        <div style="font-size:12px; color:var(--text-muted);">Lead Presource: <strong style="color:var(--text);">${p.leadId||'—'}</strong> · PIC terlibat: ${uniq.join(', ')||'—'}</div>
+        <div style="display:flex; gap:6px;">
+          <button class="mini-btn" onclick="event.stopPropagation(); downloadRevisionTemplate('${p.id}')">📥 Template Revisi</button>
+          <button class="mini-btn" onclick="event.stopPropagation(); triggerRevisiBoq('${p.id}')">🔄 Revisi Excel BoQ</button>
+          <button class="mini-btn" onclick="downloadProjectReport('${p.id}')">📥 Download Excel</button>
+          <button class="mini-btn" data-edit-project="${p.id}">Edit</button>
+          <button class="mini-btn danger" data-delete-project="${p.id}">Hapus</button>
+        </div>
+      </div>
+      ${docsHtml}
+      ${sowsHtml}
+      ${p.sphMode === 'project' ? `<div class="note">SPH dicatat di level total project (tidak dipecah per item).</div>` : ''}
+    </div>
+  `;
+}
+
+// ============================================================================
+// EVENT WIRINGS
+// ============================================================================
+function wireEvents() {
+  const fp = document.getElementById('f-priority');
+  if (fp) { fp.value = filters.priority; fp.onchange = () => { filters.priority = fp.value; render(); }; }
+  
+  const fs = document.getElementById('f-status');
+  if (fs) { fs.value = filters.status; fs.onchange = () => { filters.status = fs.value; render(); }; }
+  
+  document.querySelectorAll('[data-open]').forEach(el => {
+    el.onclick = () => { const id = el.dataset.open; openProjectId = openProjectId === id ? null : id; render(); };
+  });
+  
+  const btnNew = document.getElementById('btn-new-project');
+  if (btnNew) btnNew.onclick = () => openProjectModal(null);
+  
+  document.querySelectorAll('[data-edit-project]').forEach(el => {
+    el.onclick = (e) => { e.stopPropagation(); openProjectModal(el.dataset.editProject); };
+  });
+
+  document.querySelectorAll('[data-delete-project]').forEach(el => {
+    el.onclick = async (e) => { 
+      e.stopPropagation(); 
+      if (confirm('Hapus project ini?')) { 
+        projects = projects.filter(p => p.id !== el.dataset.deleteProject); 
+        await saveAll(); 
+        render(); 
+      } 
+    };
+  });
+  
+  const btnTeam = document.getElementById('btn-manage-team');
+  if (btnTeam) btnTeam.onclick = () => openTeamModal();
+}
+
+function downloadProjectReport(projectId) {
+  window.location.href = `/api/download_report?project_id=${encodeURIComponent(projectId)}`;
+}
+
+function downloadBoqTemplate() {
+  window.location.href = '/api/download_template_boq';
+}
+
+function downloadRevisionTemplate(projectId) {
+  window.location.href = `/api/projects/${encodeURIComponent(projectId)}/download_boq_template`;
+}
+
+async function triggerRevisiBoq(projectId) {
+  const fileInput = document.createElement('input');
+  fileInput.type = 'file';
+  fileInput.accept = '.xlsx, .xls';
+  fileInput.style.display = 'none';
+  document.body.appendChild(fileInput);
+
+  fileInput.onchange = async () => {
+    const file = fileInput.files[0];
+    document.body.removeChild(fileInput);
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('ticket_id', projectId);
+    document.body.style.cursor = 'wait';
+
+    try {
+      const previewRes = await fetch('/api/revisi_boq/preview', { method: 'POST', body: formData });
+      const preview = await previewRes.json();
+
+      if (!previewRes.ok || !preview.success) {
+        alert(`Gagal membaca Excel: ${preview.message || ''}`);
+        return;
+      }
+      showRevisionPreview(projectId, file, preview.data);
+    } catch (error) {
+      console.error(error);
+      alert('Terjadi kesalahan saat membaca file Excel.');
+    } finally {
+      document.body.style.cursor = 'default';
+    }
+  };
+  fileInput.click();
+}
+
+function revisionSummaryCard(icon, count, label, color, bg) {
+  return `
+    <div style="padding:9px; border:1px solid #E2E8F0; border-radius:7px; background:${bg};">
+      <div style="display:flex; align-items:center; gap:7px;">
+        <span style="width:22px; height:22px; display:inline-flex; align-items:center; justify-content:center; border-radius:6px; background:${color}; color:#fff; font-weight:800; font-size:13px;">${escAttr(icon)}</span>
+        <strong style="font-size:16px; color:#0F172A;">${Number(count) || 0}</strong>
+      </div>
+      <div style="margin-top:4px; font-size:8.5px; color:#64748B;">${escAttr(label)}</div>
+    </div>
+  `;
+}
+
+function showRevisionPreview(projectId, file, data) {
+  const s = data.summary || {};
+  const issues = Array.isArray(data.issues) ? data.issues : [];
+  const added = Array.isArray(data.added) ? data.added : [];
+  const updated = Array.isArray(data.updated) ? data.updated : [];
+  const removed = Array.isArray(data.removed) ? data.removed : [];
+  const canApply = !data.has_errors;
+
+  const issueHtml = issues.length ? `
+    <div style="margin-bottom:12px; padding:9px 10px; border:1px solid ${data.has_errors ? '#FECACA' : '#FDE68A'}; border-radius:6px; background:${data.has_errors ? '#FEF2F2' : '#FFFBEB'}; color:${data.has_errors ? '#B91C1C' : '#92400E'}; font-size:9px;">
+      <strong>${data.has_errors ? 'Excel memiliki error.' : 'Catatan validasi:'}</strong>
+      ${issues.slice(0, 8).map(issue => `<div style="margin-top:3px;">Row ${escAttr(issue.row)} ·${escAttr(issue.message)}</div>`).join('')}
+      ${issues.length > 8 ? `<div style="margin-top:4px; color:#A16207;">+ ${issues.length - 8} issue lainnya</div>` : ''}
+    </div>` : '';
+
+  const addedHtml = added.length ? added.map(item => `
+    <div class="revision-row added">
+      <div class="revision-mark">+</div>
+      <div>
+        <strong>${escAttr(item.description || '')}</strong>
+        <div class="revision-meta">${escAttr(String(item.qty ?? 0))} ${escAttr(item.uom || '')}${item.vendor ? ` · ${escAttr(item.vendor)}` : ''}</div>
+      </div>
+    </div>`).join('') : `<div class="revision-empty">Tidak ada item baru.</div>`;
+
+  const updatedHtml = updated.length ? updated.map(item => {
+    const changeText = Object.entries(item.changes || {}).map(([key, values]) => `<span><b>${escAttr(key)}</b>: ${escAttr(String(values[0] ?? ''))} → ${escAttr(String(values[1] ?? ''))}</span>`).join('<br>');
+    return `
+      <div class="revision-row updated">
+        <div class="revision-mark">~</div>
+        <div>
+          <strong>${escAttr(item.description || '')}</strong>
+          <div class="revision-meta">${changeText}</div>
+        </div>
+      </div>`;
+  }).join('') : `<div class="revision-empty">Tidak ada item yang berubah.</div>`;
+
+  const removedHtml = removed.length ? removed.map(item => `
+    <div class="revision-row removed">
+      <div class="revision-mark">−</div>
+      <div>
+        <strong>${escAttr(item.description || '')}</strong>
+        <div class="revision-meta">${item.itemNo ? `Item No: ${escAttr(item.itemNo)} · ` : ''}Item ini akan dihapus dari BoQ.</div>
+      </div>
+    </div>`).join('') : `<div class="revision-empty">Tidak ada item yang dihapus.</div>`;
+
+  const overlay = document.createElement('div');
+  overlay.id = 'revision-preview-modal';
+  overlay.className = 'overlay';
+  overlay.style.zIndex = '110';
+
+  overlay.innerHTML = `
+    <div class="modal" style="max-width:780px; max-height:90vh;">
+      <div class="modal-hd">
+        <div>
+          <h3>Review Revisi BoQ</h3>
+          <div style="margin-top:3px; font-size:10px; color:#94A3B8;">${escAttr(file.name)}</div>
+        </div>
+        <button class="mini-btn" type="button" onclick="closeRevisionPreview()">Tutup</button>
+      </div>
+      <div class="modal-body">
+        ${issueHtml}
+        <div style="padding:12px; background:#F8FAFC; border:1px solid #E2E8F0; border-radius:7px; margin-bottom:14px;">
+          <div style="font-size:10px; color:#64748B; margin-bottom:8px;">Perubahan yang akan diterapkan</div>
+          <div style="display:grid; grid-template-columns: repeat(4,1fr); gap:7px;">
+            ${revisionSummaryCard('+', s.added, 'Added', '#15803D', '#F0FDF4')}
+            ${revisionSummaryCard('~', s.updated, 'Updated', '#2563EB', '#EFF6FF')}
+            ${revisionSummaryCard('−', s.removed, 'Removed', '#DC2626', '#FEF2F2')}
+            ${revisionSummaryCard('=', s.unchanged, 'Unchanged', '#64748B', '#F8FAFC')}
+          </div>
+        </div>
+        <div class="revision-section"><div class="revision-section-title added-title">+ Added (${s.added || 0})</div>${addedHtml}</div>
+        <div class="revision-section"><div class="revision-section-title updated-title">~ Updated (${s.updated || 0})</div>${updatedHtml}</div>
+        <div class="revision-section"><div class="revision-section-title removed-title">− Removed (${s.removed || 0})</div>${removedHtml}</div>
+      </div>
+      <div class="modal-ft">
+        <button class="btn-ghost" type="button" onclick="closeRevisionPreview()">Batal</button>
+        <button class="btn-primary" id="btn-confirm-revision" type="button" ${canApply ? '' : 'disabled'} onclick="confirmRevisionBoq('${escAttr(projectId)}')">
+          ${canApply ? 'Confirm & Apply Revision' : 'Perbaiki Error Terlebih Dahulu'}
+        </button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+  window.pendingRevisionFile = file;
+}
+
+function closeRevisionPreview() {
+  const modal = document.getElementById('revision-preview-modal');
+  if (modal) modal.remove();
+  window.pendingRevisionFile = null;
+}
+
+async function confirmRevisionBoq(projectId) {
+  const file = window.pendingRevisionFile;
+  if (!file) { alert('File revision tidak ditemukan.'); return; }
+
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('ticket_id', projectId);
+
+  const btn = document.getElementById('btn-confirm-revision');
+  if (btn) { btn.disabled = true; btn.innerText = 'Applying revision...'; }
+
+  try {
+    const res = await fetch('/api/revisi_boq', { method: 'POST', body: formData });
+    const result = await res.json();
+
+    if (res.ok && result.success) {
+      closeRevisionPreview();
+      alert('BoQ berhasil direvisi.');
+      await loadAll();
+      return;
+    }
+
+    const details = Array.isArray(result.issues) ? '\n' + result.issues.slice(0, 5).map(x => `Row ${x.row}: ${x.message}`).join('\n') : '';
+    alert(`Gagal menerapkan revisi: ${result.message || 'Error'}${details}`);
+  } catch (error) {
+    console.error('Apply revision error:', error);
+    alert('Terjadi kesalahan saat menerapkan revisi.');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerText = 'Confirm & Apply Revision'; }
+  }
+}
+
+// ============================================================================
+// MODALS LOGIC & FORM RENDERER
+// ============================================================================
+function blankProject() {
   return {
-    id: uid('proj'), name:'', requestorName:'', requestorDept:'',
-    priority:'Medium', status:'ongoing', leadId: team[0]||'',
-    sphMode:'item', projectSphAwal:null, projectSphFinal:null,
-    createdAt: todayStr(), closedAt:null,
-    sows:[{ id:uid('sow'), name:'', boqs:[{ id:uid('boq'), name:'', items:[{ id:uid('item'), product:'', qty:1, vendor:'', notes:'', picIds:[], sphAwal:null, sphFinal:null }] }] }]
+    id: uid('proj'), name: '', requestorName: '', requestorDept: '', priority: 'Medium', status: 'ongoing', leadId: team[0] || '', sphMode: 'item', projectSphAwal: null, projectSphFinal: null,
+    createdAt: todayStr(), closedAt: null, targetRfs: '', pipelineStage: '1 - Project Identification', progressPct: 0, comparison_docs: [],
+    sows: [{ id: uid('sow'), name: '', boqs: [{ id: uid('boq'), name: '', items: [{ id: uid('item'), product: '', qty: 1, vendor: '', notes: '', picIds: [], sphAwalUnit: null, sphFinalUnit: null, sphAwal: null, sphFinal: null }] }] }]
   };
 }
-function openProjectModal(id){
-  modalScroll = 0; // Reset scroll
-  const existing = id ? JSON.parse(JSON.stringify(projects.find(p=>p.id===id))) : blankProject();
-  modal = { type:'project', data: existing, isNew: !id };
+
+function openProjectModal(id) {
+  const existing = id ? JSON.parse(JSON.stringify(projects.find(p => p.id === id))) : blankProject();
+  modal = { type: 'project', data: existing, isNew: !id };
   render();
 }
-function openTeamModal(){ 
-  modalScroll = 0; // Reset scroll
-  modal = { type:'team', data:{ names: team.join(', ') } }; render(); 
+
+function openTeamModal() { 
+  modal = { type: 'team', data: { names: team.join(', ') } }; 
+  render(); 
 }
 
-function renderModal(){
+function renderModal() {
   let root = document.getElementById('modal-root');
-  if(!root){ root = document.createElement('div'); root.id='modal-root'; document.body.appendChild(root); }
-  if(modal.type==='project') root.innerHTML = projectModalHtml(modal.data, modal.isNew);
-  if(modal.type==='team') root.innerHTML = teamModalHtml(modal.data);
+  if (!root) { root = document.createElement('div'); root.id = 'modal-root'; document.body.appendChild(root); }
+  
+  if (modal.type === 'project') root.innerHTML = projectModalHtml(modal.data, modal.isNew);
+  if (modal.type === 'team') root.innerHTML = teamModalHtml(modal.data);
+  
   wireModalEvents();
-  // Kembalikan posisi scroll agar tidak mantul ke atas
-  const m = document.querySelector('.modal');
-  if(m) m.scrollTop = modalScroll;
 }
 
-function projectModalHtml(d, isNew){
+function itemBlockHtml(it, si, bi, ii) {
+  const path = `${si}:${bi}:${ii}`;
+  const awalTotal = calculateUiSphTotal(it.qty, it.sphAwalUnit) ?? it.sphAwal;
+  const finalTotal = calculateUiSphTotal(it.qty, it.sphFinalUnit) ?? it.sphFinal;
+
   return `
-  <div class="overlay" id="ov">
-    <div class="modal">
-      <div class="modal-hd">
-        <h3>${isNew?'Project baru':'Edit project'}</h3>
-        <button class="mini-btn" id="m-close" type="button">Tutup</button>
+    <div class="item-block" data-item-idx="${ii}">
+      <div class="item-head">
+        <div class="item-label">Item ${ii + 1}</div>
+        <button class="mini-btn danger form-danger-btn" data-del-item="${path}" type="button">Hapus</button>
       </div>
-      <div class="modal-body">
-        <div class="field"><label>Nama project</label><input id="m-name" value="${escAttr(d.name)}" placeholder="Project Pertamina — ..."></div>
-        <div class="grid2">
-          <div class="field"><label>Nama pemohon (SA)</label><input id="m-req-name" value="${escAttr(d.requestorName)}" placeholder="Marcel"></div>
-          <div class="field"><label>Departemen pemohon</label><input id="m-req-dept" value="${escAttr(d.requestorDept)}" placeholder="SA G&P"></div>
+      <div class="item-grid-main">
+        <div class="field"><label>Produk</label><input class="it-product" data-path="${path}" value="${escAttr(it.product)}" placeholder="Nama produk / service"></div>
+        <div class="field"><label>Qty</label><input type="number" class="it-qty" data-path="${path}" value="${it.qty ?? 1}" min="0"></div>
+        <div class="field"><label>UoM</label><input class="it-uom" data-path="${path}" value="${escAttr(it.uom)}" placeholder="Unit"></div>
+        <div class="field"><label>Vendor</label><input class="it-vendor" data-path="${path}" value="${escAttr(it.vendor)}" placeholder="Vendor"></div>
+      </div>
+      <div class="item-grid-finance">
+        <div class="field">
+          <label>SPH Awal / Unit</label>
+          <input type="number" class="it-awal-unit" data-path="${path}" value="${it.sphAwalUnit ?? ''}" placeholder="Harga per unit">
+          <div style="margin-top:4px; font-size:9.5px; color:#64748B;">Total: <strong data-total-awal="${path}" style="color:#0F172A;">${fmtIdr(awalTotal)}</strong></div>
         </div>
-        <div class="grid3">
-          <div class="field"><label>Prioritas</label>
-            <select id="m-priority">
-              ${['Medium','High','Urgent'].map(x=>`<option ${d.priority===x?'selected':''}>${x}</option>`).join('')}
-            </select>
-          </div>
-          <div class="field"><label>Status</label>
-            <select id="m-status">
-              <option value="ongoing" ${d.status==='ongoing'?'selected':''}>Berjalan</option>
-              <option value="win" ${d.status==='win'?'selected':''}>Menang</option>
-              <option value="lose" ${d.status==='lose'?'selected':''}>Kalah</option>
-            </select>
-          </div>
-          <div class="field"><label>Lead Presource</label>
-            <select id="m-lead">${team.map(t=>`<option ${d.leadId===t?'selected':''}>${t}</option>`).join('')}</select>
-          </div>
+        <div class="field">
+          <label>SPH Final / Unit</label>
+          <input type="number" class="it-final-unit" data-path="${path}" value="${it.sphFinalUnit ?? ''}" placeholder="Harga per unit">
+          <div style="margin-top:4px; font-size:9.5px; color:#64748B;">Total: <strong data-total-final="${path}" style="color:#0F172A;">${fmtIdr(finalTotal)}</strong></div>
         </div>
-        <div class="grid2">
-          <div class="field"><label>Tanggal request masuk</label><input type="date" id="m-created" value="${d.createdAt||''}"></div>
-          <div class="field"><label>Tanggal SPH final / ditutup</label><input type="date" id="m-closed" value="${d.closedAt||''}"></div>
-        </div>
-        <div class="field"><label>Mode pencatatan SPH</label>
-          <select id="m-sphmode">
-            <option value="item" ${d.sphMode==='item'?'selected':''}>Per item/produk (di dalam BoQ)</option>
-            <option value="project" ${d.sphMode==='project'?'selected':''}>Total project saja</option>
-          </select>
-        </div>
-        <div id="m-project-sph" style="${d.sphMode==='project'?'':'display:none'}">
-          <div class="grid2">
-            <div class="field"><label>SPH Awal (total)</label><input type="number" id="m-proj-awal" value="${d.projectSphAwal??''}"></div>
-            <div class="field"><label>SPH Final (total)</label><input type="number" id="m-proj-final" value="${d.projectSphFinal??''}"></div>
+        <div class="field">
+          <label>PIC</label>
+          <div class="pic-select">
+            ${team.map(t => `<div class="pic-opt ${(it.picIds || []).includes(t) ? 'on' : ''}" data-pic="${path}:${escAttr(t)}">${escAttr(t)}</div>`).join('')}
           </div>
         </div>
-
-        <div id="sows-container">${d.sows.map((sow,si)=>sowBlockHtml(sow,si)).join('')}</div>
-        <button class="mini-btn" id="m-add-sow" type="button">+ Tambah SoW</button>
-      </div>
-      <div class="modal-ft">
-        <button class="btn-ghost" id="m-cancel" type="button">Batal</button>
-        <button class="btn-primary" id="m-save" type="button">Simpan</button>
       </div>
     </div>
-  </div>`;
-}
-function sowBlockHtml(sow, si){
-  return `<div class="sow-block" data-sow-idx="${si}">
-    <div class="field"><label>Nama SoW</label><input class="sow-name" data-si="${si}" value="${escAttr(sow.name)}" placeholder="SoW Security & Monitoring"></div>
-    ${sow.boqs.map((boq,bi)=>boqBlockHtml(boq,si,bi)).join('')}
-    <button class="mini-btn" data-add-boq="${si}" type="button">+ Tambah BoQ</button>
-    <button class="mini-btn danger" data-del-sow="${si}" type="button" style="float:right;">Hapus SoW</button>
-  </div>`;
-}
-function boqBlockHtml(boq, si, bi){
-  return `<div class="boq-block" data-boq-idx="${bi}">
-    <div class="field"><label>Nama BoQ</label><input class="boq-name" data-si="${si}" data-bi="${bi}" value="${escAttr(boq.name)}" placeholder="BoQ Utama"></div>
-    ${boq.items.map((it,ii)=>itemBlockHtml(it,si,bi,ii)).join('')}
-    <button class="mini-btn" data-add-item="${si}:${bi}" type="button">+ Tambah item/produk</button>
-    <button class="mini-btn danger" data-del-boq="${si}:${bi}" type="button" style="float:right;">Hapus BoQ</button>
-  </div>`;
-}
-function itemBlockHtml(it, si, bi, ii){
-  return `<div class="item-block" data-item-idx="${ii}">
-    <div style="display:grid; grid-template-columns: 2fr 0.5fr 1.5fr; gap:12px; margin-bottom:12px;">
-      <div class="field" style="margin:0;"><label>Produk</label><input class="it-product" data-path="${si}:${bi}:${ii}" value="${escAttr(it.product)}" placeholder="CCTV"></div>
-      <div class="field" style="margin:0;"><label>Qty</label><input type="number" class="it-qty" data-path="${si}:${bi}:${ii}" value="${it.qty??1}"></div>
-      <div class="field" style="margin:0;"><label>Vendor</label><input class="it-vendor" data-path="${si}:${bi}:${ii}" value="${escAttr(it.vendor)}" placeholder="Nama Vendor"></div>
-    </div>
-    <div class="grid3">
-      <div class="field"><label>SPH Awal item</label><input type="number" class="it-awal" data-path="${si}:${bi}:${ii}" value="${it.sphAwal??''}"></div>
-      <div class="field"><label>SPH Final item</label><input type="number" class="it-final" data-path="${si}:${bi}:${ii}" value="${it.sphFinal??''}"></div>
-      <div class="field"><label>PIC untuk item ini</label>
-        <div class="pic-select">${team.map(t=>`<div class="pic-opt ${it.picIds.includes(t)?'on':''}" data-pic="${si}:${bi}:${ii}:${t}">${t}</div>`).join('')}</div>
-      </div>
-    </div>
-    <div class="field"><label>Notes (Opsional)</label><input class="it-notes" data-path="${si}:${bi}:${ii}" value="${escAttr(it.notes)}" placeholder="Catatan tambahan..."></div>
-    <button class="mini-btn danger" data-del-item="${si}:${bi}:${ii}" type="button">Hapus item</button>
-  </div>`;
-}
-function escAttr(s){ return (s||'').replace(/"/g,'&quot;'); }
-
-function teamModalHtml(d){
-  return `<div class="overlay" id="ov">
-    <div class="modal" style="max-width:480px;">
-      <div class="modal-hd">
-        <h3>Kelola anggota tim presourcing</h3>
-        <button class="mini-btn" id="m-close" type="button">Tutup</button>
-      </div>
-      <div class="modal-body">
-        <div class="field"><label>Nama anggota, pisahkan dengan koma</label>
-          <textarea id="m-team-names" rows="4">${escAttr(d.names)}</textarea>
-        </div>
-        <div class="note">Mengubah daftar ini tidak menghapus data project yang sudah ada.</div>
-      </div>
-      <div class="modal-ft">
-        <button class="btn-ghost" id="m-cancel" type="button">Batal</button>
-        <button class="btn-primary" id="m-save-team" type="button">Simpan</button>
-      </div>
-    </div>
-  </div>`;
+  `;
 }
 
-// ---------- FUNGSI SIMPAN SEMENTARA ----------
+function updateItemFinancialPreview(input) {
+  const path = input.dataset.path;
+  if (!path) return;
+
+  const qtyInput = document.querySelector('.it-qty[data-path="' + path + '"]');
+  const awalInput = document.querySelector('.it-awal-unit[data-path="' + path + '"]');
+  const finalInput = document.querySelector('.it-final-unit[data-path="' + path + '"]');
+  const awalTotal = document.querySelector('[data-total-awal="' + path + '"]');
+  const finalTotal = document.querySelector('[data-total-final="' + path + '"]');
+
+  const totalAwal = calculateUiSphTotal(qtyInput?.value, awalInput?.value);
+  const totalFinal = calculateUiSphTotal(qtyInput?.value, finalInput?.value);
+
+  if (awalTotal) awalTotal.textContent = totalAwal == null ? '—' : fmtIdr(totalAwal);
+  if (finalTotal) finalTotal.textContent = totalFinal == null ? '—' : fmtIdr(totalFinal);
+}
+
 function syncModalData() {
-  if(!modal || modal.type !== 'project') return;
-  // Tangkap posisi scroll saat ini sebelum form di-refresh
-  const m = document.querySelector('.modal');
-  if(m) modalScroll = m.scrollTop;
+  if (!modal || modal.type !== 'project') return;
+  
   const d = modal.data;
   d.name = val('m-name'); d.requestorName = val('m-req-name'); d.requestorDept = val('m-req-dept');
   d.priority = val('m-priority'); d.status = val('m-status'); d.leadId = val('m-lead');
-  d.createdAt = val('m-created') || todayStr(); d.closedAt = val('m-closed') || null;
+  d.targetRfs = val('m-target-rfs'); d.pipelineStage = val('m-pipeline-stage'); d.progressPct = numOrNull(val('m-progress')) || 0;
   d.sphMode = val('m-sphmode');
-  if(d.sphMode==='project'){
+  
+  if (d.sphMode === 'project') {
     d.projectSphAwal = numOrNull(document.getElementById('m-proj-awal').value);
     d.projectSphFinal = numOrNull(document.getElementById('m-proj-final').value);
   }
+
+  document.querySelectorAll('.sow-name').forEach(el => d.sows[+el.dataset.si].name = el.value);
+  document.querySelectorAll('.boq-name').forEach(el => d.sows[+el.dataset.si].boqs[+el.dataset.bi].name = el.value);
   
-  document.querySelectorAll('.sow-name').forEach(el=> d.sows[+el.dataset.si].name = el.value);
-  document.querySelectorAll('.boq-name').forEach(el=> d.sows[+el.dataset.si].boqs[+el.dataset.bi].name = el.value);
-  document.querySelectorAll('.it-qty').forEach(el=>{ const [si,bi,ii]=el.dataset.path.split(':').map(Number); d.sows[si].boqs[bi].items[ii].qty = numOrNull(el.value); });
-  document.querySelectorAll('.it-vendor').forEach(el=>{ const [si,bi,ii]=el.dataset.path.split(':').map(Number); d.sows[si].boqs[bi].items[ii].vendor = el.value; });
-  document.querySelectorAll('.it-notes').forEach(el=>{ const [si,bi,ii]=el.dataset.path.split(':').map(Number); d.sows[si].boqs[bi].items[ii].notes = el.value; });
-  document.querySelectorAll('.it-product').forEach(el=>{ const [si,bi,ii]=el.dataset.path.split(':').map(Number); d.sows[si].boqs[bi].items[ii].product = el.value; });
-  document.querySelectorAll('.it-awal').forEach(el=>{ const [si,bi,ii]=el.dataset.path.split(':').map(Number); d.sows[si].boqs[bi].items[ii].sphAwal = numOrNull(el.value); });
-  document.querySelectorAll('.it-final').forEach(el=>{ const [si,bi,ii]=el.dataset.path.split(':').map(Number); d.sows[si].boqs[bi].items[ii].sphFinal = numOrNull(el.value); });
+  const syncPathField = (selector, setter) => {
+    document.querySelectorAll(selector).forEach(el => {
+      const [si, bi, ii] = el.dataset.path.split(':').map(Number);
+      setter(d.sows[si].boqs[bi].items[ii], el.value);
+    });
+  };
+
+  syncPathField('.it-product', (item, value) => { item.product = value; });
+  syncPathField('.it-qty', (item, value) => { item.qty = numOrNull(value); });
+  syncPathField('.it-uom', (item, value) => { item.uom = value; });
+  syncPathField('.it-vendor', (item, value) => { item.vendor = value; });
+
+  syncPathField('.it-awal-unit', (item, value) => {
+    item.sphAwalUnit = numOrNull(value);
+    item.sphAwal = calculateUiSphTotal(item.qty, item.sphAwalUnit);
+  });
+  syncPathField('.it-final-unit', (item, value) => {
+    item.sphFinalUnit = numOrNull(value);
+    item.sphFinal = calculateUiSphTotal(item.qty, item.sphFinalUnit);
+  });
 }
 
-// ---------- wire modal events with safety checks ----------
-function wireModalEvents(){
+function wireModalEvents() {
   if (!modal) return;
-
-  const close = ()=>{ 
-    modal = null; 
-    let root = document.getElementById('modal-root');
-    if(root) root.innerHTML = ''; 
-    render(); 
-  };
+  const close = () => { modal = null; document.getElementById('modal-root').innerHTML = ''; render(); };
   
-  const c1 = document.getElementById('m-close'); if(c1) c1.onclick = close;
-  const c2 = document.getElementById('m-cancel'); if(c2) c2.onclick = close;
-  
-  const ov = document.getElementById('ov');
-  if(ov) {
-    ov.onclick = (e) => { if(e.target === ov) close(); };
-  }
+  const c1 = document.getElementById('m-close'); if (c1) c1.onclick = close;
+  const c2 = document.getElementById('m-cancel'); if (c2) c2.onclick = close;
+  const ov = document.getElementById('ov'); if (ov) ov.onclick = (e) => { if (e.target === ov) close(); };
 
-  if(modal.type==='team'){
-    const saveTeamBtn = document.getElementById('m-save-team');
-    if(saveTeamBtn){
-      saveTeamBtn.onclick = ()=>{
-        const names = document.getElementById('m-team-names').value.split(',').map(s=>s.trim()).filter(Boolean);
-        team = names.length?names:team;
-        modal = null;
-        render();
-        saveAll();
-      };
-    }
+  if (modal.type === 'team') {
+    const sBtn = document.getElementById('m-save-team');
+    if (sBtn) sBtn.onclick = () => { team = val('m-team-names').split(',').map(s => s.trim()).filter(Boolean); modal = null; render(); saveAll(); };
     return;
   }
-
-  // project modal events (Tiap nambah/hapus selalu panggil syncModalData dulu)
+  
   const sphmode = document.getElementById('m-sphmode');
-  if(sphmode) sphmode.onchange = ()=>{ syncModalData(); modal.data.sphMode = sphmode.value; render(); };
+  if (sphmode) sphmode.onchange = () => { syncModalData(); modal.data.sphMode = sphmode.value; render(); };
 
-  const addSowBtn = document.getElementById('m-add-sow');
-  if(addSowBtn) addSowBtn.onclick = ()=>{
-    syncModalData();
-    modal.data.sows.push({
-      id:uid('sow'), name:'', 
-      boqs:[{
-        id:uid('boq'), name:'', 
-        items:[{id:uid('item'), product:'', qty:1, vendor:'', notes:'', picIds:[], sphAwal:null, sphFinal:null}]
-      }]
-    });
-    render();
-  };
-
-  document.querySelectorAll('[data-add-boq]').forEach(el=> el.onclick=()=>{
-    syncModalData();
-    const si = +el.dataset.addBoq;
-    modal.data.sows[si].boqs.push({
-      id:uid('boq'), name:'', 
-      items:[{id:uid('item'), product:'', qty:1, vendor:'', notes:'', picIds:[], sphAwal:null, sphFinal:null}]
-    });
-    render();
+  document.querySelectorAll('.it-qty, .it-awal-unit, .it-final-unit').forEach(el => {
+    el.addEventListener('input', () => updateItemFinancialPreview(el));
   });
 
-  document.querySelectorAll('[data-add-item]').forEach(el=>{
-    const [si,bi] = el.dataset.addItem.split(':').map(Number);
-    el.onclick = ()=>{ 
-      syncModalData();
-      modal.data.sows[si].boqs[bi].items.push({
-        id:uid('item'), product:'', qty:1, vendor:'', notes:'', picIds:[], sphAwal:null, sphFinal:null
-      }); 
+  const btnAddSow = document.getElementById('m-add-sow');
+  if (btnAddSow) {
+    btnAddSow.onclick = (e) => { 
+      e.preventDefault(); 
+      syncModalData(); 
+      modal.data.sows.push({id:uid('sow'), name:'', boqs:[{id:uid('boq'), name:'', items:[{id:uid('item'), product:'', qty:1, vendor:'', picIds:[], sphAwalUnit:null, sphFinalUnit:null, sphAwal:null, sphFinal:null}]}]}); 
+      render(); 
+    };
+  }
+
+  document.querySelectorAll('[data-add-boq]').forEach(el => {
+    el.onclick = (e) => { 
+      e.preventDefault(); 
+      syncModalData(); 
+      modal.data.sows[+el.dataset.addBoq].boqs.push({id:uid('boq'), name:'', items:[{id:uid('item'), product:'', qty:1, vendor:'', picIds:[], sphAwalUnit:null, sphFinalUnit:null, sphAwal:null, sphFinal:null}]}); 
       render(); 
     };
   });
 
-  document.querySelectorAll('[data-del-sow]').forEach(el=>{
-    const si = +el.dataset.delSow;
-    el.onclick = ()=>{ syncModalData(); modal.data.sows.splice(si,1); render(); };
+  document.querySelectorAll('[data-add-item]').forEach(el => { 
+    const [si, bi] = el.dataset.addItem.split(':').map(Number); 
+    el.onclick = (e) => { 
+      e.preventDefault(); 
+      syncModalData(); 
+      modal.data.sows[si].boqs[bi].items.push({id:uid('item'), product:'', qty:1, vendor:'', picIds:[], sphAwalUnit:null, sphFinalUnit:null, sphAwal:null, sphFinal:null}); 
+      render(); 
+    }; 
   });
 
-  document.querySelectorAll('[data-del-boq]').forEach(el=>{
-    const [si,bi] = el.dataset.delBoq.split(':').map(Number);
-    el.onclick = ()=>{ syncModalData(); modal.data.sows[si].boqs.splice(bi,1); render(); };
-  });
-
-  document.querySelectorAll('[data-del-item]').forEach(el=>{
-    const [si,bi,ii] = el.dataset.delItem.split(':').map(Number);
-    el.onclick = ()=>{ syncModalData(); modal.data.sows[si].boqs[bi].items.splice(ii,1); render(); };
-  });
-
-  document.querySelectorAll('[data-pic]').forEach(el=>{
-    const [si,bi,ii,name] = el.dataset.pic.split(':');
-    el.onclick = ()=>{
+  document.querySelectorAll('[data-del-sow]').forEach(el => {
+    el.onclick = (e) => {
+      e.preventDefault();
       syncModalData();
-      const arr = modal.data.sows[+si].boqs[+bi].items[+ii].picIds;
-      const idx = arr.indexOf(name);
-      if(idx>=0) arr.splice(idx,1); else arr.push(name);
+      modal.data.sows.splice(+el.dataset.delSow, 1);
       render();
     };
   });
 
-  const saveBtn = document.getElementById('m-save');
-  if(saveBtn){
-    saveBtn.onclick = ()=>{
-      syncModalData(); // Cukup panggil fungsi ini saat save
-      const d = modal.data;
-      const idx = projects.findIndex(p=>p.id===d.id);
-      if(idx>=0) projects[idx]=d; else projects.push(d);
+  document.querySelectorAll('[data-del-boq]').forEach(el => { 
+    const [si, bi] = el.dataset.delBoq.split(':').map(Number); 
+    el.onclick = (e) => { 
+      e.preventDefault(); 
+      syncModalData(); 
+      modal.data.sows[si].boqs.splice(bi, 1); 
+      render(); 
+    }; 
+  });
+
+  document.querySelectorAll('[data-del-item]').forEach(el => { 
+    const [si, bi, ii] = el.dataset.delItem.split(':').map(Number); 
+    el.onclick = (e) => { 
+      e.preventDefault(); 
+      syncModalData(); 
+      modal.data.sows[si].boqs[bi].items.splice(ii, 1); 
+      render(); 
+    }; 
+  });
+
+  document.querySelectorAll('[data-pic]').forEach(el => { 
+    const parts = el.dataset.pic.split(':');
+    const si = parseInt(parts[0]);
+    const bi = parseInt(parts[1]);
+    const ii = parseInt(parts[2]);
+    const name = parts.slice(3).join(':');
+
+    el.onclick = (e) => { 
+      e.preventDefault();
+      syncModalData(); 
       
-      let root = document.getElementById('modal-root');
-      if(root) root.innerHTML = '';
-      modal = null;
-      render();
-      saveAll();
+      let arr = modal.data.sows[si].boqs[bi].items[ii].picIds;
+      if (!Array.isArray(arr)) {
+        arr = [];
+        modal.data.sows[si].boqs[bi].items[ii].picIds = arr;
+      }
+
+      const idx = arr.indexOf(name); 
+      if (idx >= 0) arr.splice(idx, 1); 
+      else arr.push(name); 
+      
+      render(); 
+    }; 
+  });
+
+  const saveBtn = document.getElementById('m-save');
+  if (saveBtn) {
+    saveBtn.onclick = (e) => { 
+      e.preventDefault();
+      syncModalData(); 
+      const d = modal.data; 
+      const idx = projects.findIndex(p => p.id === d.id); 
+      if (idx >= 0) projects[idx] = d; 
+      else projects.push(d); 
+      
+      document.getElementById('modal-root').innerHTML = ''; 
+      modal = null; 
+      render(); 
+      saveAll(); 
     };
   }
 }
 
-function val(id){ const el=document.getElementById(id); return el?el.value:''; }
-function numOrNull(v){ return (v===''||v==null) ? null : Number(v); }
+function openUploadPembandingModal(projectId) {
+  const modalHtml = `
+    <div class="overlay" id="upload-pembanding-modal" style="z-index: 100;">
+      <div class="modal" style="max-width: 420px;">
+        <div class="modal-hd">
+          <h3>Unggah SPH Pembanding</h3>
+          <button class="btn-ghost" style="padding: 4px 8px;" onclick="closeUploadPembandingModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="field"><label>Nama Vendor</label><input type="text" id="up-vendor-name"></div>
+          <div class="field"><label>Harga Penawaran SPH</label><input type="number" id="up-vendor-price"></div>
+          <div class="field"><label>Lampiran File</label><input type="file" id="up-vendor-file" accept=".pdf, .xls, .xlsx, .jpg, .png"></div>
+        </div>
+        <div class="modal-ft">
+          <button class="btn-ghost" onclick="closeUploadPembandingModal()">Batal</button>
+          <button class="btn-primary" onclick="submitUploadPembanding('${projectId}')">Simpan</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+}
 
-// Jalankan load data awal saat pertama kali script dimuat
+function closeUploadPembandingModal() { const m = document.getElementById('upload-pembanding-modal'); if (m) m.remove(); }
+
+async function submitUploadPembanding(projectId) {
+  const name = document.getElementById('up-vendor-name').value;
+  const price = document.getElementById('up-vendor-price').value;
+  const file = document.getElementById('up-vendor-file').files[0];
+  if (!name || !price || !file) { alert("Semua kolom wajib diisi!"); return; }
+  
+  const formData = new FormData(); 
+  formData.append('ticket_id', projectId); 
+  formData.append('vendor_name', name); 
+  formData.append('offered_price', price); 
+  formData.append('file', file);
+  
+  document.body.style.cursor = 'wait';
+  try {
+    const res = await fetch('/api/upload_comparison', { method: 'POST', body: formData });
+    const result = await res.json();
+    if (res.ok && result.success) { 
+      alert("Dokumen berhasil ditambahkan!"); 
+      closeUploadPembandingModal(); 
+      loadAll(); 
+    } else {
+      alert(`Gagal: ${result.message}`);
+    }
+  } catch (err) {
+    alert("Terjadi kesalahan sistem."); 
+    closeUploadPembandingModal();
+  } finally { 
+    document.body.style.cursor = 'default'; 
+  }
+}
+
 loadAll();
