@@ -327,10 +327,10 @@ body{
 .revision-empty{ padding:8px; color:#94A3B8; font-size:9.5px; }
 
 /* =========================================================
-   EXECUTIVE DASHBOARD (CLEANED UP)
+   EXECUTIVE DASHBOARD (50:50 GRID LAYOUT)
    ========================================================= */
-/* KPI Top Cards (Mandiri, tidak mengganggu class lain) */
-.exec-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 20px; }
+/* 1. KPI Top Cards (6 Kolom Penuh) */
+.exec-kpis { display: grid; grid-template-columns: repeat(6, 1fr); gap: 14px; margin-bottom: 20px; }
 .exec-kpi { background: #FFFFFF; border: 1px solid #E2E8F0; border-top: 3px solid #3B82F6; border-radius: 8px; padding: 14px; display: flex; align-items: flex-start; gap: 12px; box-shadow: 0 2px 4px rgba(15,23,42,0.04); }
 .exec-kpi:nth-child(2) { border-top-color: #6366F1; }
 .exec-kpi.green { border-top-color: #16A34A; }
@@ -344,13 +344,14 @@ body{
 .exec-kpi-progress { height: 4px; background: #E2E8F0; border-radius: 2px; margin-top: 8px; overflow: hidden; width: 100%; }
 .exec-kpi-progress span { display: block; height: 100%; border-radius: 2px; }
 
-/* Flexbox Layout 2 Kolom yang Tepat (Menggantikan CSS Grid yang kacau) */
-.dash-grid { display: flex; gap: 16px; align-items: flex-start; }
-.dash-col-main { flex: 2; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
-.dash-col-side { flex: 1; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
-@media(max-width: 1024px) { .dash-grid { flex-direction: column; } }
+/* 2. Grid Layout Utama (50:50 Kiri & Kanan) */
+.dash-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+.dash-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 
-/* Pipeline Flow */
+/* 3. Sub-Grid (Status & PIC Sejajar di dalam Kolom Kanan) */
+.dash-sub-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+/* 4. Pipeline Flow */
 .pipeline-flow { display: flex; gap: 10px; width: 100%; }
 .pipeline-step { flex: 1; padding: 14px; border: 1px solid #E2E8F0; border-radius: 6px; background: #F8FAFC; text-align: center; }
 .pipeline-step.active { background: #FFFFFF; border-color: #93C5FD; box-shadow: 0 4px 6px -1px rgba(37,99,235,0.05); }
@@ -364,7 +365,7 @@ body{
 .pipeline-progress span { display: block; height: 100%; background: #2563EB; border-radius: 2px; }
 .pipeline-step.final.active .pipeline-progress span { background: #16A34A; }
 
-/* Warning Box & Donut Chart Teks */
+/* 5. Warning Box & Donut Chart Teks */
 .warning-summary { display: flex; gap: 12px; padding: 12px 16px; border-bottom: 1px solid #E2E8F0; background: #FAFAFA; }
 .warning-box { flex: 1; padding: 12px; border-radius: 6px; background: #FEF2F2; text-align: center; border: 1px solid #FECACA; }
 .warning-box:nth-child(2) { background: #FFFBEB; border-color: #FDE68A; }
@@ -377,19 +378,12 @@ body{
 .exec-donut-number { font-size: 28px; font-weight: 700; color: #0F172A; line-height: 1; margin-bottom: 2px; }
 .exec-donut-label { font-size: 11px; color: #64748B; font-weight: 500; }
 
-@media(max-width: 768px) {
-  .pipeline-flow { flex-direction: column; }
-  .pipeline-step { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; text-align: left; }
-  .pipeline-number { margin: 0; }
-  .pipeline-name { flex: 1; margin-left: 12px; margin-bottom: 0; }
-  .pipeline-count { margin-right: 12px; margin-bottom: 0; }
-  .pipeline-count-label, .pipeline-progress { display: none; }
-}
-
-/* Penyesuaian layar kecil */
-@media(max-width: 1024px) {
-  .exec-grid { grid-template-columns: 1fr; } /* Berubah jadi 1 kolom ke bawah */
-  .exec-panel { grid-column: 1 !important; grid-row: auto !important; }
+/* 6. Responsivitas */
+@media(max-width: 1200px) { .exec-kpis { grid-template-columns: repeat(3, 1fr); } }
+@media(max-width: 1024px) { .dash-grid { grid-template-columns: 1fr; } }
+@media(max-width: 768px) { 
+  .exec-kpis { grid-template-columns: 1fr 1fr; }
+  .dash-sub-grid { grid-template-columns: 1fr; }
   .pipeline-flow { flex-direction: column; }
   .pipeline-step { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; text-align: left; }
   .pipeline-number { margin: 0; }

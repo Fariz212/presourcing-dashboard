@@ -390,63 +390,22 @@ function renderOverview(){
     `;
   });
 
-  return `
+return `
+    <!-- 6 KPI TOP CARDS -->
     <div class="exec-kpis">
-      <div class="exec-kpi">
-        <div class="exec-kpi-icon" style="color:#0284C7;">▣</div>
-        <div>
-          <div class="exec-kpi-label">Total Project</div>
-          <div class="exec-kpi-value">${totalProj}</div>
-          <div class="exec-kpi-meta">${activeProjects} active projects</div>
-        </div>
-      </div>
-      <div class="exec-kpi">
-        <div class="exec-kpi-icon" style="color:#4F46E5;">◉</div>
-        <div>
-          <div class="exec-kpi-label">Total Project Value</div>
-          <div class="exec-kpi-value" style="font-size:15px;">Rp ${valToM(totalVal)} M</div>
-          <div class="exec-kpi-meta">Est. project value</div>
-        </div>
-      </div>
-      <div class="exec-kpi green">
-        <div class="exec-kpi-icon" style="color:#16A34A; background:#F0FDF4;">✓</div>
-        <div style="width:100%;">
-          <div class="exec-kpi-label">On Track</div>
-          <div class="exec-kpi-value">${sCount['On Track']} <small>${getPct(sCount['On Track'])}%</small></div>
-          <div class="exec-kpi-progress"><span style="width:${getPct(sCount['On Track'])}%; background:#16A34A;"></span></div>
-        </div>
-      </div>
-      <div class="exec-kpi yellow">
-        <div class="exec-kpi-icon" style="color:#D97706; background:#FFFBEB;">!</div>
-        <div style="width:100%;">
-          <div class="exec-kpi-label">At Risk</div>
-          <div class="exec-kpi-value">${atRisk} <small style="color:#D97706;">${getPct(atRisk)}%</small></div>
-          <div class="exec-kpi-progress"><span style="width:${getPct(atRisk)}%; background:#F59E0B;"></span></div>
-        </div>
-      </div>
-      <div class="exec-kpi red">
-        <div class="exec-kpi-icon" style="color:#DC2626; background:#FEF2F2;">!</div>
-        <div style="width:100%;">
-          <div class="exec-kpi-label">Overdue</div>
-          <div class="exec-kpi-value">${overdue} <small style="color:#DC2626;">${getPct(overdue)}%</small></div>
-          <div class="exec-kpi-progress"><span style="width:${getPct(overdue)}%; background:#DC2626;"></span></div>
-        </div>
-      </div>
-      <div class="exec-kpi gray">
-        <div class="exec-kpi-icon" style="color:#475569; background:#F8FAFC;">↗</div>
-        <div>
-          <div class="exec-kpi-label">Avg Efficiency</div>
-          <div class="exec-kpi-value">${fmtPct(avgEfficiency)}</div>
-          <div class="exec-kpi-meta">${efficiencies.length} project with data</div>
-        </div>
-      </div>
+      <div class="exec-kpi"><div class="exec-kpi-icon" style="color:#0284C7;">▣</div><div><div class="exec-kpi-label">Total Project</div><div class="exec-kpi-value">${totalProj}</div><div class="exec-kpi-meta">${activeProjects} active projects</div></div></div>
+      <div class="exec-kpi"><div class="exec-kpi-icon" style="color:#4F46E5;">◉</div><div><div class="exec-kpi-label">Total Project Value</div><div class="exec-kpi-value" style="font-size:15px;">Rp ${valToM(totalVal)} M</div><div class="exec-kpi-meta">Est. project value</div></div></div>
+      <div class="exec-kpi green"><div class="exec-kpi-icon" style="color:#16A34A; background:#F0FDF4;">✓</div><div style="width:100%;"><div class="exec-kpi-label">On Track</div><div class="exec-kpi-value">${sCount['On Track']} <small>${getPct(sCount['On Track'])}%</small></div><div class="exec-kpi-progress"><span style="width:${getPct(sCount['On Track'])}%; background:#16A34A;"></span></div></div></div>
+      <div class="exec-kpi yellow"><div class="exec-kpi-icon" style="color:#D97706; background:#FFFBEB;">!</div><div style="width:100%;"><div class="exec-kpi-label">At Risk</div><div class="exec-kpi-value">${atRisk} <small style="color:#D97706;">${getPct(atRisk)}%</small></div><div class="exec-kpi-progress"><span style="width:${getPct(atRisk)}%; background:#F59E0B;"></span></div></div></div>
+      <div class="exec-kpi red"><div class="exec-kpi-icon" style="color:#DC2626; background:#FEF2F2;">!</div><div style="width:100%;"><div class="exec-kpi-label">Overdue</div><div class="exec-kpi-value">${overdue} <small style="color:#DC2626;">${getPct(overdue)}%</small></div><div class="exec-kpi-progress"><span style="width:${getPct(overdue)}%; background:#DC2626;"></span></div></div></div>
+      <div class="exec-kpi gray"><div class="exec-kpi-icon" style="color:#475569; background:#F8FAFC;">↗</div><div><div class="exec-kpi-label">Avg Efficiency</div><div class="exec-kpi-value">${fmtPct(avgEfficiency)}</div><div class="exec-kpi-meta">${efficiencies.length} project with data</div></div></div>
     </div>
 
-    <!-- MENGGUNAKAN KELAS PANEL BAWAAN ASLI -->
+    <!-- GRID LAYOUT 50:50 -->
     <div class="dash-grid">
       
-      <!-- KOLOM KIRI (LEBAR) -->
-      <div class="dash-col-main">
+      <!-- KOLOM KIRI (50%) -->
+      <div class="dash-col">
         <div class="panel">
           <div class="panel-hd">
             <h2>▣ Project Presourcing Overview</h2>
@@ -480,32 +439,37 @@ function renderOverview(){
         </div>
       </div>
 
-      <!-- KOLOM KANAN (SEMPIT) -->
-      <div class="dash-col-side">
-        <div class="panel">
-          <div class="panel-hd"><h2>◉ Project Status</h2></div>
-          <div class="panel-body" style="padding: 16px;">
-            <div style="position: relative; height: 220px; width: 100%;">
-              <canvas id="chartStatus"></canvas>
-              <div class="exec-donut-center">
-                <div class="exec-donut-number">${totalProj}</div>
-                <div class="exec-donut-label">Projects</div>
+      <!-- KOLOM KANAN (50%) -->
+      <div class="dash-col">
+        
+        <!-- SUB-GRID UNTUK STATUS & PIC (Berdampingan) -->
+        <div class="dash-sub-grid">
+          <div class="panel">
+            <div class="panel-hd"><h2>◉ Project Status</h2></div>
+            <div class="panel-body" style="padding: 16px;">
+              <div style="position: relative; height: 215px; width: 100%;">
+                <canvas id="chartStatus"></canvas>
+                <div class="exec-donut-center">
+                  <div class="exec-donut-number">${totalProj}</div>
+                  <div class="exec-donut-label">Projects</div>
+                </div>
               </div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-hd"><h2>▥ Project Value by PIC</h2></div>
+            <div class="panel-body" style="padding: 16px;">
+              <div style="position: relative; height: 215px; width: 100%;"><canvas id="chartPicValue"></canvas></div>
             </div>
           </div>
         </div>
 
-        <div class="panel">
-          <div class="panel-hd"><h2>▥ Project Value by PIC</h2></div>
-          <div class="panel-body" style="padding: 16px;">
-            <div style="position: relative; height: 220px; width: 100%;"><canvas id="chartPicValue"></canvas></div>
-          </div>
-        </div>
-
+        <!-- TARGET RFS & EARLY WARNING (Lebar Penuh di Kolom Kanan) -->
         <div class="panel">
           <div class="panel-hd"><h2>▥ Target RFS by Month</h2></div>
           <div class="panel-body" style="padding: 16px;">
-            <div style="position: relative; height: 220px; width: 100%;"><canvas id="chartRfsMonth"></canvas></div>
+            <div style="position: relative; height: 230px; width: 100%;"><canvas id="chartRfsMonth"></canvas></div>
           </div>
         </div>
 
@@ -528,10 +492,8 @@ function renderOverview(){
           </div>
         </div>
       </div>
-
     </div>
   `;
-}
 
 function renderDashboardCharts() {
     if (typeof Chart === 'undefined') return;
