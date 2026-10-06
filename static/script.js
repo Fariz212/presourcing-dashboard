@@ -494,6 +494,7 @@ return `
       </div>
     </div>
   `;
+}
 
 function renderDashboardCharts() {
     if (typeof Chart === 'undefined') return;
