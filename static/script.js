@@ -324,21 +324,21 @@ function renderOverview(){
     const rfs = p.targetRfs ? new Date(p.targetRfs).toLocaleDateString('id-ID', {day:'2-digit', month:'short', year:'numeric'}) : '—';
 
     overviewRows += `
-      <tr>
+      <tr class="proj-row">
         <td>${idx + 1}</td>
         <td>
-          <div class="exec-project-name" title="${escAttr(p.name)}">${escAttr(p.name)}</div>
-          <div class="exec-project-pic">${escAttr(p.requestorDept || '—')}</div>
+          <div style="font-weight: 600; color: #0F172A; margin-bottom: 2px;" title="${escAttr(p.name)}">${escAttr(p.name)}</div>
+          <div style="font-size: 10.5px; color: #64748B;">${escAttr(p.requestorDept || '—')}</div>
         </td>
-        <td class="mono">${valToM(sph.awal)} M</td>
+        <td class="num mono">${valToM(sph.awal)} M</td>
         <td>${escAttr(p.leadId || '—')}</td>
         <td style="white-space:nowrap">${rfs}</td>
         <td>${badgeStatus(getDynamicStatus(p))}</td>
         <td>
-          <div class="exec-progress">
-            <span class="exec-progress-value">${progress}%</span>
-            <div class="exec-progress-bg">
-              <div class="exec-progress-fill" style="width:${progress}%"></div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 11px; font-weight: 600; width: 32px; text-align: right; color: #475569;">${progress}%</span>
+            <div style="flex: 1; height: 6px; background: #E2E8F0; border-radius: 3px; overflow: hidden; min-width: 60px;">
+              <div style="height: 100%; background: #3B82F6; border-radius: 3px; width:${progress}%"></div>
             </div>
           </div>
         </td>
@@ -355,10 +355,10 @@ function renderOverview(){
     const progress = Number(p.progressPct) || 0;
     const rfs = p.targetRfs ? new Date(p.targetRfs).toLocaleDateString('id-ID', {day:'2-digit', month:'short'}) : '—';
     warningRows += `
-      <tr>
+      <tr class="proj-row">
         <td>
-          <div class="exec-project-name">${escAttr(p.name)}</div>
-          <div class="exec-project-pic">PIC: ${escAttr(p.leadId || '—')}</div>
+          <div style="font-weight: 600; color: #0F172A; margin-bottom: 2px;">${escAttr(p.name)}</div>
+          <div style="font-size: 10.5px; color: #64748B;">PIC: ${escAttr(p.leadId || '—')}</div>
         </td>
         <td style="white-space:nowrap">${rfs}</td>
         <td><strong>${progress}%</strong></td>
@@ -442,71 +442,93 @@ function renderOverview(){
       </div>
     </div>
 
-    <div class="exec-grid">
-      <div class="exec-panel overview">
-        <div class="exec-panel-head">▣ <span>Project Presourcing Overview</span><span class="exec-panel-sub">${totalProj} Projects</span></div>
-        <div class="exec-table-wrap">
-          <table class="exec-table">
-            <thead><tr><th>No</th><th>Project Name</th><th>Value</th><th>PIC</th><th>Target RFS</th><th>Status</th><th>Progress</th></tr></thead>
-            <tbody>${overviewRows}</tbody>
-          </table>
+    <!-- MENGGUNAKAN KELAS PANEL BAWAAN ASLI -->
+    <div class="dash-grid">
+      
+      <!-- KOLOM KIRI (LEBAR) -->
+      <div class="dash-col-main">
+        <div class="panel">
+          <div class="panel-hd">
+            <h2>▣ Project Presourcing Overview</h2>
+            <span class="tag tag-medium" style="color:#fff; border-color:rgba(255,255,255,0.3); background:rgba(255,255,255,0.1);">${totalProj} Projects</span>
+          </div>
+          <div class="panel-body">
+            <div style="overflow-x: auto;">
+              <table>
+                <thead><tr><th>No</th><th>Project Name</th><th>Value</th><th>PIC</th><th>Target RFS</th><th>Status</th><th>Progress</th></tr></thead>
+                <tbody>${overviewRows}</tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-hd">
+            <h2>⇢ Presourcing Progress Pipeline</h2>
+            <span class="tag tag-medium" style="color:#fff; border-color:rgba(255,255,255,0.3); background:rgba(255,255,255,0.1);">${activeProjects} active</span>
+          </div>
+          <div class="panel-body" style="padding: 16px;">
+            <div class="pipeline-flow">${pipelineHtml}</div>
+          </div>
+        </div>
+        
+        <div class="panel">
+          <div class="panel-hd"><h2>≡ Top 5 Project Value</h2></div>
+          <div class="panel-body" style="padding: 16px;">
+            <div style="position: relative; height: 220px; width: 100%;"><canvas id="chartTop5"></canvas></div>
+          </div>
         </div>
       </div>
 
-      <div class="exec-panel status">
-        <div class="exec-panel-head">◉ <span>Project Status</span></div>
-        <div class="exec-panel-body">
-          <div class="exec-donut" style="position: relative; height: 220px; width: 100%;">
-            <canvas id="chartStatus"></canvas>
-            <div class="exec-donut-center">
-              <div class="exec-donut-number">${totalProj}</div>
-              <div class="exec-donut-label">Projects</div>
+      <!-- KOLOM KANAN (SEMPIT) -->
+      <div class="dash-col-side">
+        <div class="panel">
+          <div class="panel-hd"><h2>◉ Project Status</h2></div>
+          <div class="panel-body" style="padding: 16px;">
+            <div style="position: relative; height: 220px; width: 100%;">
+              <canvas id="chartStatus"></canvas>
+              <div class="exec-donut-center">
+                <div class="exec-donut-number">${totalProj}</div>
+                <div class="exec-donut-label">Projects</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-hd"><h2>▥ Project Value by PIC</h2></div>
+          <div class="panel-body" style="padding: 16px;">
+            <div style="position: relative; height: 220px; width: 100%;"><canvas id="chartPicValue"></canvas></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-hd"><h2>▥ Target RFS by Month</h2></div>
+          <div class="panel-body" style="padding: 16px;">
+            <div style="position: relative; height: 220px; width: 100%;"><canvas id="chartRfsMonth"></canvas></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-hd" style="background: #DC2626;">
+            <h2>! Early Warning</h2>
+            <span class="tag" style="background: rgba(255,255,255,0.2); color: #fff; border: none;">Need Attention</span>
+          </div>
+          <div class="panel-body">
+            <div class="warning-summary">
+              <div class="warning-box"><div class="warning-label">Overdue</div><div class="warning-value">${overdue}</div></div>
+              <div class="warning-box"><div class="warning-label">At Risk</div><div class="warning-value">${atRisk}</div></div>
+            </div>
+            <div style="overflow-x: auto;">
+              <table>
+                <thead><tr><th>Project</th><th>RFS</th><th>Progress</th><th>Status</th></tr></thead>
+                <tbody>${warningRows}</tbody>
+              </table>
             </div>
           </div>
         </div>
       </div>
 
-      <div class="exec-panel pic">
-        <div class="exec-panel-head">▥ <span>Project Value by PIC</span></div>
-        <div class="exec-panel-body">
-          <div class="exec-chart" style="position: relative; height: 220px; width: 100%;"><canvas id="chartPicValue"></canvas></div>
-        </div>
-      </div>
-
-      <div class="exec-panel pipeline">
-        <div class="exec-panel-head">⇢ <span>Presourcing Progress Pipeline</span><span class="exec-panel-sub">${activeProjects} active</span></div>
-        <div class="exec-panel-body">
-          <div class="pipeline-flow">${pipelineHtml}</div>
-        </div>
-      </div>
-
-      <div class="exec-panel rfs">
-        <div class="exec-panel-head">▥ <span>Target RFS by Month</span></div>
-        <div class="exec-panel-body">
-          <div class="exec-chart" style="position: relative; height: 220px; width: 100%;"><canvas id="chartRfsMonth"></canvas></div>
-        </div>
-      </div>
-
-      <div class="exec-panel top5">
-        <div class="exec-panel-head">≡ <span>Top 5 Project Value</span></div>
-        <div class="exec-panel-body">
-          <div class="exec-chart" style="position: relative; height: 220px; width: 100%;"><canvas id="chartTop5"></canvas></div>
-        </div>
-      </div>
-
-      <div class="exec-panel warning">
-        <div class="exec-panel-head warning-head">! <span>Early Warning</span><span class="exec-panel-sub">Need Attention</span></div>
-        <div class="warning-summary">
-          <div class="warning-box"><div class="warning-label">Overdue</div><div class="warning-value">${overdue}</div></div>
-          <div class="warning-box"><div class="warning-label">At Risk</div><div class="warning-value">${atRisk}</div></div>
-        </div>
-        <div class="exec-table-wrap">
-          <table class="exec-table">
-            <thead><tr><th>Project</th><th>RFS</th><th>Progress</th><th>Status</th></tr></thead>
-            <tbody>${warningRows}</tbody>
-          </table>
-        </div>
-      </div>
     </div>
   `;
 }
