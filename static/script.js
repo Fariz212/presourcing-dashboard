@@ -386,6 +386,7 @@ function renderOverview() {
         width: 100%;
         max-width: 1420px;
         margin: 0 auto;
+        padding-top: 24px;
       }
 
       /* =====================================================
@@ -630,10 +631,16 @@ function renderOverview() {
 
       .exec-grid {
         display: grid;
+
         grid-template-columns:
           minmax(0, 1.55fr)
           minmax(0, .72fr)
           minmax(0, .72fr);
+
+        grid-template-rows:
+          260px
+          auto
+          auto;
 
         grid-template-areas:
           "overview status pic"
@@ -641,7 +648,8 @@ function renderOverview() {
           "top5 top5 warning";
 
         gap: 12px;
-        align-items: start;
+
+        align-items: stretch;
       }
 
       /* =====================================================
@@ -687,6 +695,7 @@ function renderOverview() {
 
       .exec-panel.overview {
         grid-area: overview;
+        min-height: 260px;
       }
 
       .exec-panel.status {
@@ -810,7 +819,7 @@ function renderOverview() {
          ===================================================== */
 
       .exec-chart {
-        height: 155px;
+        height: 150px;
         position: relative;
         width: 100%;
       }
@@ -821,7 +830,7 @@ function renderOverview() {
       }
 
       .exec-donut {
-        height: 170px;
+        height: 150px;
         position: relative;
       }
 
@@ -902,7 +911,7 @@ function renderOverview() {
       .pipeline-step {
         position: relative;
         min-width: 0;
-        min-height: 105px;
+        min-height: 100px;
         padding: 9px 7px 8px;
         background: #F2F7FD;
         border: 1px solid #BFD7F3;
@@ -1012,6 +1021,10 @@ function renderOverview() {
          ===================================================== */
 
       @media(max-width:1100px) {
+
+        .page-shell {
+          padding-top: 16px;
+        }
         .page-hero-side {
           display: none;
         }
