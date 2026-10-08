@@ -638,7 +638,7 @@ function renderOverview() {
           minmax(0, .72fr);
 
         grid-template-rows:
-          260px
+          230px
           auto
           auto;
 
@@ -681,6 +681,44 @@ function renderOverview() {
         font-size: 12px;
         font-weight: 700;
       }
+        /* =====================================================
+   EARLY WARNING - RED ALERT PANEL
+   ===================================================== */
+
+      .exec-panel.warning .exec-panel-head {
+        background: linear-gradient(
+          90deg,
+          #DC2626 0%,
+          #EF4444 100%
+        );
+      }
+
+      .exec-panel.warning .exec-panel-sub {
+        color: #FFFFFF;
+        opacity: .9;
+      }
+
+      .exec-panel.warning {
+        border-color: #FECACA;
+      }
+
+      .exec-panel.warning .warning-summary {
+        background: #FEF2F2;
+        border-bottom-color: #FECACA;
+      }
+
+      .exec-panel.warning .warning-box {
+        border-color: #FECACA;
+        background: #FFFFFF;
+      }
+
+      .exec-panel.warning .warning-label {
+        color: #B91C1C;
+      }
+
+      .exec-panel.warning .warning-value {
+        color: #991B1B;
+      }
 
       .exec-panel-sub {
         margin-left: auto;
@@ -695,7 +733,7 @@ function renderOverview() {
 
       .exec-panel.overview {
         grid-area: overview;
-        min-height: 260px;
+        min-height: auto;
       }
 
       .exec-panel.status {
@@ -1040,11 +1078,10 @@ function renderOverview() {
           grid-template-areas:
             "overview overview"
             "status pic"
-            "rfs rfs"
             "pipeline pipeline"
+            "rfs rfs"
             "top5 warning";
-        }
-      }
+          }
 
       @media(max-width:700px) {
         .page-hero {
@@ -1060,23 +1097,40 @@ function renderOverview() {
             repeat(2, minmax(0, 1fr));
         }
 
-        .exec-grid {
-          grid-template-columns: 1fr;
-
-          grid-template-areas:
-            "overview"
-            "status"
-            "pic"
-            "rfs"
-            "pipeline"
-            "top5"
-            "warning";
-        }
-
         .pipeline-flow {
           grid-template-columns:
             repeat(3, minmax(0, 1fr));
         }
+        .exec-grid {
+          grid-template-columns: 1fr 1fr;
+
+          grid-template-areas:
+            "overview overview"
+            "status pic"
+            "pipeline pipeline"
+            "rfs rfs"
+            "top5 warning";
+        }
+      }
+      .exec-grid {
+        display: grid;
+
+        /*
+        * 12-column grid:
+        * Row 1  = Overview 50% | Status 25% | PIC 25%
+        * Row 2  = Pipeline 50% | Target RFS 50%
+        * Row 3  = Top 5 75%    | Early Warning 25%
+        */
+        grid-template-columns:
+          repeat(12, minmax(0, 1fr));
+
+        grid-template-areas:
+          "overview overview overview overview overview overview status status status pic pic pic"
+          "pipeline pipeline pipeline pipeline pipeline pipeline rfs rfs rfs rfs rfs rfs"
+          "top5 top5 top5 top5 top5 top5 top5 top5 top5 warning warning warning";
+
+        gap: 12px;
+        align-items: start;
       }
 
     </style>
