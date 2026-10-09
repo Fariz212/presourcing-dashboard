@@ -345,12 +345,6 @@ function renderOverview() {
   const atRisk = sCount['At Risk'];
   const overdue = sCount['Overdue'];
 
-  /*
-   * =========================================================
-   * CHART.JS
-   * =========================================================
-   */
-
   if (
     !window.Chart &&
     !document.getElementById('chartjs-script')
@@ -369,1448 +363,161 @@ function renderOverview() {
     setTimeout(renderDashboardCharts, 80);
   }
 
-  /*
-   * =========================================================
-   * DASHBOARD UI STYLE
-   * =========================================================
-   */
-
   const dashStyles = `
     <style>
-
-      /* =====================================================
-         PAGE
-         ===================================================== */
-
-      .page-shell {
-        width: 100%;
-        max-width: 1420px;
-        margin: 0 auto;
-        padding-top: 24px;
-      }
-
-      /* =====================================================
-         HERO
-         ===================================================== */
-
-      .page-hero {
-        min-height: 76px;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 20px;
-        padding: 12px 18px;
-        margin-bottom: 12px;
-        border-radius: 10px;
-        color: #fff;
-        background: linear-gradient(
-          115deg,
-          #0B4F91 0%,
-          #1769C2 58%,
-          #2583DA 100%
-        );
-        box-shadow: 0 4px 12px rgba(15,23,42,.12);
-        position: relative;
-        overflow: hidden;
-      }
-
-      .page-hero::after {
-        content: '';
-        position: absolute;
-        width: 260px;
-        height: 160px;
-        right: -70px;
-        top: -90px;
-        background: rgba(255,255,255,.07);
-        transform: rotate(28deg);
-        pointer-events: none;
-      }
-
-      .page-hero-main {
-        position: relative;
-        z-index: 1;
-        min-width: 0;
-      }
-
-      .page-hero-title {
-        font-size: 22px;
-        line-height: 1.1;
-        font-weight: 700;
-        letter-spacing: .01em;
-      }
-
-      .page-hero-sub {
-        margin-top: 5px;
-        font-size: 11px;
-        color: rgba(255,255,255,.78);
-      }
-
-      .page-hero-side {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        position: relative;
-        z-index: 1;
-      }
-
-      .objective-box {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 7px 11px;
-        min-width: 230px;
-        border: 1px solid rgba(255,255,255,.25);
-        border-radius: 7px;
-        background: rgba(255,255,255,.08);
-      }
-
-      .objective-icon {
-        width: 28px;
-        height: 28px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 50%;
-        border: 2px solid rgba(255,255,255,.85);
-        font-size: 15px;
-        font-weight: 700;
-      }
-
-      .objective-label {
-        font-size: 9px;
-        font-weight: 700;
-        color: rgba(255,255,255,.92);
-        text-transform: uppercase;
-        letter-spacing: .05em;
-      }
-
-      .objective-text {
-        margin-top: 2px;
-        font-size: 9.5px;
-        line-height: 1.25;
-        color: rgba(255,255,255,.78);
-        max-width: 210px;
-      }
-
-      .data-date {
-        display: flex;
-        flex-direction: column;
-        gap: 2px;
-        padding: 7px 11px;
-        border: 1px solid rgba(255,255,255,.20);
-        border-radius: 7px;
-        min-width: 110px;
-      }
-
-      .data-date span {
-        font-size: 8.5px;
-        color: rgba(255,255,255,.65);
-      }
-
-      .data-date strong {
-        font-size: 9.5px;
-        color: #fff;
-      }
-
-      /* =====================================================
-         KPI
-         ===================================================== */
-
-      .exec-kpis {
-        display: grid;
-        grid-template-columns:
-          repeat(6, minmax(0, 1fr));
-        gap: 9px;
-        margin-bottom: 12px;
-      }
-
-      .exec-kpi {
-        min-height: 72px;
-        padding: 10px 11px;
-        display: flex;
-        align-items: center;
-        gap: 9px;
-        border: 1px solid #dbe3ec;
-        border-radius: 8px;
-        background: #fff;
-        position: relative;
-        overflow: hidden;
-        box-shadow:
-          0 1px 3px rgba(15,23,42,.04);
-      }
-
-      .exec-kpi::after {
-        content: '';
-        position: absolute;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        height: 3px;
-        background: #3B82F6;
-      }
-
-      .exec-kpi:nth-child(2)::after {
-        background: #6366F1;
-      }
-
-      .exec-kpi.green::after {
-        background: #16A34A;
-      }
-
-      .exec-kpi.yellow::after {
-        background: #F59E0B;
-      }
-
-      .exec-kpi.red::after {
-        background: #DC2626;
-      }
-
-      .exec-kpi.gray::after {
-        background: #94A3B8;
-      }
-
-      .exec-kpi-icon {
-        width: 32px;
-        height: 32px;
-        flex: 0 0 32px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 7px;
-        background: #F1F5F9;
-        color: #64748B;
-        font-size: 15px;
-      }
-
-      .exec-kpi-label {
-        font-size: 9.5px;
-        color: #64748B;
-        margin-bottom: 3px;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: .03em;
-      }
-
-      .exec-kpi-value {
-        font-size: 18px;
-        font-weight: 700;
-        color: #0F172A;
-        line-height: 1.1;
-      }
-
-      .exec-kpi-value small {
-        font-size: 9.5px;
-        color: #16A34A;
-        font-weight: 600;
-      }
-
-      .exec-kpi-meta {
-        font-size: 8.5px;
-        color: #94A3B8;
-        margin-top: 4px;
-      }
-
-      .exec-kpi-progress {
-        height: 4px;
-        background: #E2E8F0;
-        border-radius: 2px;
-        margin-top: 6px;
-        overflow: hidden;
-        width: 100%;
-      }
-
-      .exec-kpi-progress span {
-        display: block;
-        height: 100%;
-        border-radius: 2px;
-      }
-
-      /* =====================================================
-         MAIN DASHBOARD GRID
-         ===================================================== */
-
-      .exec-grid {
-        display: grid;
-
-        grid-template-columns:
-          minmax(0, 1.55fr)
-          minmax(0, .72fr)
-          minmax(0, .72fr);
-
-        grid-template-rows:
-          230px
-          auto
-          auto;
-
-        grid-template-areas:
-          "overview status pic"
-          "pipeline pipeline rfs"
-          "top5 top5 warning";
-
-        gap: 12px;
-
-        align-items: stretch;
-      }
-
-      /* =====================================================
-         PANELS
-         ===================================================== */
-
-      .exec-panel {
-        min-width: 0;
-        background: #FFFFFF;
-        border: 1px solid #DCE4EE;
-        border-radius: 8px;
-        overflow: hidden;
-        box-shadow:
-          0 2px 4px rgba(15,23,42,.04);
-      }
-
-      .exec-panel-head {
-        min-height: 42px;
-        padding: 11px 14px;
-        display: flex;
-        align-items: center;
-        gap: 5px;
-        background: linear-gradient(
-          90deg,
-          #0F5CA8 0%,
-          #1672C8 100%
-        );
-        color: #FFFFFF;
-        font-size: 12px;
-        font-weight: 700;
-      }
-        /* =====================================================
-   EARLY WARNING - RED ALERT PANEL
-   ===================================================== */
-
-      .exec-panel.warning .exec-panel-head {
-        background: linear-gradient(
-          90deg,
-          #DC2626 0%,
-          #EF4444 100%
-        );
-      }
-
-      .exec-panel.warning .exec-panel-sub {
-        color: #FFFFFF;
-        opacity: .9;
-      }
-
-      .exec-panel.warning {
-        border-color: #FECACA;
-      }
-
-      .exec-panel.warning .warning-summary {
-        background: #FEF2F2;
-        border-bottom-color: #FECACA;
-      }
-
-      .exec-panel.warning .warning-box {
-        border-color: #FECACA;
-        background: #FFFFFF;
-      }
-
-      .exec-panel.warning .warning-label {
-        color: #B91C1C;
-      }
-
-      .exec-panel.warning .warning-value {
-        color: #991B1B;
-      }
-
-      .exec-panel-sub {
-        margin-left: auto;
-        font-size: 9px;
-        font-weight: 500;
-        opacity: .8;
-      }
-
-      .exec-panel-body {
-        padding: 10px;
-      }
-
-      .exec-panel.overview {
-        grid-area: overview;
-        min-height: auto;
-      }
-
-      .exec-panel.status {
-        grid-area: status;
-      }
-
-      .exec-panel.pic {
-        grid-area: pic;
-      }
-
-      .exec-panel.pipeline {
-        grid-area: pipeline;
-      }
-
-      .exec-panel.rfs {
-        grid-area: rfs;
-      }
-
-      .exec-panel.top5 {
-        grid-area: top5;
-      }
-
-      .exec-panel.warning {
-        grid-area: warning;
-      }
-
-      /* =====================================================
-         PROJECT TABLE
-         ===================================================== */
-
-      .exec-table-wrap {
-        width: 100%;
-        overflow-x: auto;
-      }
-
-      .exec-table {
-        width: 100%;
-        border-collapse: collapse;
-        table-layout: auto;
-      }
-
-      .exec-table th {
-        padding: 8px 7px;
-        background: #F4F7FB;
-        color: #64748B;
-        border-bottom: 1px solid #DCE4EE;
-        font-size: 8.5px;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: .03em;
-        white-space: nowrap;
-        text-align: left;
-      }
-
-      .exec-table td {
-        padding: 8px 7px;
-        border-bottom: 1px solid #EEF2F6;
-        color: #334155;
-        font-size: 9.5px;
-        line-height: 1.3;
-        vertical-align: middle;
-      }
-
-      .exec-table tbody tr:last-child td {
-        border-bottom: 0;
-      }
-
-      .exec-table .mono {
-        font-size: 9px;
-        white-space: nowrap;
-      }
-
-      .exec-project-name {
-        max-width: 180px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        font-weight: 600;
-        color: #0F172A;
-      }
-
-      .exec-project-pic {
-        margin-top: 2px;
-        color: #94A3B8;
-        font-size: 8px;
-      }
-
-      /* =====================================================
-         PROGRESS
-         ===================================================== */
-
-      .exec-progress {
-        display: flex;
-        align-items: center;
-        gap: 4px;
-      }
-
-      .exec-progress-value {
-        width: 25px;
-        text-align: right;
-        font-size: 8.5px;
-        font-weight: 600;
-      }
-
-      .exec-progress-bg {
-        width: 38px;
-        height: 4px;
-        border-radius: 8px;
-        overflow: hidden;
-        background: #E2E8F0;
-      }
-
-      .exec-progress-fill {
-        height: 100%;
-        background: #2583DA;
-        border-radius: 8px;
-      }
-
-      /* =====================================================
-         CHART
-         ===================================================== */
-
-      .exec-chart {
-        height: 150px;
-        position: relative;
-        width: 100%;
-      }
-
-      .exec-chart canvas {
-        width: 100% !important;
-        height: 100% !important;
-      }
-
-      .exec-donut {
-        height: 150px;
-        position: relative;
-      }
-
-      .exec-donut canvas {
-        width: 100% !important;
-        height: 100% !important;
-      }
-
-      .exec-donut-center {
-        position: absolute;
-        left: 37%;
-        top: 50%;
-        transform: translate(-50%, -50%);
-        text-align: center;
-        pointer-events: none;
-      }
-
-      .exec-donut-number {
-        font-size: 22px;
-        line-height: 1;
-        font-weight: 700;
-        color: #0F172A;
-      }
-
-      .exec-donut-label {
-        margin-top: 2px;
-        font-size: 8px;
-        color: #64748B;
-      }
-
-      /* =====================================================
-         WARNING
-         ===================================================== */
-
-      .warning-summary {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 6px;
-        padding: 7px;
-        background: #FFFBEB;
-        border-bottom: 1px solid #FDE68A;
-      }
-
-      .warning-box {
-        padding: 5px 7px;
-        background: #fff;
-        border: 1px solid #FDE68A;
-        border-radius: 5px;
-      }
-
-      .warning-label {
-        font-size: 7.5px;
-        color: #92400E;
-        font-weight: 700;
-        text-transform: uppercase;
-      }
-
-      .warning-value {
-        margin-top: 1px;
-        font-size: 15px;
-        line-height: 1;
-        font-weight: 700;
-        color: #78350F;
-      }
-
-      /* =====================================================
-         PIPELINE
-         ===================================================== */
-
-      .pipeline-flow {
-        display: grid;
-        grid-template-columns:
-          repeat(6, minmax(0, 1fr));
-        gap: 2px;
-        margin-top: 1px;
-      }
-
-      .pipeline-step {
-        position: relative;
-        min-width: 0;
-        min-height: 100px;
-        padding: 9px 7px 8px;
-        background: #F2F7FD;
-        border: 1px solid #BFD7F3;
-        text-align: center;
-
-        clip-path: polygon(
-          0 0,
-          calc(100% - 10px) 0,
-          100% 50%,
-          calc(100% - 10px) 100%,
-          0 100%,
-          10px 50%
-        );
-      }
-
-      .pipeline-step:first-child {
-        clip-path: polygon(
-          0 0,
-          calc(100% - 10px) 0,
-          100% 50%,
-          calc(100% - 10px) 100%,
-          0 100%
-        );
-      }
-
-      .pipeline-step:last-child {
-        clip-path: polygon(
-          0 0,
-          100% 0,
-          100% 100%,
-          0 100%,
-          10px 50%
-        );
-      }
-
-      .pipeline-step.active {
-        background: #E8F2FE;
-        border-color: #93C5FD;
-      }
-
-      .pipeline-step.final {
-        background: #F0FDF4;
-        border-color: #86EFAC;
-      }
-
-      .pipeline-number {
-        width: 22px;
-        height: 22px;
-        margin: 0 auto 6px;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: #2563EB;
-        color: #fff;
-        font-size: 9px;
-        font-weight: 700;
-      }
-
-      .pipeline-step.final .pipeline-number {
-        background: #16A34A;
-      }
-
-      .pipeline-name {
-        min-height: 25px;
-        font-size: 8px;
-        line-height: 1.2;
-        font-weight: 600;
-        color: #334155;
-      }
-
-      .pipeline-count {
-        margin-top: 5px;
-        font-size: 15px;
-        line-height: 1;
-        font-weight: 700;
-        color: #0F172A;
-      }
-
-      .pipeline-count-label {
-        margin-top: 2px;
-        font-size: 7.5px;
-        color: #94A3B8;
-      }
-
-      .pipeline-progress {
-        margin-top: 6px;
-        height: 4px;
-        background: #DCE5EF;
-        border-radius: 8px;
-        overflow: hidden;
-      }
-
-      .pipeline-progress span {
-        display: block;
-        height: 100%;
-        background: #2681D8;
-        border-radius: 8px;
-      }
-
-      .pipeline-step.final .pipeline-progress span {
-        background: #16A34A;
-      }
-
-      /* =====================================================
-         RESPONSIVE
-         ===================================================== */
-
+      .page-shell { width: 100%; max-width: 1420px; margin: 0 auto; padding-top: 24px; }
+      .page-hero { min-height: 76px; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 12px 18px; margin-bottom: 12px; border-radius: 10px; color: #fff; background: linear-gradient(115deg, #0B4F91 0%, #1769C2 58%, #2583DA 100%); box-shadow: 0 4px 12px rgba(15,23,42,.12); position: relative; overflow: hidden; }
+      .page-hero::after { content: ''; position: absolute; width: 260px; height: 160px; right: -70px; top: -90px; background: rgba(255,255,255,.07); transform: rotate(28deg); pointer-events: none; }
+      .page-hero-main { position: relative; z-index: 1; min-width: 0; }
+      .page-hero-title { font-size: 22px; line-height: 1.1; font-weight: 700; letter-spacing: .01em; }
+      .page-hero-sub { margin-top: 5px; font-size: 11px; color: rgba(255,255,255,.78); }
+      .page-hero-side { display: flex; align-items: center; gap: 10px; position: relative; z-index: 1; }
+      .objective-box { display: flex; align-items: center; gap: 8px; padding: 7px 11px; min-width: 230px; border: 1px solid rgba(255,255,255,.25); border-radius: 7px; background: rgba(255,255,255,.08); }
+      .objective-icon { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 50%; border: 2px solid rgba(255,255,255,.85); font-size: 15px; font-weight: 700; }
+      .objective-label { font-size: 9px; font-weight: 700; color: rgba(255,255,255,.92); text-transform: uppercase; letter-spacing: .05em; }
+      .objective-text { margin-top: 2px; font-size: 9.5px; line-height: 1.25; color: rgba(255,255,255,.78); max-width: 210px; }
+      .data-date { display: flex; flex-direction: column; gap: 2px; padding: 7px 11px; border: 1px solid rgba(255,255,255,.20); border-radius: 7px; min-width: 110px; }
+      .data-date span { font-size: 8.5px; color: rgba(255,255,255,.65); }
+      .data-date strong { font-size: 9.5px; color: #fff; }
+      .exec-kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 9px; margin-bottom: 12px; }
+      .exec-kpi { min-height: 72px; padding: 10px 11px; display: flex; align-items: center; gap: 9px; border: 1px solid #dbe3ec; border-radius: 8px; background: #fff; position: relative; overflow: hidden; box-shadow: 0 1px 3px rgba(15,23,42,.04); }
+      .exec-kpi::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: #3B82F6; }
+      .exec-kpi:nth-child(2)::after { background: #6366F1; }
+      .exec-kpi.green::after { background: #16A34A; }
+      .exec-kpi.yellow::after { background: #F59E0B; }
+      .exec-kpi.red::after { background: #DC2626; }
+      .exec-kpi.gray::after { background: #94A3B8; }
+      .exec-kpi-icon { width: 32px; height: 32px; flex: 0 0 32px; display: flex; align-items: center; justify-content: center; border-radius: 7px; background: #F1F5F9; color: #64748B; font-size: 15px; }
+      .exec-kpi-label { font-size: 9.5px; color: #64748B; margin-bottom: 3px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; }
+      .exec-kpi-value { font-size: 18px; font-weight: 700; color: #0F172A; line-height: 1.1; }
+      .exec-kpi-value small { font-size: 9.5px; color: #16A34A; font-weight: 600; }
+      .exec-kpi-meta { font-size: 8.5px; color: #94A3B8; margin-top: 4px; }
+      .exec-kpi-progress { height: 4px; background: #E2E8F0; border-radius: 2px; margin-top: 6px; overflow: hidden; width: 100%; }
+      .exec-kpi-progress span { display: block; height: 100%; border-radius: 2px; }
+      .exec-panel { min-width: 0; background: #FFFFFF; border: 1px solid #DCE4EE; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(15,23,42,.04); }
+      .exec-panel-head { min-height: 42px; padding: 11px 14px; display: flex; align-items: center; gap: 5px; background: linear-gradient(90deg, #0F5CA8 0%, #1672C8 100%); color: #FFFFFF; font-size: 12px; font-weight: 700; }
+      .exec-panel.warning .exec-panel-head { background: linear-gradient(90deg, #DC2626 0%, #EF4444 100%); }
+      .exec-panel.warning .exec-panel-sub { color: #FFFFFF; opacity: .9; }
+      .exec-panel.warning { border-color: #FECACA; }
+      .exec-panel.warning .warning-summary { background: #FEF2F2; border-bottom-color: #FECACA; }
+      .exec-panel.warning .warning-box { border-color: #FECACA; background: #FFFFFF; }
+      .exec-panel.warning .warning-label { color: #B91C1C; }
+      .exec-panel.warning .warning-value { color: #991B1B; }
+      .exec-panel-sub { margin-left: auto; font-size: 9px; font-weight: 500; opacity: .8; }
+      .exec-panel-body { padding: 10px; }
+      .exec-panel.overview { grid-area: overview; min-height: auto; }
+      .exec-panel.status { grid-area: status; }
+      .exec-panel.pic { grid-area: pic; }
+      .exec-panel.pipeline { grid-area: pipeline; }
+      .exec-panel.rfs { grid-area: rfs; }
+      .exec-panel.top5 { grid-area: top5; }
+      .exec-panel.warning { grid-area: warning; }
+      .exec-table-wrap { width: 100%; overflow-x: auto; }
+      .exec-table { width: 100%; border-collapse: collapse; table-layout: auto; }
+      .exec-table th { padding: 8px 7px; background: #F4F7FB; color: #64748B; border-bottom: 1px solid #DCE4EE; font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; text-align: left; }
+      .exec-table td { padding: 8px 7px; border-bottom: 1px solid #EEF2F6; color: #334155; font-size: 9.5px; line-height: 1.3; vertical-align: middle; }
+      .exec-table tbody tr:last-child td { border-bottom: 0; }
+      .exec-table .mono { font-size: 9px; white-space: nowrap; }
+      .exec-project-name { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; color: #0F172A; }
+      .exec-project-pic { margin-top: 2px; color: #94A3B8; font-size: 8px; }
+      .exec-progress { display: flex; align-items: center; gap: 4px; }
+      .exec-progress-value { width: 25px; text-align: right; font-size: 8.5px; font-weight: 600; }
+      .exec-progress-bg { width: 38px; height: 4px; border-radius: 8px; overflow: hidden; background: #E2E8F0; }
+      .exec-progress-fill { height: 100%; background: #2583DA; border-radius: 8px; }
+      .exec-chart { height: 150px; position: relative; width: 100%; }
+      .exec-chart canvas { width: 100% !important; height: 100% !important; }
+      .exec-donut { height: 150px; position: relative; }
+      .exec-donut canvas { width: 100% !important; height: 100% !important; }
+      .exec-donut-center { position: absolute; left: 37%; top: 50%; transform: translate(-50%, -50%); text-align: center; pointer-events: none; }
+      .exec-donut-number { font-size: 22px; line-height: 1; font-weight: 700; color: #0F172A; }
+      .exec-donut-label { margin-top: 2px; font-size: 8px; color: #64748B; }
+      .warning-summary { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 7px; background: #FFFBEB; border-bottom: 1px solid #FDE68A; }
+      .warning-box { padding: 5px 7px; background: #fff; border: 1px solid #FDE68A; border-radius: 5px; }
+      .warning-label { font-size: 7.5px; color: #92400E; font-weight: 700; text-transform: uppercase; }
+      .warning-value { margin-top: 1px; font-size: 15px; line-height: 1; font-weight: 700; color: #78350F; }
+      .pipeline-flow { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 2px; margin-top: 1px; }
+      .pipeline-step { position: relative; min-width: 0; min-height: 100px; padding: 9px 7px 8px; background: #F2F7FD; border: 1px solid #BFD7F3; text-align: center; clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%, 10px 50%); }
+      .pipeline-step:first-child { clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%); }
+      .pipeline-step:last-child { clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 10px 50%); }
+      .pipeline-step.active { background: #E8F2FE; border-color: #93C5FD; }
+      .pipeline-step.final { background: #F0FDF4; border-color: #86EFAC; }
+      .pipeline-number { width: 22px; height: 22px; margin: 0 auto 6px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: #2563EB; color: #fff; font-size: 9px; font-weight: 700; }
+      .pipeline-step.final .pipeline-number { background: #16A34A; }
+      .pipeline-name { min-height: 25px; font-size: 8px; line-height: 1.2; font-weight: 600; color: #334155; }
+      .pipeline-count { margin-top: 5px; font-size: 15px; line-height: 1; font-weight: 700; color: #0F172A; }
+      .pipeline-count-label { margin-top: 2px; font-size: 7.5px; color: #94A3B8; }
+      .pipeline-progress { margin-top: 6px; height: 4px; background: #DCE5EF; border-radius: 8px; overflow: hidden; }
+      .pipeline-progress span { display: block; height: 100%; background: #2681D8; border-radius: 8px; }
+      .pipeline-step.final .pipeline-progress span { background: #16A34A; }
       @media(max-width:1100px) {
-
-        .page-shell {
-          padding-top: 16px;
-        }
-        .page-hero-side {
-          display: none;
-        }
-
-        .exec-kpis {
-          grid-template-columns:
-            repeat(3, minmax(0, 1fr));
-        }
-
-        .exec-grid {
-          grid-template-columns: 1fr 1fr;
-
-          grid-template-areas:
-            "overview overview"
-            "status pic"
-            "pipeline pipeline"
-            "rfs rfs"
-            "top5 warning";
-          }
-
+        .page-shell { padding-top: 16px; }
+        .page-hero-side { display: none; }
+        .exec-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        .exec-grid { grid-template-columns: 1fr 1fr; grid-template-areas: "overview overview" "status pic" "pipeline pipeline" "rfs rfs" "top5 warning"; }
+      }
       @media(max-width:700px) {
-        .page-hero {
-          min-height: auto;
-        }
-
-        .page-hero-title {
-          font-size: 18px;
-        }
-
-        .exec-kpis {
-          grid-template-columns:
-            repeat(2, minmax(0, 1fr));
-        }
-
-        .pipeline-flow {
-          grid-template-columns:
-            repeat(3, minmax(0, 1fr));
-        }
-        .exec-grid {
-          grid-template-columns: 1fr 1fr;
-
-          grid-template-areas:
-            "overview overview"
-            "status pic"
-            "pipeline pipeline"
-            "rfs rfs"
-            "top5 warning";
-        }
+        .page-hero { min-height: auto; }
+        .page-hero-title { font-size: 18px; }
+        .exec-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .pipeline-flow { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        .exec-grid { grid-template-columns: 1fr 1fr; grid-template-areas: "overview overview" "status pic" "pipeline pipeline" "rfs rfs" "top5 warning"; }
       }
-      .exec-grid {
-        display: grid;
-
-        /*
-        * 12-column grid:
-        * Row 1  = Overview 50% | Status 25% | PIC 25%
-        * Row 2  = Pipeline 50% | Target RFS 50%
-        * Row 3  = Top 5 75%    | Early Warning 25%
-        */
-        grid-template-columns:
-          repeat(12, minmax(0, 1fr));
-
-        grid-template-areas:
-          "overview overview overview overview overview overview status status status pic pic pic"
-          "pipeline pipeline pipeline pipeline pipeline pipeline rfs rfs rfs rfs rfs rfs"
-          "top5 top5 top5 top5 top5 top5 top5 top5 top5 warning warning warning";
-
-        gap: 12px;
-        align-items: start;
-      }
-
+      .exec-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); grid-template-areas: "overview overview overview overview overview overview status status status pic pic pic" "pipeline pipeline pipeline pipeline pipeline pipeline rfs rfs rfs rfs rfs rfs" "top5 top5 top5 top5 top5 top5 top5 top5 top5 warning warning warning"; gap: 12px; align-items: start; }
     </style>
   `;
 
-  /*
-   * =========================================================
-   * PROJECT TABLE
-   * =========================================================
-   */
-
-  const sortedProjects = [...projects].sort(
-    (a, b) =>
-      new Date(a.targetRfs || '2099-12-31') -
-      new Date(b.targetRfs || '2099-12-31')
-  );
-
+  const sortedProjects = [...projects].sort((a, b) => new Date(a.targetRfs || '2099-12-31') - new Date(b.targetRfs || '2099-12-31'));
   let overviewRows = '';
-
+  
   sortedProjects.forEach((p, idx) => {
     const sph = projectSph(p);
-
-    const progress = Math.max(
-      0,
-      Math.min(100, Number(p.progressPct) || 0)
-    );
-
-    const rfs = p.targetRfs
-      ? new Date(p.targetRfs).toLocaleDateString(
-          'id-ID',
-          {
-            day: '2-digit',
-            month: 'short',
-            year: 'numeric'
-          }
-        )
-      : '—';
-
-    overviewRows += `
-      <tr>
-        <td>${idx + 1}</td>
-
-        <td>
-          <div
-            class="exec-project-name"
-            title="${escAttr(p.name)}"
-          >
-            ${escAttr(p.name)}
-          </div>
-
-          <div class="exec-project-pic">
-            ${escAttr(p.requestorDept || '—')}
-          </div>
-        </td>
-
-        <td class="mono">
-          ${valToM(sph.awal)} M
-        </td>
-
-        <td>
-          ${escAttr(p.leadId || '—')}
-        </td>
-
-        <td style="white-space:nowrap">
-          ${rfs}
-        </td>
-
-        <td>
-          ${badgeStatus(getDynamicStatus(p))}
-        </td>
-
-        <td>
-          <div class="exec-progress">
-            <span class="exec-progress-value">
-              ${progress}%
-            </span>
-
-            <div class="exec-progress-bg">
-              <div
-                class="exec-progress-fill"
-                style="width:${progress}%"
-              ></div>
-            </div>
-          </div>
-        </td>
-      </tr>
-    `;
+    const progress = Math.max(0, Math.min(100, Number(p.progressPct) || 0));
+    const rfs = p.targetRfs ? new Date(p.targetRfs).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+    overviewRows += `<tr><td>${idx + 1}</td><td><div class="exec-project-name" title="${escAttr(p.name)}">${escAttr(p.name)}</div><div class="exec-project-pic">${escAttr(p.requestorDept || '—')}</div></td><td class="mono">${valToM(sph.awal)} M</td><td>${escAttr(p.leadId || '—')}</td><td style="white-space:nowrap">${rfs}</td><td>${badgeStatus(getDynamicStatus(p))}</td><td><div class="exec-progress"><span class="exec-progress-value">${progress}%</span><div class="exec-progress-bg"><div class="exec-progress-fill" style="width:${progress}%"></div></div></div></td></tr>`;
   });
 
-  if (!overviewRows) {
-    overviewRows = `
-      <tr>
-        <td
-          colspan="7"
-          style="
-            text-align:center;
-            padding:25px;
-            color:#94A3B8;
-          "
-        >
-          Belum ada project.
-        </td>
-      </tr>
-    `;
-  }
+  if (!overviewRows) overviewRows = `<tr><td colspan="7" style="text-align:center; padding:25px; color:#94A3B8;">Belum ada project.</td></tr>`;
 
-  /*
-   * =========================================================
-   * EARLY WARNING
-   * =========================================================
-   */
-
-  const warningProjects = sortedProjects.filter(
-    p =>
-      ['Overdue', 'At Risk'].includes(
-        getDynamicStatus(p)
-      )
-  );
-
+  const warningProjects = sortedProjects.filter(p => ['Overdue', 'At Risk'].includes(getDynamicStatus(p)));
   let warningRows = '';
 
   warningProjects.slice(0, 5).forEach(p => {
     const progress = Number(p.progressPct) || 0;
-
-    const rfs = p.targetRfs
-      ? new Date(p.targetRfs).toLocaleDateString(
-          'id-ID',
-          {
-            day: '2-digit',
-            month: 'short'
-          }
-        )
-      : '—';
-
-    warningRows += `
-      <tr>
-        <td>
-          <div class="exec-project-name">
-            ${escAttr(p.name)}
-          </div>
-
-          <div class="exec-project-pic">
-            PIC: ${escAttr(p.leadId || '—')}
-          </div>
-        </td>
-
-        <td style="white-space:nowrap">
-          ${rfs}
-        </td>
-
-        <td>
-          <strong>${progress}%</strong>
-        </td>
-
-        <td>
-          ${badgeStatus(getDynamicStatus(p))}
-        </td>
-      </tr>
-    `;
+    const rfs = p.targetRfs ? new Date(p.targetRfs).toLocaleDateString('id-ID', { day: '2-digit', month: 'short' }) : '—';
+    warningRows += `<tr><td><div class="exec-project-name">${escAttr(p.name)}</div><div class="exec-project-pic">PIC: ${escAttr(p.leadId || '—')}</div></td><td style="white-space:nowrap">${rfs}</td><td><strong>${progress}%</strong></td><td>${badgeStatus(getDynamicStatus(p))}</td></tr>`;
   });
 
-  if (!warningRows) {
-    warningRows = `
-      <tr>
-        <td
-          colspan="4"
-          style="
-            text-align:center;
-            padding:18px;
-            color:#15803D;
-          "
-        >
-          ✓ Tidak ada project yang perlu perhatian
-        </td>
-      </tr>
-    `;
-  }
+  if (!warningRows) warningRows = `<tr><td colspan="4" style="text-align:center; padding:18px; color:#15803D;">✓ Tidak ada project yang perlu perhatian</td></tr>`;
 
-  /*
-   * =========================================================
-   * PIPELINE
-   * =========================================================
-   */
-
-  const pNames = [
-    'Project Identification',
-    'SPH Preparation',
-    'Vendor Selection',
-    'Negotiation',
-    'Finalization',
-    'RFS'
-  ];
-
+  const pNames = ['Project Identification', 'SPH Preparation', 'Vendor Selection', 'Negotiation', 'Finalization', 'RFS'];
   let pipelineHtml = '';
 
   pNames.forEach((name, i) => {
     const n = i + 1;
     const count = pCount[n];
-
-    const pct = activeProjects
-      ? Math.round(
-          (count / activeProjects) * 100
-        )
-      : 0;
-
-    const activeClass =
-      count > 0 ? 'active' : '';
-
-    const finalClass =
-      n === 6 ? 'final' : '';
-
-    pipelineHtml += `
-      <div
-        class="pipeline-step
-          ${activeClass}
-          ${finalClass}"
-      >
-        <div class="pipeline-number">
-          ${n}
-        </div>
-
-        <div class="pipeline-name">
-          ${name}
-        </div>
-
-        <div class="pipeline-count">
-          ${count}
-        </div>
-
-        <div class="pipeline-count-label">
-          ${count === 1 ? 'Project' : 'Projects'}
-        </div>
-
-        <div class="pipeline-progress">
-          <span
-            style="width:${pct}%"
-          ></span>
-        </div>
-      </div>
-    `;
+    const pct = activeProjects ? Math.round((count / activeProjects) * 100) : 0;
+    const activeClass = count > 0 ? 'active' : '';
+    const finalClass = n === 6 ? 'final' : '';
+    pipelineHtml += `<div class="pipeline-step ${activeClass} ${finalClass}"><div class="pipeline-number">${n}</div><div class="pipeline-name">${name}</div><div class="pipeline-count">${count}</div><div class="pipeline-count-label">${count === 1 ? 'Project' : 'Projects'}</div><div class="pipeline-progress"><span style="width:${pct}%"></span></div></div>`;
   });
 
-  /*
-   * =========================================================
-   * RETURN DASHBOARD
-   * =========================================================
-   */
-
   return dashStyles + `
-
-    <!-- KPI -->
-
     <div class="exec-kpis">
-
-      <div class="exec-kpi">
-        <div
-          class="exec-kpi-icon"
-          style="color:#0284C7;"
-        >
-          ▣
-        </div>
-
-        <div>
-          <div class="exec-kpi-label">
-            Total Project
-          </div>
-
-          <div class="exec-kpi-value">
-            ${totalProj}
-          </div>
-
-          <div class="exec-kpi-meta">
-            ${activeProjects} active projects
-          </div>
-        </div>
-      </div>
-
-
-      <div class="exec-kpi">
-        <div
-          class="exec-kpi-icon"
-          style="color:#4F46E5;"
-        >
-          ◉
-        </div>
-
-        <div>
-          <div class="exec-kpi-label">
-            Total Project Value
-          </div>
-
-          <div
-            class="exec-kpi-value"
-            style="font-size:15px;"
-          >
-            Rp ${valToM(totalVal)} M
-          </div>
-
-          <div class="exec-kpi-meta">
-            Est. project value
-          </div>
-        </div>
-      </div>
-
-
-      <div class="exec-kpi green">
-        <div
-          class="exec-kpi-icon"
-          style="
-            color:#16A34A;
-            background:#F0FDF4;
-          "
-        >
-          ✓
-        </div>
-
-        <div style="width:100%;">
-          <div class="exec-kpi-label">
-            On Track
-          </div>
-
-          <div class="exec-kpi-value">
-            ${sCount['On Track']}
-            <small>
-              ${getPct(sCount['On Track'])}%
-            </small>
-          </div>
-
-          <div class="exec-kpi-progress">
-            <span
-              style="
-                width:${getPct(sCount['On Track'])}%;
-                background:#16A34A;
-              "
-            ></span>
-          </div>
-        </div>
-      </div>
-
-
-      <div class="exec-kpi yellow">
-        <div
-          class="exec-kpi-icon"
-          style="
-            color:#D97706;
-            background:#FFFBEB;
-          "
-        >
-          !
-        </div>
-
-        <div style="width:100%;">
-          <div class="exec-kpi-label">
-            At Risk
-          </div>
-
-          <div class="exec-kpi-value">
-            ${atRisk}
-
-            <small style="color:#D97706;">
-              ${getPct(atRisk)}%
-            </small>
-          </div>
-
-          <div class="exec-kpi-progress">
-            <span
-              style="
-                width:${getPct(atRisk)}%;
-                background:#F59E0B;
-              "
-            ></span>
-          </div>
-        </div>
-      </div>
-
-
-      <div class="exec-kpi red">
-        <div
-          class="exec-kpi-icon"
-          style="
-            color:#DC2626;
-            background:#FEF2F2;
-          "
-        >
-          !
-        </div>
-
-        <div style="width:100%;">
-          <div class="exec-kpi-label">
-            Overdue
-          </div>
-
-          <div class="exec-kpi-value">
-            ${overdue}
-
-            <small style="color:#DC2626;">
-              ${getPct(overdue)}%
-            </small>
-          </div>
-
-          <div class="exec-kpi-progress">
-            <span
-              style="
-                width:${getPct(overdue)}%;
-                background:#DC2626;
-              "
-            ></span>
-          </div>
-        </div>
-      </div>
-
-
-      <div class="exec-kpi gray">
-        <div
-          class="exec-kpi-icon"
-          style="
-            color:#475569;
-            background:#F8FAFC;
-          "
-        >
-          ↗
-        </div>
-
-        <div>
-          <div class="exec-kpi-label">
-            Avg Efficiency
-          </div>
-
-          <div class="exec-kpi-value">
-            ${fmtPct(avgEfficiency)}
-          </div>
-
-          <div class="exec-kpi-meta">
-            ${efficiencies.length}
-            project with data
-          </div>
-        </div>
-      </div>
-
+      <div class="exec-kpi"><div class="exec-kpi-icon" style="color:#0284C7;">▣</div><div><div class="exec-kpi-label">Total Project</div><div class="exec-kpi-value">${totalProj}</div><div class="exec-kpi-meta">${activeProjects} active projects</div></div></div>
+      <div class="exec-kpi"><div class="exec-kpi-icon" style="color:#4F46E5;">◉</div><div><div class="exec-kpi-label">Total Project Value</div><div class="exec-kpi-value" style="font-size:15px;">Rp ${valToM(totalVal)} M</div><div class="exec-kpi-meta">Est. project value</div></div></div>
+      <div class="exec-kpi green"><div class="exec-kpi-icon" style="color:#16A34A; background:#F0FDF4;">✓</div><div style="width:100%;"><div class="exec-kpi-label">On Track</div><div class="exec-kpi-value">${sCount['On Track']} <small>${getPct(sCount['On Track'])}%</small></div><div class="exec-kpi-progress"><span style="width:${getPct(sCount['On Track'])}%; background:#16A34A;"></span></div></div></div>
+      <div class="exec-kpi yellow"><div class="exec-kpi-icon" style="color:#D97706; background:#FFFBEB;">!</div><div style="width:100%;"><div class="exec-kpi-label">At Risk</div><div class="exec-kpi-value">${atRisk} <small style="color:#D97706;">${getPct(atRisk)}%</small></div><div class="exec-kpi-progress"><span style="width:${getPct(atRisk)}%; background:#F59E0B;"></span></div></div></div>
+      <div class="exec-kpi red"><div class="exec-kpi-icon" style="color:#DC2626; background:#FEF2F2;">!</div><div style="width:100%;"><div class="exec-kpi-label">Overdue</div><div class="exec-kpi-value">${overdue} <small style="color:#DC2626;">${getPct(overdue)}%</small></div><div class="exec-kpi-progress"><span style="width:${getPct(overdue)}%; background:#DC2626;"></span></div></div></div>
+      <div class="exec-kpi gray"><div class="exec-kpi-icon" style="color:#475569; background:#F8FAFC;">↗</div><div><div class="exec-kpi-label">Avg Efficiency</div><div class="exec-kpi-value">${fmtPct(avgEfficiency)}</div><div class="exec-kpi-meta">${efficiencies.length} project with data</div></div></div>
     </div>
-
-
-    <!-- MAIN GRID -->
-
     <div class="exec-grid">
-
-
-      <!-- PROJECT OVERVIEW -->
-
-      <div class="exec-panel overview">
-
-        <div class="exec-panel-head">
-          ▣
-          <span>
-            Project Presourcing Overview
-          </span>
-
-          <span class="exec-panel-sub">
-            ${totalProj} Projects
-          </span>
-        </div>
-
-        <div class="exec-table-wrap">
-
-          <table class="exec-table">
-
-            <thead>
-              <tr>
-                <th>No</th>
-                <th>Project Name</th>
-                <th>Value</th>
-                <th>PIC</th>
-                <th>Target RFS</th>
-                <th>Status</th>
-                <th>Progress</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              ${overviewRows}
-            </tbody>
-
-          </table>
-
-        </div>
-
-      </div>
-
-
-      <!-- PROJECT STATUS -->
-
-      <div class="exec-panel status">
-
-        <div class="exec-panel-head">
-          ◉
-          <span>
-            Project Status
-          </span>
-        </div>
-
-        <div class="exec-panel-body">
-
-          <div class="exec-donut">
-
-            <canvas id="chartStatus"></canvas>
-
-            <div class="exec-donut-center">
-
-              <div class="exec-donut-number">
-                ${totalProj}
-              </div>
-
-              <div class="exec-donut-label">
-                Projects
-              </div>
-
-            </div>
-
-          </div>
-
-        </div>
-
-      </div>
-
-
-      <!-- PROJECT VALUE BY PIC -->
-
-      <div class="exec-panel pic">
-
-        <div class="exec-panel-head">
-          ▥
-          <span>
-            Project Value by PIC
-          </span>
-        </div>
-
-        <div class="exec-panel-body">
-
-          <div class="exec-chart">
-            <canvas id="chartPicValue"></canvas>
-          </div>
-
-        </div>
-
-      </div>
-
-
-      <!-- PIPELINE -->
-
-      <div class="exec-panel pipeline">
-
-        <div class="exec-panel-head">
-          ⇢
-          <span>
-            Presourcing Progress Pipeline
-          </span>
-
-          <span class="exec-panel-sub">
-            ${activeProjects} active
-          </span>
-        </div>
-
-        <div class="exec-panel-body">
-
-          <div class="pipeline-flow">
-            ${pipelineHtml}
-          </div>
-
-        </div>
-
-      </div>
-
-
-      <!-- TARGET RFS -->
-
-      <div class="exec-panel rfs">
-
-        <div class="exec-panel-head">
-          ▥
-          <span>
-            Target RFS by Month
-          </span>
-        </div>
-
-        <div class="exec-panel-body">
-
-          <div class="exec-chart">
-            <canvas id="chartRfsMonth"></canvas>
-          </div>
-
-        </div>
-
-      </div>
-
-
-      <!-- TOP 5 -->
-
-      <div class="exec-panel top5">
-
-        <div class="exec-panel-head">
-          ≡
-          <span>
-            Top 5 Project Value
-          </span>
-        </div>
-
-        <div class="exec-panel-body">
-
-          <div class="exec-chart">
-            <canvas id="chartTop5"></canvas>
-          </div>
-
-        </div>
-
-      </div>
-
-
-      <!-- EARLY WARNING -->
-
-      <div class="exec-panel warning">
-
-        <div class="exec-panel-head">
-          <span>!</span>
-
-          <span>
-            Early Warning
-          </span>
-
-          <span class="exec-panel-sub">
-            Need Attention
-          </span>
-        </div>
-
-        <div class="warning-summary">
-
-          <div class="warning-box">
-            <div class="warning-label">
-              Overdue
-            </div>
-
-            <div class="warning-value">
-              ${overdue}
-            </div>
-          </div>
-
-          <div class="warning-box">
-            <div class="warning-label">
-              At Risk
-            </div>
-
-            <div class="warning-value">
-              ${atRisk}
-            </div>
-          </div>
-
-        </div>
-
-        <div class="exec-table-wrap">
-
-          <table class="exec-table">
-
-            <thead>
-              <tr>
-                <th>Project</th>
-                <th>RFS</th>
-                <th>Progress</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              ${warningRows}
-            </tbody>
-
-          </table>
-
-        </div>
-
-      </div>
-
+      <div class="exec-panel overview"><div class="exec-panel-head">▣<span>Project Presourcing Overview</span><span class="exec-panel-sub">${totalProj} Projects</span></div><div class="exec-table-wrap"><table class="exec-table"><thead><tr><th>No</th><th>Project Name</th><th>Value</th><th>PIC</th><th>Target RFS</th><th>Status</th><th>Progress</th></tr></thead><tbody>${overviewRows}</tbody></table></div></div>
+      <div class="exec-panel status"><div class="exec-panel-head">◉<span>Project Status</span></div><div class="exec-panel-body"><div class="exec-donut"><canvas id="chartStatus"></canvas><div class="exec-donut-center"><div class="exec-donut-number">${totalProj}</div><div class="exec-donut-label">Projects</div></div></div></div></div>
+      <div class="exec-panel pic"><div class="exec-panel-head">▥<span>Project Value by PIC</span></div><div class="exec-panel-body"><div class="exec-chart"><canvas id="chartPicValue"></canvas></div></div></div>
+      <div class="exec-panel pipeline"><div class="exec-panel-head">⇢<span>Presourcing Progress Pipeline</span><span class="exec-panel-sub">${activeProjects} active</span></div><div class="exec-panel-body"><div class="pipeline-flow">${pipelineHtml}</div></div></div>
+      <div class="exec-panel rfs"><div class="exec-panel-head">▥<span>Target RFS by Month</span></div><div class="exec-panel-body"><div class="exec-chart"><canvas id="chartRfsMonth"></canvas></div></div></div>
+      <div class="exec-panel top5"><div class="exec-panel-head">≡<span>Top 5 Project Value</span></div><div class="exec-panel-body"><div class="exec-chart"><canvas id="chartTop5"></canvas></div></div></div>
+      <div class="exec-panel warning"><div class="exec-panel-head"><span>!</span><span>Early Warning</span><span class="exec-panel-sub">Need Attention</span></div><div class="warning-summary"><div class="warning-box"><div class="warning-label">Overdue</div><div class="warning-value">${overdue}</div></div><div class="warning-box"><div class="warning-label">At Risk</div><div class="warning-value">${atRisk}</div></div></div><div class="exec-table-wrap"><table class="exec-table"><thead><tr><th>Project</th><th>RFS</th><th>Progress</th><th>Status</th></tr></thead><tbody>${warningRows}</tbody></table></div></div>
     </div>
   `;
 }
@@ -2052,6 +759,7 @@ function projectModalHtml(p, isNew) {
     `;
   }).join('');
 
+  // PERBAIKAN BUG 1: CSS Hide/Show diterapkan di bagian "Scope of Work & BoQ"
   return `
     <div class="overlay" id="ov">
       <div class="modal project-modal">
@@ -2113,7 +821,7 @@ function projectModalHtml(p, isNew) {
           <div class="form-section">
             <div class="form-section-head">
               <div class="form-section-title">Scope of Work &amp; BoQ</div>
-              <button class="mini-btn form-add-btn" id="m-add-sow" type="button">+ Tambah SoW</button>
+              <button class="mini-btn form-add-btn" id="m-add-sow" type="button" style="display: ${p.sphMode === 'item' ? 'inline-block' : 'none'};">+ Tambah SoW</button>
             </div>
             <div class="field">
               <label>Mode SPH</label>
@@ -2122,12 +830,17 @@ function projectModalHtml(p, isNew) {
                 <option value="project" ${p.sphMode === 'project' ? 'selected' : ''}>Manual Total Project</option>
               </select>
             </div>
-            ${p.sphMode === 'project' ? `
+            
+            <div id="m-sph-project-container" style="display: ${p.sphMode === 'project' ? 'block' : 'none'};">
               <div class="sph-summary-box">
                 <div class="field"><label>Total SPH Awal (Project)</label><input type="number" id="m-proj-awal" value="${p.projectSphAwal ?? ''}"></div>
                 <div class="field"><label>Total SPH Final (Project)</label><input type="number" id="m-proj-final" value="${p.projectSphFinal ?? ''}"></div>
               </div>
-            ` : sowsHtml}
+            </div>
+
+            <div id="m-sph-item-container" style="display: ${p.sphMode === 'item' ? 'block' : 'none'};">
+              ${sowsHtml}
+            </div>
           </div>
         </div>
         <div class="modal-ft">
@@ -2165,6 +878,7 @@ function teamModalHtml(d) {
 // ============================================================================
 // PROJECTS LIST & DETAIL
 // ============================================================================
+// PERBAIKAN BUG 2: Menambahkan kolom "SPH Final" pada tabel daftar project
 function renderProjects() {
   const filtered = projects.filter(p => {
     if (filters.priority !== 'all' && p.priority !== filters.priority) return false;
@@ -2174,7 +888,7 @@ function renderProjects() {
 
   let tbodyHtml = '';
   if (filtered.length === 0) {
-    tbodyHtml = '<tr><td colspan="7"><div class="empty">Tidak ada project yang cocok.</div></td></tr>';
+    tbodyHtml = '<tr><td colspan="8"><div class="empty">Tidak ada project yang cocok.</div></td></tr>';
   } else {
     filtered.forEach(p => {
       const s = projectSph(p); 
@@ -2189,11 +903,12 @@ function renderProjects() {
           <td>${badgeStatus(getDynamicStatus(p))}</td>
           <td><span style="font-size:12px;">${pipelineText} (${pct}%)</span></td>
           <td class="num mono">${fmtIdr(s.awal)}</td>
+          <td class="num mono">${fmtIdr(s.final)}</td>
           <td class="num mono">${fmtPct(eff)}</td>
           <td class="num mono">${durationDays(p)} hari</td>
         </tr>
       `;
-      if (openProjectId === p.id) tbodyHtml += `<tr><td colspan="7">${renderProjectDetail(p)}</td></tr>`;
+      if (openProjectId === p.id) tbodyHtml += `<tr><td colspan="8">${renderProjectDetail(p)}</td></tr>`;
     });
   }
 
@@ -2211,7 +926,7 @@ function renderProjects() {
       </div>
       <div class="panel-body">
         <table>
-          <thead><tr><th>Project</th><th>Pemohon</th><th>Status EWS</th><th>Tahap Pipeline</th><th class="num">SPH Awal</th><th class="num">Efficiency</th><th class="num">Durasi</th></tr></thead>
+          <thead><tr><th>Project</th><th>Pemohon</th><th>Status EWS</th><th>Tahap Pipeline</th><th class="num">SPH Awal</th><th class="num">SPH Final</th><th class="num">Efficiency</th><th class="num">Durasi</th></tr></thead>
           <tbody>${tbodyHtml}</tbody>
         </table>
       </div>
@@ -2540,10 +1255,19 @@ function renderModal() {
   wireModalEvents();
 }
 
+// PERBAIKAN BUG 3: Menambahkan tag efisiensi yang akan di-update secara live
 function itemBlockHtml(it, si, bi, ii) {
   const path = `${si}:${bi}:${ii}`;
   const awalTotal = calculateUiSphTotal(it.qty, it.sphAwalUnit) ?? it.sphAwal;
   const finalTotal = calculateUiSphTotal(it.qty, it.sphFinalUnit) ?? it.sphFinal;
+
+  let initEff = '';
+  let initEffColor = '#2563EB';
+  if (awalTotal > 0 && finalTotal != null) {
+    const e = ((awalTotal - finalTotal) / awalTotal) * 100;
+    initEff = `Eff: ${e.toFixed(1)}%`;
+    initEffColor = e >= 0 ? '#16A34A' : '#DC2626';
+  }
 
   return `
     <div class="item-block" data-item-idx="${ii}">
@@ -2566,7 +1290,10 @@ function itemBlockHtml(it, si, bi, ii) {
         <div class="field">
           <label>SPH Final / Unit</label>
           <input type="number" class="it-final-unit" data-path="${path}" value="${it.sphFinalUnit ?? ''}" placeholder="Harga per unit">
-          <div style="margin-top:4px; font-size:9.5px; color:#64748B;">Total: <strong data-total-final="${path}" style="color:#0F172A;">${fmtIdr(finalTotal)}</strong></div>
+          <div style="margin-top:4px; font-size:9.5px; color:#64748B; display:flex; justify-content:space-between;">
+            <span>Total: <strong data-total-final="${path}" style="color:#0F172A;">${fmtIdr(finalTotal)}</strong></span>
+            <span data-eff-preview="${path}" style="font-weight:700; color:${initEffColor};">${initEff}</span>
+          </div>
         </div>
         <div class="field">
           <label>PIC</label>
@@ -2579,6 +1306,7 @@ function itemBlockHtml(it, si, bi, ii) {
   `;
 }
 
+// PERBAIKAN BUG 3: Kalkulasi ulang label efisiensi setiap SPH Final/Unit diketik
 function updateItemFinancialPreview(input) {
   const path = input.dataset.path;
   if (!path) return;
@@ -2588,12 +1316,23 @@ function updateItemFinancialPreview(input) {
   const finalInput = document.querySelector('.it-final-unit[data-path="' + path + '"]');
   const awalTotal = document.querySelector('[data-total-awal="' + path + '"]');
   const finalTotal = document.querySelector('[data-total-final="' + path + '"]');
+  const effPreview = document.querySelector('[data-eff-preview="' + path + '"]');
 
   const totalAwal = calculateUiSphTotal(qtyInput?.value, awalInput?.value);
   const totalFinal = calculateUiSphTotal(qtyInput?.value, finalInput?.value);
 
   if (awalTotal) awalTotal.textContent = totalAwal == null ? '—' : fmtIdr(totalAwal);
   if (finalTotal) finalTotal.textContent = totalFinal == null ? '—' : fmtIdr(totalFinal);
+
+  if (effPreview) {
+    if (totalAwal > 0 && totalFinal != null) {
+      const eff = ((totalAwal - totalFinal) / totalAwal) * 100;
+      effPreview.textContent = `Eff: ${eff.toFixed(1)}%`;
+      effPreview.style.color = eff >= 0 ? '#16A34A' : '#DC2626';
+    } else {
+      effPreview.textContent = '';
+    }
+  }
 }
 
 function syncModalData() {
@@ -2649,8 +1388,22 @@ function wireModalEvents() {
     return;
   }
   
+  // PERBAIKAN BUG 1: Event listener untuk dropdown menggunakan hide/show CSS
   const sphmode = document.getElementById('m-sphmode');
-  if (sphmode) sphmode.onchange = () => { syncModalData(); modal.data.sphMode = sphmode.value; render(); };
+  if (sphmode) {
+    sphmode.onchange = () => { 
+      syncModalData(); 
+      modal.data.sphMode = sphmode.value; 
+      
+      const projContainer = document.getElementById('m-sph-project-container');
+      const itemContainer = document.getElementById('m-sph-item-container');
+      const btnAddSow = document.getElementById('m-add-sow');
+
+      if (projContainer) projContainer.style.display = sphmode.value === 'project' ? 'block' : 'none';
+      if (itemContainer) itemContainer.style.display = sphmode.value === 'item' ? 'block' : 'none';
+      if (btnAddSow) btnAddSow.style.display = sphmode.value === 'item' ? 'inline-block' : 'none';
+    };
+  }
 
   document.querySelectorAll('.it-qty, .it-awal-unit, .it-final-unit').forEach(el => {
     el.addEventListener('input', () => updateItemFinancialPreview(el));
