@@ -384,6 +384,7 @@ function renderOverview() {
 
   const dashStyles = `
     <style>
+
       /* =====================================================
          PAGE & HERO
          ===================================================== */
@@ -402,6 +403,9 @@ function renderOverview() {
       .data-date span { font-size: 8.5px; color: rgba(255,255,255,.65); }
       .data-date strong { font-size: 9.5px; color: #fff; }
 
+      /* =====================================================
+         KPI
+         ===================================================== */
       .exec-kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 9px; margin-bottom: 12px; }
       .exec-kpi { min-height: 72px; padding: 10px 11px; display: flex; align-items: center; gap: 9px; border: 1px solid #dbe3ec; border-radius: 8px; background: #fff; position: relative; overflow: hidden; box-shadow: 0 1px 3px rgba(15,23,42,.04); }
       .exec-kpi::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: #3B82F6; }
@@ -562,6 +566,34 @@ function renderOverview() {
           grid-template-areas: "overview overview" "status pic" "pipeline pipeline" "rfs rfs" "top5 warning"; 
         }
       }
+    /* =====================================================
+         GRID LAYOUT 50:50 (KIRI & KANAN INDEPENDEN)
+         ===================================================== */
+      .dash-grid { 
+        display: grid; 
+        grid-template-columns: 1fr 1fr; 
+        gap: 12px; 
+        align-items: start; /* Mencegah kolom saling menarik tinggi */
+      }
+      .dash-col { 
+        display: flex; 
+        flex-direction: column; 
+        gap: 12px; 
+        min-width: 0; 
+      }
+      .dash-sub-grid { 
+        display: grid; 
+        grid-template-columns: 1fr 1fr; 
+        gap: 12px; 
+      }
+
+      /* Responsivitas untuk layar kecil */
+      @media(max-width: 1100px) {
+        .dash-grid { grid-template-columns: 1fr; }
+      }
+      @media(max-width: 700px) {
+        .dash-sub-grid { grid-template-columns: 1fr; }
+      }
     </style>
   `;
 
@@ -601,6 +633,7 @@ function renderOverview() {
   });
 
   return dashStyles + `
+    <!-- KPI TOP CARDS -->
     <div class="exec-kpis">
       <div class="exec-kpi"><div class="exec-kpi-icon" style="color:#0284C7;">▣</div><div><div class="exec-kpi-label">Total Project</div><div class="exec-kpi-value">${totalProj}</div><div class="exec-kpi-meta">${activeProjects} active projects</div></div></div>
       <div class="exec-kpi"><div class="exec-kpi-icon" style="color:#4F46E5;">◉</div><div><div class="exec-kpi-label">Total Project Value</div><div class="exec-kpi-value" style="font-size:15px;">Rp ${valToM(totalVal)} M</div><div class="exec-kpi-meta">Est. project value</div></div></div>
@@ -609,14 +642,88 @@ function renderOverview() {
       <div class="exec-kpi red"><div class="exec-kpi-icon" style="color:#DC2626; background:#FEF2F2;">!</div><div style="width:100%;"><div class="exec-kpi-label">Overdue</div><div class="exec-kpi-value">${overdue} <small style="color:#DC2626;">${getPct(overdue)}%</small></div><div class="exec-kpi-progress"><span style="width:${getPct(overdue)}%; background:#DC2626;"></span></div></div></div>
       <div class="exec-kpi gray"><div class="exec-kpi-icon" style="color:#475569; background:#F8FAFC;">↗</div><div><div class="exec-kpi-label">Avg Efficiency</div><div class="exec-kpi-value">${fmtPct(avgEfficiency)}</div><div class="exec-kpi-meta">${efficiencies.length} project with data</div></div></div>
     </div>
-    <div class="exec-grid">
-      <div class="exec-panel overview"><div class="exec-panel-head">▣<span>Project Presourcing Overview</span><span class="exec-panel-sub">${totalProj} Projects</span></div><div class="exec-table-wrap"><table class="exec-table"><thead><tr><th>No</th><th>Project Name</th><th>Value</th><th>PIC</th><th>Target RFS</th><th>Status</th><th>Progress</th></tr></thead><tbody>${overviewRows}</tbody></table></div></div>
-      <div class="exec-panel status"><div class="exec-panel-head">◉<span>Project Status</span></div><div class="exec-panel-body"><div class="exec-donut"><canvas id="chartStatus"></canvas><div class="exec-donut-center"><div class="exec-donut-number">${totalProj}</div><div class="exec-donut-label">Projects</div></div></div></div></div>
-      <div class="exec-panel pic"><div class="exec-panel-head">▥<span>Project Value by PIC</span></div><div class="exec-panel-body"><div class="exec-chart"><canvas id="chartPicValue"></canvas></div></div></div>
-      <div class="exec-panel pipeline"><div class="exec-panel-head">⇢<span>Presourcing Progress Pipeline</span><span class="exec-panel-sub">${activeProjects} active</span></div><div class="exec-panel-body"><div class="pipeline-flow">${pipelineHtml}</div></div></div>
-      <div class="exec-panel rfs"><div class="exec-panel-head">▥<span>Target RFS by Month</span></div><div class="exec-panel-body"><div class="exec-chart"><canvas id="chartRfsMonth"></canvas></div></div></div>
-      <div class="exec-panel top5"><div class="exec-panel-head">≡<span>Top 5 Project Value</span></div><div class="exec-panel-body"><div class="exec-chart"><canvas id="chartTop5"></canvas></div></div></div>
-      <div class="exec-panel warning"><div class="exec-panel-head"><span>!</span><span>Early Warning</span><span class="exec-panel-sub">Need Attention</span></div><div class="warning-summary"><div class="warning-box"><div class="warning-label">Overdue</div><div class="warning-value">${overdue}</div></div><div class="warning-box"><div class="warning-label">At Risk</div><div class="warning-value">${atRisk}</div></div></div><div class="exec-table-wrap"><table class="exec-table"><thead><tr><th>Project</th><th>RFS</th><th>Progress</th><th>Status</th></tr></thead><tbody>${warningRows}</tbody></table></div></div>
+
+    <!-- GRID LAYOUT 50:50 -->
+    <div class="dash-grid">
+      
+      <!-- KOLOM KIRI (50%) -->
+      <div class="dash-col">
+        
+        <div class="exec-panel overview">
+          <div class="exec-panel-head">▣<span>Project Presourcing Overview</span><span class="exec-panel-sub">${totalProj} Projects</span></div>
+          <div class="exec-table-wrap">
+            <table class="exec-table">
+              <thead><tr><th>No</th><th>Project Name</th><th>Value</th><th>PIC</th><th>Target RFS</th><th>Status</th><th>Progress</th></tr></thead>
+              <tbody>${overviewRows}</tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="exec-panel pipeline">
+          <div class="exec-panel-head">⇢<span>Presourcing Progress Pipeline</span><span class="exec-panel-sub">${activeProjects} active</span></div>
+          <div class="exec-panel-body">
+            <div class="pipeline-flow">${pipelineHtml}</div>
+          </div>
+        </div>
+        
+        <div class="exec-panel top5">
+          <div class="exec-panel-head">≡<span>Top 5 Project Value</span></div>
+          <div class="exec-panel-body">
+            <div class="exec-chart"><canvas id="chartTop5"></canvas></div>
+          </div>
+        </div>
+        
+      </div>
+
+      <!-- KOLOM KANAN (50%) -->
+      <div class="dash-col">
+        
+        <!-- SUB-GRID UNTUK STATUS & PIC (Berdampingan) -->
+        <div class="dash-sub-grid">
+          <div class="exec-panel status">
+            <div class="exec-panel-head">◉<span>Project Status</span></div>
+            <div class="exec-panel-body">
+              <div class="exec-donut">
+                <canvas id="chartStatus"></canvas>
+                <div class="exec-donut-center">
+                  <div class="exec-donut-number">${totalProj}</div>
+                  <div class="exec-donut-label">Projects</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="exec-panel pic">
+            <div class="exec-panel-head">▥<span>Project Value by PIC</span></div>
+            <div class="exec-panel-body">
+              <div class="exec-chart"><canvas id="chartPicValue"></canvas></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TARGET RFS & EARLY WARNING -->
+        <div class="exec-panel rfs">
+          <div class="exec-panel-head">▥<span>Target RFS by Month</span></div>
+          <div class="exec-panel-body">
+            <div class="exec-chart"><canvas id="chartRfsMonth"></canvas></div>
+          </div>
+        </div>
+
+        <div class="exec-panel warning">
+          <div class="exec-panel-head"><span>!</span><span>Early Warning</span><span class="exec-panel-sub">Need Attention</span></div>
+          <div class="warning-summary">
+            <div class="warning-box"><div class="warning-label">Overdue</div><div class="warning-value">${overdue}</div></div>
+            <div class="warning-box"><div class="warning-label">At Risk</div><div class="warning-value">${atRisk}</div></div>
+          </div>
+          <div class="exec-table-wrap" style="max-height: 240px;">
+            <table class="exec-table">
+              <thead><tr><th>Project</th><th>RFS</th><th>Progress</th><th>Status</th></tr></thead>
+              <tbody>${warningRows}</tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
     </div>
   `;
 }
