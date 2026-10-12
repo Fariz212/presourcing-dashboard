@@ -384,6 +384,9 @@ function renderOverview() {
 
   const dashStyles = `
     <style>
+      /* =====================================================
+         PAGE & HERO
+         ===================================================== */
       .page-shell { width: 100%; max-width: 1420px; margin: 0 auto; padding-top: 24px; }
       .page-hero { min-height: 76px; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 12px 18px; margin-bottom: 12px; border-radius: 10px; color: #fff; background: linear-gradient(115deg, #0B4F91 0%, #1769C2 58%, #2583DA 100%); box-shadow: 0 4px 12px rgba(15,23,42,.12); position: relative; overflow: hidden; }
       .page-hero::after { content: ''; position: absolute; width: 260px; height: 160px; right: -70px; top: -90px; background: rgba(255,255,255,.07); transform: rotate(28deg); pointer-events: none; }
@@ -398,6 +401,7 @@ function renderOverview() {
       .data-date { display: flex; flex-direction: column; gap: 2px; padding: 7px 11px; border: 1px solid rgba(255,255,255,.20); border-radius: 7px; min-width: 110px; }
       .data-date span { font-size: 8.5px; color: rgba(255,255,255,.65); }
       .data-date strong { font-size: 9.5px; color: #fff; }
+
       .exec-kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 9px; margin-bottom: 12px; }
       .exec-kpi { min-height: 72px; padding: 10px 11px; display: flex; align-items: center; gap: 9px; border: 1px solid #dbe3ec; border-radius: 8px; background: #fff; position: relative; overflow: hidden; box-shadow: 0 1px 3px rgba(15,23,42,.04); }
       .exec-kpi::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: #3B82F6; }
@@ -413,6 +417,24 @@ function renderOverview() {
       .exec-kpi-meta { font-size: 8.5px; color: #94A3B8; margin-top: 4px; }
       .exec-kpi-progress { height: 4px; background: #E2E8F0; border-radius: 2px; margin-top: 6px; overflow: hidden; width: 100%; }
       .exec-kpi-progress span { display: block; height: 100%; border-radius: 2px; }
+
+      /* =====================================================
+         MAIN DASHBOARD GRID (KEMBALI KE ASLI MILIKMU)
+         ===================================================== */
+      .exec-grid {
+        display: grid;
+        grid-template-columns: repeat(12, minmax(0, 1fr));
+        grid-template-areas:
+          "overview overview overview overview overview overview status status status pic pic pic"
+          "pipeline pipeline pipeline pipeline pipeline pipeline rfs rfs rfs rfs rfs rfs"
+          "top5 top5 top5 top5 top5 top5 top5 top5 top5 warning warning warning";
+        gap: 12px;
+        align-items: start;
+      }
+
+      /* =====================================================
+         PANELS
+         ===================================================== */
       .exec-panel { min-width: 0; background: #FFFFFF; border: 1px solid #DCE4EE; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(15,23,42,.04); }
       .exec-panel-head { min-height: 42px; padding: 11px 14px; display: flex; align-items: center; gap: 5px; background: linear-gradient(90deg, #0F5CA8 0%, #1672C8 100%); color: #FFFFFF; font-size: 12px; font-weight: 700; }
       .exec-panel.warning .exec-panel-head { background: linear-gradient(90deg, #DC2626 0%, #EF4444 100%); }
@@ -431,18 +453,59 @@ function renderOverview() {
       .exec-panel.rfs { grid-area: rfs; }
       .exec-panel.top5 { grid-area: top5; }
       .exec-panel.warning { grid-area: warning; }
-      .exec-table-wrap { width: 100%; overflow-x: auto; max-height:220px; }
-      .exec-table { width: 100%; border-collapse: collapse; table-layout: auto; }
-      .exec-table th { padding: 8px 7px; background: #F4F7FB; color: #64748B; border-bottom: 1px solid #DCE4EE; font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; text-align: left; }
+
+      /* =====================================================
+         PROJECT TABLE (INI SAJA YANG DIUBAH)
+         ===================================================== */
+      .exec-table-wrap { 
+        width: 100%; 
+        max-height: 240px; /* Sesuai temuanmu di DevTools */
+        overflow-y: auto; 
+        overflow-x: auto; 
+      }
+      
+      /* Scrollbar khusus agar tidak tebal dan jelek */
+      .exec-table-wrap::-webkit-scrollbar { width: 6px; height: 6px; }
+      .exec-table-wrap::-webkit-scrollbar-track { background: transparent; }
+      .exec-table-wrap::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 10px; }
+      .exec-table-wrap::-webkit-scrollbar-thumb:hover { background-color: #94a3b8; }
+
+      .exec-table { width: 100%; border-collapse: separate; border-spacing: 0; table-layout: auto; }
+      
+      /* Header sticky & bayangan agar tidak bocor */
+      .exec-table th { 
+        position: sticky; 
+        top: 0; 
+        z-index: 10; 
+        padding: 8px 7px; 
+        background: #F4F7FB; 
+        color: #64748B; 
+        font-size: 8.5px; 
+        font-weight: 700; 
+        text-transform: uppercase; 
+        letter-spacing: .03em; 
+        white-space: nowrap; 
+        text-align: left; 
+        box-shadow: inset 0 -1px 0 #DCE4EE; 
+      }
+      
       .exec-table td { padding: 8px 7px; border-bottom: 1px solid #EEF2F6; color: #334155; font-size: 9.5px; line-height: 1.3; vertical-align: middle; }
       .exec-table tbody tr:last-child td { border-bottom: 0; }
       .exec-table .mono { font-size: 9px; white-space: nowrap; }
       .exec-project-name { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; color: #0F172A; }
       .exec-project-pic { margin-top: 2px; color: #94A3B8; font-size: 8px; }
+
+      /* =====================================================
+         PROGRESS
+         ===================================================== */
       .exec-progress { display: flex; align-items: center; gap: 4px; }
       .exec-progress-value { width: 25px; text-align: right; font-size: 8.5px; font-weight: 600; }
       .exec-progress-bg { width: 38px; height: 4px; border-radius: 8px; overflow: hidden; background: #E2E8F0; }
       .exec-progress-fill { height: 100%; background: #2583DA; border-radius: 8px; }
+
+      /* =====================================================
+         CHART
+         ===================================================== */
       .exec-chart { height: 150px; position: relative; width: 100%; }
       .exec-chart canvas { width: 100% !important; height: 100% !important; }
       .exec-donut { height: 150px; position: relative; }
@@ -450,10 +513,18 @@ function renderOverview() {
       .exec-donut-center { position: absolute; left: 37%; top: 50%; transform: translate(-50%, -50%); text-align: center; pointer-events: none; }
       .exec-donut-number { font-size: 22px; line-height: 1; font-weight: 700; color: #0F172A; }
       .exec-donut-label { margin-top: 2px; font-size: 8px; color: #64748B; }
+
+      /* =====================================================
+         WARNING
+         ===================================================== */
       .warning-summary { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 7px; background: #FFFBEB; border-bottom: 1px solid #FDE68A; }
       .warning-box { padding: 5px 7px; background: #fff; border: 1px solid #FDE68A; border-radius: 5px; }
       .warning-label { font-size: 7.5px; color: #92400E; font-weight: 700; text-transform: uppercase; }
       .warning-value { margin-top: 1px; font-size: 15px; line-height: 1; font-weight: 700; color: #78350F; }
+
+      /* =====================================================
+         PIPELINE
+         ===================================================== */
       .pipeline-flow { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 2px; margin-top: 1px; }
       .pipeline-step { position: relative; min-width: 0; min-height: 100px; padding: 9px 7px 8px; background: #F2F7FD; border: 1px solid #BFD7F3; text-align: center; clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%, 10px 50%); }
       .pipeline-step:first-child { clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%); }
@@ -468,21 +539,29 @@ function renderOverview() {
       .pipeline-progress { margin-top: 6px; height: 4px; background: #DCE5EF; border-radius: 8px; overflow: hidden; }
       .pipeline-progress span { display: block; height: 100%; background: #2681D8; border-radius: 8px; }
       .pipeline-step.final .pipeline-progress span { background: #16A34A; }
-      
+
+      /* =====================================================
+         RESPONSIVE
+         ===================================================== */
       @media(max-width:1100px) {
         .page-shell { padding-top: 16px; }
         .page-hero-side { display: none; }
         .exec-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-        .exec-grid { grid-template-columns: 1fr 1fr; grid-template-areas: "overview overview" "status pic" "pipeline pipeline" "rfs rfs" "top5 warning"; }
+        .exec-grid { 
+          grid-template-columns: 1fr 1fr; 
+          grid-template-areas: "overview overview" "status pic" "pipeline pipeline" "rfs rfs" "top5 warning"; 
+        }
       }
       @media(max-width:700px) {
         .page-hero { min-height: auto; }
         .page-hero-title { font-size: 18px; }
         .exec-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .pipeline-flow { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-        .exec-grid { grid-template-columns: 1fr 1fr; grid-template-areas: "overview overview" "status pic" "pipeline pipeline" "rfs rfs" "top5 warning"; }
+        .exec-grid { 
+          grid-template-columns: 1fr 1fr; 
+          grid-template-areas: "overview overview" "status pic" "pipeline pipeline" "rfs rfs" "top5 warning"; 
+        }
       }
-      .exec-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); grid-template-areas: "overview overview overview overview overview overview status status status pic pic pic" "pipeline pipeline pipeline pipeline pipeline pipeline rfs rfs rfs rfs rfs rfs" "top5 top5 top5 top5 top5 top5 top5 top5 top5 warning warning warning"; gap: 12px; align-items: start; }
     </style>
   `;
 
