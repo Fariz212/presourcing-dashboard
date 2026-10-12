@@ -61,7 +61,7 @@ function seedData() {
       id: uid('proj'), name: 'Project Backbone Expansion', requestorName: 'Marcel', requestorDept: 'SA G&P',
       priority: 'High', status: 'ongoing', leadId: 'Andi', sphMode: 'item', projectSphAwal: null, projectSphFinal: null,
       createdAt: '2026-07-02', closedAt: null, targetRfs: '2026-10-15', pipelineStage: '4 - Negotiation', progressPct: 85, comparison_docs: [],
-      sows: [{ id: uid('sow'), name: 'SoW Core', boqs: [{ id: uid('boq'), name: 'BoQ Utama', items: [{ id: uid('item'), product: 'Router', qty: 1, picIds: ['Andi'], sphAwalUnit: 25000000000, sphAwal: 25000000000, sphFinalUnit: null, sphFinal: null }] }] }]
+      sows: [{ id: uid('sow'), name: 'SoW Core', boqs: [{ id: uid('boq'), name: 'BoQ Utama', items: [{ id: uid('item'), product: 'Router', qty: 1, vendor: '', notes: '', picIds: ['Andi'], sphAwalUnit: 25000000000, sphAwal: 25000000000, sphFinalUnit: null, sphFinal: null }] }] }]
     }
   ];
 }
@@ -128,18 +128,37 @@ function allItems(proj) {
   return out;
 }
 
+// UPDATE LOGIKA 1: Perhitungan Efisiensi Parsial
 function projectSph(proj) {
   if (proj.sphMode === 'project') return { awal: proj.projectSphAwal, final: proj.projectSphFinal };
   
   const items = allItems(proj);
-  let awal = 0, final = 0, hasAwal = false, hasFinal = true;
+  let awal = 0, final = 0, hasAwal = false;
   
   items.forEach(it => {
-    if (it.sphAwal != null) { awal += Number(it.sphAwal); hasAwal = true; }
-    if (it.sphFinal == null) { hasFinal = false; } else { final += Number(it.sphFinal); }
+    let itemAwal = 0;
+    
+    // Tambahkan SPH Awal jika ada
+    if (it.sphAwal != null) { 
+      itemAwal = Number(it.sphAwal);
+      awal += itemAwal; 
+      hasAwal = true; 
+    }
+    
+    // Evaluasi SPH Final parsial
+    if (it.sphFinal != null) { 
+      final += Number(it.sphFinal); 
+    } else { 
+      // Jika SPH Final kosong, anggap harganya sama dengan SPH Awal (Efisiensi 0%)
+      final += itemAwal; 
+    }
   });
   
-  return { awal: hasAwal ? awal : null, final: (hasFinal && items.length) ? final : null };
+  // Jika ada SPH awal, kita bisa mereturn SPH Awal dan perhitungan kumulatif Final
+  return { 
+    awal: hasAwal ? awal : null, 
+    final: hasAwal ? final : null 
+  };
 }
 
 function efficiencyPct(awal, final) {
@@ -759,7 +778,6 @@ function projectModalHtml(p, isNew) {
     `;
   }).join('');
 
-  // PERBAIKAN BUG 1: CSS Hide/Show diterapkan di bagian "Scope of Work & BoQ"
   return `
     <div class="overlay" id="ov">
       <div class="modal project-modal">
@@ -878,7 +896,6 @@ function teamModalHtml(d) {
 // ============================================================================
 // PROJECTS LIST & DETAIL
 // ============================================================================
-// PERBAIKAN BUG 2: Menambahkan kolom "SPH Final" pada tabel daftar project
 function renderProjects() {
   const filtered = projects.filter(p => {
     if (filters.priority !== 'all' && p.priority !== filters.priority) return false;
@@ -964,9 +981,20 @@ function renderProjectDetail(p) {
         </div>
       `;
       (boq.items || []).forEach(it => {
-        const eff = p.sphMode === 'item' ? efficiencyPct(it.sphAwal, it.sphFinal) : null;
+        // Tampilkan kalkulasi item parsial di Detail View
+        let finalItemValue = null;
+        let eff = null;
+        
+        if (p.sphMode === 'item') {
+          if (it.sphAwal != null) {
+            finalItemValue = it.sphFinal != null ? it.sphFinal : it.sphAwal; // Efisiensi parsial
+            eff = efficiencyPct(it.sphAwal, finalItemValue);
+          }
+        }
+        
         const notesHtml = it.notes ? `<div style="font-size:11px; color:var(--text-muted); margin-top:3px;">📝 ${escAttr(it.notes)}</div>` : '';
         const picsHtml = (it.picIds || []).map(x => `<span class="pic-chip">${escAttr(x)}</span>`).join('');
+        
         sowsHtml += `
           <div style="display:grid; grid-template-columns: 2fr 0.4fr 0.5fr 1fr 1fr 1fr 0.8fr 1.5fr; gap:8px; padding:7px 0; font-size:12.5px; border-bottom:1px solid var(--border-soft); align-items:start;">
             <div><div style="font-weight:500;">${escAttr(it.product) || '—'}</div>${notesHtml}</div>
@@ -974,7 +1002,7 @@ function renderProjectDetail(p) {
             <div style="color:var(--text-muted);">${escAttr(it.uom) || '-'}</div>
             <div style="color:var(--text-muted);">${escAttr(it.vendor) || '-'}</div>
             <div class="num mono">${p.sphMode === 'item' ? fmtIdr(it.sphAwal) : '—'}</div>
-            <div class="num mono">${p.sphMode === 'item' ? fmtIdr(it.sphFinal) : '—'}</div>
+            <div class="num mono">${p.sphMode === 'item' ? fmtIdr(finalItemValue) : '—'}</div>
             <div class="num mono">${p.sphMode === 'item' ? fmtPct(eff) : '—'}</div>
             <div>${picsHtml}</div>
           </div>
@@ -1255,7 +1283,6 @@ function renderModal() {
   wireModalEvents();
 }
 
-// PERBAIKAN BUG 3: Menambahkan tag efisiensi yang akan di-update secara live
 function itemBlockHtml(it, si, bi, ii) {
   const path = `${si}:${bi}:${ii}`;
   const awalTotal = calculateUiSphTotal(it.qty, it.sphAwalUnit) ?? it.sphAwal;
@@ -1269,6 +1296,7 @@ function itemBlockHtml(it, si, bi, ii) {
     initEffColor = e >= 0 ? '#16A34A' : '#DC2626';
   }
 
+  // UPDATE LOGIKA 2: Penambahan baris "Catatan" (it-notes)
   return `
     <div class="item-block" data-item-idx="${ii}">
       <div class="item-head">
@@ -1280,6 +1308,10 @@ function itemBlockHtml(it, si, bi, ii) {
         <div class="field"><label>Qty</label><input type="number" class="it-qty" data-path="${path}" value="${it.qty ?? 1}" min="0"></div>
         <div class="field"><label>UoM</label><input class="it-uom" data-path="${path}" value="${escAttr(it.uom)}" placeholder="Unit"></div>
         <div class="field"><label>Vendor</label><input class="it-vendor" data-path="${path}" value="${escAttr(it.vendor)}" placeholder="Vendor"></div>
+      </div>
+      <div class="field" style="margin-bottom: 10px;">
+        <label>Catatan</label>
+        <input class="it-notes" data-path="${path}" value="${escAttr(it.notes)}" placeholder="Tambahkan catatan spesifikasi atau info tambahan (opsional)">
       </div>
       <div class="item-grid-finance">
         <div class="field">
@@ -1306,7 +1338,6 @@ function itemBlockHtml(it, si, bi, ii) {
   `;
 }
 
-// PERBAIKAN BUG 3: Kalkulasi ulang label efisiensi setiap SPH Final/Unit diketik
 function updateItemFinancialPreview(input) {
   const path = input.dataset.path;
   if (!path) return;
@@ -1363,6 +1394,7 @@ function syncModalData() {
   syncPathField('.it-qty', (item, value) => { item.qty = numOrNull(value); });
   syncPathField('.it-uom', (item, value) => { item.uom = value; });
   syncPathField('.it-vendor', (item, value) => { item.vendor = value; });
+  syncPathField('.it-notes', (item, value) => { item.notes = value; }); // Sinkronisasi nilai catatan ke data
 
   syncPathField('.it-awal-unit', (item, value) => {
     item.sphAwalUnit = numOrNull(value);
@@ -1388,7 +1420,6 @@ function wireModalEvents() {
     return;
   }
   
-  // PERBAIKAN BUG 1: Event listener untuk dropdown menggunakan hide/show CSS
   const sphmode = document.getElementById('m-sphmode');
   if (sphmode) {
     sphmode.onchange = () => { 
@@ -1414,7 +1445,7 @@ function wireModalEvents() {
     btnAddSow.onclick = (e) => { 
       e.preventDefault(); 
       syncModalData(); 
-      modal.data.sows.push({id:uid('sow'), name:'', boqs:[{id:uid('boq'), name:'', items:[{id:uid('item'), product:'', qty:1, vendor:'', picIds:[], sphAwalUnit:null, sphFinalUnit:null, sphAwal:null, sphFinal:null}]}]}); 
+      modal.data.sows.push({id:uid('sow'), name:'', boqs:[{id:uid('boq'), name:'', items:[{id:uid('item'), product:'', qty:1, vendor:'', notes:'', picIds:[], sphAwalUnit:null, sphFinalUnit:null, sphAwal:null, sphFinal:null}]}]}); 
       render(); 
     };
   }
@@ -1423,7 +1454,7 @@ function wireModalEvents() {
     el.onclick = (e) => { 
       e.preventDefault(); 
       syncModalData(); 
-      modal.data.sows[+el.dataset.addBoq].boqs.push({id:uid('boq'), name:'', items:[{id:uid('item'), product:'', qty:1, vendor:'', picIds:[], sphAwalUnit:null, sphFinalUnit:null, sphAwal:null, sphFinal:null}]}); 
+      modal.data.sows[+el.dataset.addBoq].boqs.push({id:uid('boq'), name:'', items:[{id:uid('item'), product:'', qty:1, vendor:'', notes:'', picIds:[], sphAwalUnit:null, sphFinalUnit:null, sphAwal:null, sphFinal:null}]}); 
       render(); 
     };
   });
@@ -1433,7 +1464,7 @@ function wireModalEvents() {
     el.onclick = (e) => { 
       e.preventDefault(); 
       syncModalData(); 
-      modal.data.sows[si].boqs[bi].items.push({id:uid('item'), product:'', qty:1, vendor:'', picIds:[], sphAwalUnit:null, sphFinalUnit:null, sphAwal:null, sphFinal:null}); 
+      modal.data.sows[si].boqs[bi].items.push({id:uid('item'), product:'', qty:1, vendor:'', notes:'', picIds:[], sphAwalUnit:null, sphFinalUnit:null, sphAwal:null, sphFinal:null}); 
       render(); 
     }; 
   });
