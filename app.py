@@ -311,6 +311,7 @@ def init_db():
                 ("admin", "admin123", "Admin Presourcing", "Presourcing Control", "admin"),
                 ("master", "master123", "Master Admin", "System Control", "admin"),
                 ("tester", "tester123", "QA Tester", "Testing Team", "sa"),
+                ("buyer", "buyer123", "Leasing", "Buy to Use", "buyer"),
             ]:
                 cursor.execute("SELECT COUNT(*) FROM users WHERE username = %s", (user_data[0],))
                 if cursor.fetchone()[0] == 0:
