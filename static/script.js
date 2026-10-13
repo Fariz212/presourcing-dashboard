@@ -465,6 +465,7 @@ function renderOverview() {
       .exec-table td { padding: 8px 7px; border-bottom: 1px solid #EEF2F6; color: #334155; font-size: 9.5px; line-height: 1.3; vertical-align: middle; }
       .exec-table tbody tr:last-child td { border-bottom: 0; }
       .exec-table .mono { font-size: 9px; white-space: nowrap; }
+      
       .exec-project-name { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; color: #0F172A; }
       .exec-project-pic { margin-top: 2px; color: #94A3B8; font-size: 8px; }
       .exec-progress { display: flex; align-items: center; gap: 4px; }

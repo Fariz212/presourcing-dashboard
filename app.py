@@ -1317,6 +1317,542 @@ def download_comparison(filename):
         return jsonify({"success": False, "message": "Akses ditolak. Silakan login."}), 403
     return send_from_directory(os.path.join(app.root_path, "secure_data", "comparisons"), secure_filename(filename))
 
+
+
+# ============================================================================
+# LEASING MVP API (isolated from Presourcing M&S routes/tables)
+# Apply leasing_mvp_schema.sql once before using these endpoints.
+# ============================================================================
+from functools import wraps
+
+LEASING_STAGES = {
+    "request_received", "requirement_review", "vendor_sourcing",
+    "response_monitoring", "commercial_review", "result_submission"
+}
+LEASING_CASE_STATUSES = {"open", "closed", "cancelled"}
+LEASING_REQUIREMENT_STATUSES = {"open", "in_progress", "resolved", "stopped"}
+
+
+def leasing_login_required(fn):
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        if not session.get("username"):
+            return jsonify({"success": False, "message": "Login diperlukan."}), 401
+        # Temporary MVP access: existing admins can operate Leasing until a Buyer role
+        # is formally provisioned. Explicit buyer role is also supported.
+        if session.get("role") not in {"admin", "buyer"}:
+            return jsonify({"success": False, "message": "Akses Leasing hanya untuk Buyer/Admin."}), 403
+        return fn(*args, **kwargs)
+    return wrapper
+
+
+def leasing_activity(cursor, work_item_id, event_type, summary, actor, metadata=None):
+    cursor.execute(
+        "INSERT INTO leasing.activity_events (work_item_id, event_type, event_summary, actor_id, metadata) "
+        "VALUES (%s, %s, %s, %s, %s::jsonb)",
+        (work_item_id, event_type, summary, actor, json.dumps(metadata or {}))
+    )
+
+
+@app.route("/api/leasing/dashboard", methods=["GET"])
+@leasing_login_required
+def leasing_dashboard():
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("""SELECT
+                    COUNT(*) FILTER (WHERE case_status='open') AS open_cases,
+                    COUNT(*) FILTER (WHERE case_status='open' AND request_due_date < CURRENT_DATE) AS overdue_cases,
+                    COUNT(*) FILTER (WHERE case_status='open' AND request_due_date = CURRENT_DATE) AS due_today,
+                    COUNT(*) FILTER (WHERE case_status='open' AND current_stage='result_submission') AS pending_submission
+                    FROM leasing.work_items""")
+                summary = dict(cur.fetchone())
+                cur.execute("""SELECT w.id, w.request_id, c.customer_name, w.requester_name,
+                    w.requester_division, w.request_due_date, w.current_stage, w.case_status,
+                    w.buyer_owner_id, w.created_at,
+                    COUNT(DISTINCT r.id) AS requirement_count,
+                    COUNT(DISTINCT r.id) FILTER (WHERE r.status IN ('resolved','stopped')) AS resolved_count,
+                    COUNT(DISTINCT o.id) FILTER (WHERE o.response_status IN ('sent','awaiting_response','partial_response')) AS pending_partner_responses,
+                    MIN(o.next_follow_up_at) FILTER (WHERE o.next_follow_up_at IS NOT NULL AND o.response_status IN ('sent','awaiting_response','partial_response')) AS next_follow_up_at
+                    FROM leasing.work_items w
+                    LEFT JOIN leasing.customers c ON c.id=w.customer_id
+                    LEFT JOIN leasing.requirements r ON r.work_item_id=w.id
+                    LEFT JOIN leasing.partner_outreaches o ON o.work_item_id=w.id
+                    GROUP BY w.id, c.customer_name
+                    ORDER BY CASE WHEN w.case_status='open' AND w.request_due_date < CURRENT_DATE THEN 0 ELSE 1 END,
+                    w.request_due_date NULLS LAST, w.updated_at DESC LIMIT 200""")
+                items = [dict(row) for row in cur.fetchall()]
+                cur.execute("""SELECT o.id, o.work_item_id, w.request_id, p.partner_name,
+                    o.response_status, o.next_follow_up_at, o.sent_at
+                    FROM leasing.partner_outreaches o
+                    JOIN leasing.work_items w ON w.id=o.work_item_id
+                    JOIN leasing.partners p ON p.id=o.partner_id
+                    WHERE w.case_status='open' AND o.response_status IN ('sent','awaiting_response','partial_response')
+                    ORDER BY o.next_follow_up_at NULLS FIRST LIMIT 100""")
+                followups = [dict(row) for row in cur.fetchall()]
+        return jsonify({"success": True, "summary": summary, "work_items": items, "follow_ups": followups})
+    except psycopg2.Error:
+        app.logger.exception("Leasing dashboard query failed")
+        return jsonify({"success": False, "message": "Gagal memuat dashboard Leasing. Pastikan schema Leasing sudah diterapkan."}), 500
+
+
+@app.route("/api/leasing/work-items", methods=["GET", "POST"])
+@leasing_login_required
+def leasing_work_items():
+    if request.method == "GET":
+        try:
+            with get_db_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute("""SELECT w.*, c.customer_name,
+                        COUNT(DISTINCT r.id) AS requirement_count,
+                        COUNT(DISTINCT r.id) FILTER (WHERE r.status IN ('resolved','stopped')) AS resolved_count
+                        FROM leasing.work_items w LEFT JOIN leasing.customers c ON c.id=w.customer_id
+                        LEFT JOIN leasing.requirements r ON r.work_item_id=w.id
+                        GROUP BY w.id, c.customer_name ORDER BY w.created_at DESC LIMIT 500""")
+                    return jsonify({"success": True, "work_items": [dict(x) for x in cur.fetchall()]})
+        except psycopg2.Error:
+            app.logger.exception("Leasing work item list failed")
+            return jsonify({"success": False, "message": "Schema Leasing belum tersedia atau query gagal."}), 500
+
+    payload = request.get_json(silent=True) or {}
+    requester_name = str(payload.get("requester_name") or "").strip()
+    customer_name = str(payload.get("customer_name") or "").strip()
+    requirements = payload.get("requirements") or []
+    if not requester_name or not customer_name or not isinstance(requirements, list) or not requirements:
+        return jsonify({"success": False, "message": "customer_name, requester_name, dan minimal satu requirement wajib diisi."}), 400
+    request_id = str(payload.get("request_id") or ("LEA-" + datetime.now().strftime("%Y%m%d") + "-" + uuid.uuid4().hex[:6].upper())).strip()
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                # Reuse the customer directory record, but never use customer name to group Work Items.
+                cur.execute("SELECT id FROM leasing.customers WHERE customer_name=%s ORDER BY id LIMIT 1", (customer_name,))
+                customer = cur.fetchone()
+                if not customer:
+                    cur.execute("INSERT INTO leasing.customers (customer_name) VALUES (%s) RETURNING id", (customer_name,))
+                    customer = cur.fetchone()
+                cur.execute("""INSERT INTO leasing.work_items
+                    (request_id, customer_id, requester_name, requester_email, requester_division,
+                     requester_role, request_due_date, buyer_owner_id, source_reference, notes, created_by)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
+                    (request_id, customer["id"], requester_name, payload.get("requester_email"),
+                     payload.get("requester_division"), payload.get("requester_role"),
+                     payload.get("request_due_date") or None, payload.get("buyer_owner_id") or session["username"],
+                     payload.get("source_reference"), payload.get("notes"), session["username"]))
+                work_item_id = cur.fetchone()["id"]
+                for idx, req in enumerate(requirements, start=1):
+                    if not isinstance(req, dict):
+                        raise ValueError("Setiap requirement harus berupa object.")
+                    cur.execute("""INSERT INTO leasing.requirements
+                        (work_item_id, requirement_no, gedung_kawasan, a_end, z_end, bandwidth,
+                         bandwidth_unit, service_type, special_features, existing_mrc_amount, existing_mrc_currency)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                        (work_item_id, req.get("requirement_no") or idx, req.get("gedung_kawasan"),
+                         req.get("a_end"), req.get("z_end"), (req.get("bandwidth") if req.get("bandwidth") not in (None, "") else None),
+                         req.get("bandwidth_unit"), req.get("service_type"), req.get("special_features"),
+                         (req.get("existing_mrc_amount") if req.get("existing_mrc_amount") not in (None, "") else None), req.get("existing_mrc_currency")))
+                leasing_activity(cur, work_item_id, "work_item_created", "Work Item Leasing dibuat", session["username"], {"request_id": request_id})
+            conn.commit()
+        return jsonify({"success": True, "id": work_item_id, "request_id": request_id, "message": "Work Item Leasing berhasil dibuat."}), 201
+    except (psycopg2.Error, ValueError) as exc:
+        app.logger.exception("Leasing work item create failed")
+        return jsonify({"success": False, "message": str(exc) if isinstance(exc, ValueError) else "Gagal membuat Work Item. Periksa schema dan data yang dikirim."}), 400
+
+
+@app.route("/api/leasing/work-items/<int:work_item_id>", methods=["GET", "PATCH"])
+@leasing_login_required
+def leasing_work_item_detail(work_item_id):
+    if request.method == "PATCH":
+        payload = request.get_json(silent=True) or {}
+        allowed = {"current_stage", "case_status", "closure_reason", "request_due_date", "buyer_owner_id", "notes"}
+        changes = {k: payload[k] for k in allowed if k in payload}
+        if not changes:
+            return jsonify({"success": False, "message": "Tidak ada field yang diperbarui."}), 400
+        if "current_stage" in changes and changes["current_stage"] not in LEASING_STAGES:
+            return jsonify({"success": False, "message": "Stage tidak valid."}), 400
+        if "case_status" in changes and changes["case_status"] not in LEASING_CASE_STATUSES:
+            return jsonify({"success": False, "message": "Status case tidak valid."}), 400
+        if changes.get("case_status") == "closed" and not str(changes.get("closure_reason") or payload.get("closure_reason") or "").strip():
+            return jsonify({"success": False, "message": "closure_reason wajib diisi untuk menutup case."}), 400
+        if "case_status" in changes:
+            changes["closed_at"] = "NOW()" if changes["case_status"] == "closed" else None
+        try:
+            with get_db_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute("SELECT id FROM leasing.work_items WHERE id=%s", (work_item_id,))
+                    if not cur.fetchone(): return jsonify({"success": False, "message": "Work Item tidak ditemukan."}), 404
+                    if changes.get("case_status") == "closed":
+                        cur.execute("SELECT COUNT(*) AS total, COUNT(*) FILTER (WHERE status IN ('resolved','stopped')) AS done FROM leasing.requirements WHERE work_item_id=%s", (work_item_id,))
+                        progress = cur.fetchone()
+                        if progress["total"] == 0 or progress["total"] != progress["done"]:
+                            return jsonify({"success": False, "message": "Case belum bisa ditutup: semua requirement harus resolved/stopped."}), 409
+                    assignments, values = [], []
+                    for key, value in changes.items():
+                        if key == "closed_at":
+                            assignments.append("closed_at = NOW()" if value == "NOW()" else "closed_at = NULL")
+                        else:
+                            assignments.append(f"{key} = %s")
+                            values.append(value or None if key == "request_due_date" else value)
+                    values.append(work_item_id)
+                    cur.execute(f"UPDATE leasing.work_items SET {', '.join(assignments)} WHERE id=%s", values)
+                    leasing_activity(cur, work_item_id, "work_item_updated", "Work Item diperbarui", session["username"], changes)
+                conn.commit()
+            return jsonify({"success": True, "message": "Work Item diperbarui."})
+        except psycopg2.Error:
+            app.logger.exception("Leasing work item update failed")
+            return jsonify({"success": False, "message": "Gagal memperbarui Work Item."}), 400
+
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("""SELECT w.*, c.customer_name FROM leasing.work_items w
+                    LEFT JOIN leasing.customers c ON c.id=w.customer_id WHERE w.id=%s""", (work_item_id,))
+                work_item = cur.fetchone()
+                if not work_item: return jsonify({"success": False, "message": "Work Item tidak ditemukan."}), 404
+                cur.execute("SELECT * FROM leasing.requirements WHERE work_item_id=%s ORDER BY requirement_no", (work_item_id,))
+                requirements = [dict(x) for x in cur.fetchall()]
+                cur.execute("""SELECT o.*, p.partner_name FROM leasing.partner_outreaches o
+                    JOIN leasing.partners p ON p.id=o.partner_id WHERE o.work_item_id=%s ORDER BY o.created_at DESC""", (work_item_id,))
+                outreaches = [dict(x) for x in cur.fetchall()]
+                cur.execute("SELECT * FROM leasing.activity_events WHERE work_item_id=%s ORDER BY occurred_at DESC LIMIT 200", (work_item_id,))
+                activity = [dict(x) for x in cur.fetchall()]
+                cur.execute("""SELECT ct.*, r.requirement_no, r.gedung_kawasan FROM leasing.commercial_targets ct
+                    LEFT JOIN leasing.requirements r ON r.id=ct.requirement_id
+                    WHERE ct.work_item_id=%s ORDER BY ct.requirement_id NULLS FIRST, ct.metric, ct.created_at DESC""", (work_item_id,))
+                commercial_targets = [dict(x) for x in cur.fetchall()]
+                cur.execute("""SELECT po.*, o.work_item_id, p.partner_name FROM leasing.partner_offers po
+                    JOIN leasing.partner_outreaches o ON o.id=po.outreach_id JOIN leasing.partners p ON p.id=o.partner_id
+                    WHERE o.work_item_id=%s ORDER BY po.created_at DESC""", (work_item_id,))
+                offers = [dict(x) for x in cur.fetchall()]
+                cur.execute("""SELECT pol.*, po.outreach_id, po.version_no, po.received_at,
+                    o.partner_id, p.partner_name, r.requirement_no, r.gedung_kawasan, r.a_end, r.z_end
+                    FROM leasing.partner_offer_lines pol
+                    JOIN leasing.partner_offers po ON po.id=pol.offer_id
+                    JOIN leasing.partner_outreaches o ON o.id=po.outreach_id
+                    JOIN leasing.partners p ON p.id=o.partner_id
+                    JOIN leasing.requirements r ON r.id=pol.requirement_id
+                    WHERE o.work_item_id=%s ORDER BY po.created_at DESC, r.requirement_no""", (work_item_id,))
+                offer_lines = [dict(x) for x in cur.fetchall()]
+                cur.execute("""SELECT ne.*, pol.requirement_id, r.requirement_no, p.partner_name
+                    FROM leasing.negotiation_events ne
+                    JOIN leasing.partner_offer_lines pol ON pol.id=ne.offer_line_id
+                    JOIN leasing.requirements r ON r.id=pol.requirement_id
+                    JOIN leasing.partner_offers po ON po.id=pol.offer_id
+                    JOIN leasing.partner_outreaches o ON o.id=po.outreach_id
+                    JOIN leasing.partners p ON p.id=o.partner_id
+                    WHERE o.work_item_id=%s ORDER BY ne.occurred_at DESC""", (work_item_id,))
+                negotiation_events = [dict(x) for x in cur.fetchall()]
+                cur.execute("SELECT * FROM leasing.result_submissions WHERE work_item_id=%s ORDER BY submission_no DESC", (work_item_id,))
+                submissions = [dict(x) for x in cur.fetchall()]
+                cur.execute("""SELECT rsl.*, r.requirement_no, r.gedung_kawasan, pol.mrc_amount,
+                    pol.otc_amount, pol.currency, p.partner_name
+                    FROM leasing.result_submission_lines rsl
+                    JOIN leasing.result_submissions rs ON rs.id=rsl.submission_id
+                    JOIN leasing.requirements r ON r.id=rsl.requirement_id
+                    LEFT JOIN leasing.partner_offer_lines pol ON pol.id=rsl.offer_line_id
+                    LEFT JOIN leasing.partner_offers po ON po.id=pol.offer_id
+                    LEFT JOIN leasing.partner_outreaches o ON o.id=po.outreach_id
+                    LEFT JOIN leasing.partners p ON p.id=o.partner_id
+                    WHERE rs.work_item_id=%s ORDER BY rs.submission_no DESC, r.requirement_no""", (work_item_id,))
+                submission_lines = [dict(x) for x in cur.fetchall()]
+        return jsonify({"success": True, "work_item": dict(work_item), "requirements": requirements,
+                        "partner_outreaches": outreaches, "offers": offers, "offer_lines": offer_lines,
+                        "commercial_targets": commercial_targets, "negotiation_events": negotiation_events, "result_submissions": submissions,
+                        "submission_lines": submission_lines, "activity": activity})
+    except psycopg2.Error:
+        app.logger.exception("Leasing work item detail failed")
+        return jsonify({"success": False, "message": "Gagal memuat detail Work Item."}), 500
+
+
+@app.route("/api/leasing/partners", methods=["GET", "POST"])
+@leasing_login_required
+def leasing_partners():
+    payload = request.get_json(silent=True) or {}
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                if request.method == "POST":
+                    name = str(payload.get("partner_name") or "").strip()
+                    if not name: return jsonify({"success": False, "message": "partner_name wajib diisi."}), 400
+                    cur.execute("""INSERT INTO leasing.partners (partner_name, partner_code, contact_name, contact_email, contact_phone, notes)
+                        VALUES (%s,%s,%s,%s,%s,%s) RETURNING *""", (name, payload.get("partner_code"), payload.get("contact_name"), payload.get("contact_email"), payload.get("contact_phone"), payload.get("notes")))
+                    partner = dict(cur.fetchone()); conn.commit()
+                    return jsonify({"success": True, "partner": partner}), 201
+                cur.execute("SELECT * FROM leasing.partners WHERE is_active=TRUE ORDER BY partner_name")
+                return jsonify({"success": True, "partners": [dict(x) for x in cur.fetchall()]})
+    except psycopg2.IntegrityError:
+        return jsonify({"success": False, "message": "Partner code sudah digunakan."}), 409
+    except psycopg2.Error:
+        app.logger.exception("Leasing partners query failed")
+        return jsonify({"success": False, "message": "Gagal memproses data partner."}), 500
+
+
+@app.route("/api/leasing/work-items/<int:work_item_id>/outreaches", methods=["POST"])
+@leasing_login_required
+def leasing_create_outreach(work_item_id):
+    payload = request.get_json(silent=True) or {}
+    try:
+        partner_id = int(payload.get("partner_id"))
+        requirement_ids = payload.get("requirement_ids") or []
+        with get_db_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("SELECT id FROM leasing.work_items WHERE id=%s AND case_status='open'", (work_item_id,))
+                if not cur.fetchone(): return jsonify({"success": False, "message": "Work Item tidak ditemukan atau sudah ditutup."}), 404
+                cur.execute("SELECT id FROM leasing.partners WHERE id=%s AND is_active=TRUE", (partner_id,))
+                if not cur.fetchone(): return jsonify({"success": False, "message": "Partner tidak ditemukan."}), 404
+                if requirement_ids:
+                    cur.execute("SELECT id FROM leasing.requirements WHERE work_item_id=%s AND id = ANY(%s)", (work_item_id, requirement_ids))
+                    if len(cur.fetchall()) != len(set(requirement_ids)):
+                        return jsonify({"success": False, "message": "Ada requirement yang bukan milik Work Item ini."}), 400
+                cur.execute("SELECT COALESCE(MAX(outreach_round),0)+1 AS round FROM leasing.partner_outreaches WHERE work_item_id=%s AND partner_id=%s", (work_item_id, partner_id))
+                round_no = cur.fetchone()["round"]
+                cur.execute("""INSERT INTO leasing.partner_outreaches
+                    (work_item_id, partner_id, outreach_round, sent_at, response_status, follow_up_owner_id, next_follow_up_at, notes, created_by)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
+                    (work_item_id, partner_id, round_no, payload.get("sent_at") or None,
+                     payload.get("response_status", "draft"), payload.get("follow_up_owner_id") or session["username"],
+                     payload.get("next_follow_up_at") or None, payload.get("notes"), session["username"]))
+                outreach_id = cur.fetchone()["id"]
+                for req_id in requirement_ids:
+                    cur.execute("INSERT INTO leasing.outreach_requirements (outreach_id, requirement_id, response_status) VALUES (%s,%s,'awaiting_response')", (outreach_id, req_id))
+                leasing_activity(cur, work_item_id, "partner_outreach_created", "Outreach partner dicatat", session["username"], {"outreach_id": outreach_id, "partner_id": partner_id})
+            conn.commit()
+        return jsonify({"success": True, "outreach_id": outreach_id}), 201
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "message": "partner_id harus berupa angka."}), 400
+    except psycopg2.Error:
+        app.logger.exception("Leasing outreach create failed")
+        return jsonify({"success": False, "message": "Gagal mencatat outreach partner."}), 400
+
+
+@app.route("/api/leasing/outreaches/<int:outreach_id>", methods=["PATCH"])
+@leasing_login_required
+def leasing_update_outreach(outreach_id):
+    payload = request.get_json(silent=True) or {}
+    allowed = {"response_status", "sent_at", "next_follow_up_at", "responded_at", "follow_up_owner_id", "notes"}
+    changes = {k: payload[k] for k in allowed if k in payload}
+    if not changes: return jsonify({"success": False, "message": "Tidak ada field yang diperbarui."}), 400
+    if "response_status" in changes and changes["response_status"] not in {"draft", "sent", "awaiting_response", "partial_response", "responded", "no_bid", "cancelled"}:
+        return jsonify({"success": False, "message": "response_status tidak valid."}), 400
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("SELECT work_item_id FROM leasing.partner_outreaches WHERE id=%s", (outreach_id,)); row=cur.fetchone()
+                if not row: return jsonify({"success": False, "message": "Outreach tidak ditemukan."}), 404
+                sets=[]; vals=[]
+                for k,v in changes.items(): sets.append(f"{k}=%s"); vals.append(v or None)
+                vals.append(outreach_id)
+                cur.execute(f"UPDATE leasing.partner_outreaches SET {', '.join(sets)} WHERE id=%s", vals)
+                leasing_activity(cur, row["work_item_id"], "partner_outreach_updated", "Status atau follow-up partner diperbarui", session["username"], changes)
+            conn.commit()
+        return jsonify({"success": True})
+    except psycopg2.Error:
+        app.logger.exception("Leasing outreach update failed")
+        return jsonify({"success": False, "message": "Gagal memperbarui outreach."}), 400
+
+
+@app.route("/api/leasing/outreaches/<int:outreach_id>/offers", methods=["POST"])
+@leasing_login_required
+def leasing_create_offer(outreach_id):
+    payload = request.get_json(silent=True) or {}; lines = payload.get("lines") or []
+    if not isinstance(lines, list): return jsonify({"success": False, "message": "lines harus berupa array."}), 400
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("SELECT work_item_id FROM leasing.partner_outreaches WHERE id=%s", (outreach_id,)); outreach=cur.fetchone()
+                if not outreach: return jsonify({"success": False, "message": "Outreach tidak ditemukan."}), 404
+                cur.execute("SELECT COALESCE(MAX(version_no),0)+1 AS v FROM leasing.partner_offers WHERE outreach_id=%s", (outreach_id,)); version=cur.fetchone()["v"]
+                cur.execute("UPDATE leasing.partner_offers SET offer_status='superseded' WHERE outreach_id=%s AND offer_status='current'", (outreach_id,))
+                cur.execute("""INSERT INTO leasing.partner_offers (outreach_id, version_no, received_at, valid_until, notes, created_by)
+                    VALUES (%s,%s,%s,%s,%s,%s) RETURNING id""", (outreach_id, version, payload.get("received_at") or None, payload.get("valid_until") or None, payload.get("notes"), session["username"]))
+                offer_id=cur.fetchone()["id"]
+                for line in lines:
+                    requirement_id=int(line["requirement_id"])
+                    cur.execute("SELECT id FROM leasing.requirements WHERE id=%s AND work_item_id=%s", (requirement_id, outreach["work_item_id"]))
+                    if not cur.fetchone(): raise ValueError("Requirement bukan milik Work Item pada outreach ini.")
+                    cur.execute("""INSERT INTO leasing.partner_offer_lines
+                        (offer_id, requirement_id, feasibility_status, mrc_amount, otc_amount, currency, notes)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s)""", (offer_id, requirement_id, line.get("feasibility_status", "pending"),
+                         (line.get("mrc_amount") if line.get("mrc_amount") not in (None, "") else None),
+                         (line.get("otc_amount") if line.get("otc_amount") not in (None, "") else None),
+                         line.get("currency"), line.get("notes")))
+                leasing_activity(cur, outreach["work_item_id"], "partner_offer_recorded", "Penawaran partner dicatat", session["username"], {"offer_id": offer_id, "version_no": version})
+            conn.commit()
+        return jsonify({"success": True, "offer_id": offer_id, "version_no": version}), 201
+    except (KeyError, TypeError, ValueError) as exc:
+        return jsonify({"success": False, "message": str(exc) or "Format offer tidak valid."}), 400
+    except psycopg2.Error:
+        app.logger.exception("Leasing offer create failed")
+        return jsonify({"success": False, "message": "Gagal mencatat penawaran partner."}), 400
+
+
+@app.route("/api/leasing/work-items/<int:work_item_id>/commercial-targets", methods=["GET", "POST"])
+@leasing_login_required
+def leasing_commercial_targets(work_item_id):
+    if request.method == "GET":
+        try:
+            with get_db_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute("""SELECT ct.*, r.requirement_no, r.gedung_kawasan
+                        FROM leasing.commercial_targets ct LEFT JOIN leasing.requirements r ON r.id=ct.requirement_id
+                        WHERE ct.work_item_id=%s ORDER BY ct.requirement_id NULLS FIRST, ct.metric, ct.created_at DESC""", (work_item_id,))
+                    return jsonify({"success": True, "commercial_targets": [dict(x) for x in cur.fetchall()]})
+        except psycopg2.Error:
+            app.logger.exception("Leasing commercial targets query failed")
+            return jsonify({"success": False, "message": "Gagal memuat commercial target."}), 500
+
+    payload = request.get_json(silent=True) or {}
+    metric = payload.get("metric")
+    if metric not in {"mrc", "otc"}:
+        return jsonify({"success": False, "message": "metric harus mrc atau otc."}), 400
+    try:
+        amount = float(payload.get("target_amount"))
+        if amount < 0:
+            raise ValueError()
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "message": "target_amount harus angka non-negatif."}), 400
+    currency = str(payload.get("currency") or "IDR").strip().upper()
+    if len(currency) != 3:
+        return jsonify({"success": False, "message": "currency harus berupa kode 3 huruf, misalnya IDR."}), 400
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("SELECT id FROM leasing.work_items WHERE id=%s", (work_item_id,))
+                if not cur.fetchone():
+                    return jsonify({"success": False, "message": "Work Item tidak ditemukan."}), 404
+                requirement_id = payload.get("requirement_id") or None
+                if requirement_id:
+                    try:
+                        requirement_id = int(requirement_id)
+                    except (TypeError, ValueError):
+                        return jsonify({"success": False, "message": "requirement_id tidak valid."}), 400
+                    cur.execute("SELECT id FROM leasing.requirements WHERE id=%s AND work_item_id=%s", (requirement_id, work_item_id))
+                    if not cur.fetchone():
+                        return jsonify({"success": False, "message": "Requirement bukan milik Work Item ini."}), 400
+                cur.execute("""INSERT INTO leasing.commercial_targets
+                    (work_item_id, requirement_id, metric, target_amount, currency, target_source, notes, created_by)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
+                    (work_item_id, requirement_id, metric, amount, currency,
+                     payload.get("target_source", "requester"), payload.get("notes"), session["username"]))
+                target_id = cur.fetchone()["id"]
+                leasing_activity(cur, work_item_id, "commercial_target_recorded", "Target komersial dicatat", session["username"],
+                                 {"target_id": target_id, "metric": metric, "target_amount": amount, "currency": currency, "requirement_id": requirement_id})
+            conn.commit()
+        return jsonify({"success": True, "target_id": target_id}), 201
+    except psycopg2.Error:
+        app.logger.exception("Leasing commercial target save failed")
+        return jsonify({"success": False, "message": "Gagal menyimpan commercial target."}), 400
+
+
+@app.route("/api/leasing/offer-lines/<int:offer_line_id>/negotiations", methods=["POST"])
+@leasing_login_required
+def leasing_create_negotiation_event(offer_line_id):
+    payload = request.get_json(silent=True) or {}
+    event_type = payload.get("event_type", "note")
+    allowed_types = {"initial_offer", "counter_offer", "partner_revision", "agreed", "rejected", "note"}
+    if event_type not in allowed_types:
+        return jsonify({"success": False, "message": "Jenis event negosiasi tidak valid."}), 400
+    def optional_nonnegative_number(value, field_name):
+        if value is None or value == "":
+            return None
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            raise ValueError(f"{field_name} harus berupa angka.")
+        if number < 0:
+            raise ValueError(f"{field_name} tidak boleh negatif.")
+        return number
+    try:
+        mrc = optional_nonnegative_number(payload.get("mrc_amount"), "MRC")
+        otc = optional_nonnegative_number(payload.get("otc_amount"), "OTC")
+        currency = (str(payload.get("currency") or "IDR").strip().upper() if mrc is not None or otc is not None else None)
+        if currency is not None and len(currency) != 3:
+            raise ValueError("Currency harus berupa kode 3 huruf.")
+        with get_db_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("""SELECT o.work_item_id FROM leasing.partner_offer_lines pol
+                    JOIN leasing.partner_offers po ON po.id=pol.offer_id
+                    JOIN leasing.partner_outreaches o ON o.id=po.outreach_id WHERE pol.id=%s""", (offer_line_id,))
+                line = cur.fetchone()
+                if not line:
+                    return jsonify({"success": False, "message": "Offer line tidak ditemukan."}), 404
+                cur.execute("""INSERT INTO leasing.negotiation_events
+                    (offer_line_id, event_type, mrc_amount, otc_amount, currency, notes, created_by)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
+                    (offer_line_id, event_type, mrc, otc, currency, payload.get("notes"), session["username"]))
+                event_id = cur.fetchone()["id"]
+                leasing_activity(cur, line["work_item_id"], "negotiation_event_recorded", "Event negosiasi dicatat", session["username"],
+                                 {"negotiation_event_id": event_id, "offer_line_id": offer_line_id, "event_type": event_type})
+            conn.commit()
+        return jsonify({"success": True, "event_id": event_id}), 201
+    except ValueError as exc:
+        return jsonify({"success": False, "message": str(exc)}), 400
+    except psycopg2.Error:
+        app.logger.exception("Leasing negotiation event save failed")
+        return jsonify({"success": False, "message": "Gagal mencatat event negosiasi."}), 400
+
+
+@app.route("/api/leasing/work-items/<int:work_item_id>/result-submissions", methods=["POST"])
+@leasing_login_required
+def leasing_create_result_submission(work_item_id):
+    payload = request.get_json(silent=True) or {}; lines = payload.get("lines") or []
+    if not isinstance(lines, list) or not lines: return jsonify({"success": False, "message": "Minimal satu hasil requirement harus dicatat."}), 400
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("SELECT id FROM leasing.work_items WHERE id=%s", (work_item_id,))
+                if not cur.fetchone(): return jsonify({"success": False, "message": "Work Item tidak ditemukan."}), 404
+                cur.execute("SELECT COALESCE(MAX(submission_no),0)+1 AS n FROM leasing.result_submissions WHERE work_item_id=%s", (work_item_id,)); n=cur.fetchone()["n"]
+                status=payload.get("submission_status", "draft")
+                sent_at=payload.get("sent_at") or (datetime.now().isoformat() if status == "sent" else None)
+                cur.execute("""INSERT INTO leasing.result_submissions
+                    (work_item_id, submission_no, submission_status, recipient_name, recipient_email, channel, sent_at, notes, created_by)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""", (work_item_id,n,status,payload.get("recipient_name"),payload.get("recipient_email"),payload.get("channel","email"),sent_at,payload.get("notes"),session["username"]))
+                submission_id=cur.fetchone()["id"]
+                for line in lines:
+                    req_id=int(line["requirement_id"]); offer_line_id=line.get("offer_line_id")
+                    cur.execute("SELECT id FROM leasing.requirements WHERE id=%s AND work_item_id=%s", (req_id,work_item_id))
+                    if not cur.fetchone(): raise ValueError("Requirement bukan milik Work Item ini.")
+                    if offer_line_id:
+                        cur.execute("""SELECT pol.id FROM leasing.partner_offer_lines pol JOIN leasing.partner_offers po ON po.id=pol.offer_id
+                            JOIN leasing.partner_outreaches o ON o.id=po.outreach_id WHERE pol.id=%s AND o.work_item_id=%s""", (offer_line_id,work_item_id))
+                        if not cur.fetchone(): raise ValueError("Offer line bukan milik Work Item ini.")
+                    cur.execute("INSERT INTO leasing.result_submission_lines (submission_id, requirement_id, offer_line_id, result_note) VALUES (%s,%s,%s,%s)", (submission_id,req_id,offer_line_id,line.get("result_note")))
+                leasing_activity(cur,work_item_id,"result_submission_created","Hasil dikirim/dicatat untuk sebagian atau seluruh requirement",session["username"],{"submission_id":submission_id,"submission_no":n,"line_count":len(lines)})
+            conn.commit()
+        return jsonify({"success": True, "submission_id": submission_id, "submission_no": n}), 201
+    except (KeyError, TypeError, ValueError) as exc:
+        return jsonify({"success": False, "message": str(exc) or "Format hasil tidak valid."}), 400
+    except psycopg2.Error:
+        app.logger.exception("Leasing result submission failed")
+        return jsonify({"success": False, "message": "Gagal mencatat hasil Leasing."}), 400
+
+
+@app.route("/api/leasing/requirements/<int:requirement_id>", methods=["PATCH"])
+@leasing_login_required
+def leasing_update_requirement(requirement_id):
+    payload=request.get_json(silent=True) or {}
+    allowed={"status","resolution_note","gedung_kawasan","a_end","z_end","bandwidth","bandwidth_unit","service_type","special_features"}
+    changes={k:payload[k] for k in allowed if k in payload}
+    if not changes: return jsonify({"success":False,"message":"Tidak ada field yang diperbarui."}),400
+    if "status" in changes and changes["status"] not in LEASING_REQUIREMENT_STATUSES:
+        return jsonify({"success":False,"message":"Status requirement tidak valid."}),400
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("SELECT work_item_id FROM leasing.requirements WHERE id=%s",(requirement_id,)); row=cur.fetchone()
+                if not row: return jsonify({"success":False,"message":"Requirement tidak ditemukan."}),404
+                sets=[]; vals=[]
+                for k,v in changes.items(): sets.append(f"{k}=%s"); vals.append(v)
+                vals.append(requirement_id)
+                cur.execute(f"UPDATE leasing.requirements SET {', '.join(sets)} WHERE id=%s",vals)
+                leasing_activity(cur,row["work_item_id"],"requirement_updated","Requirement diperbarui",session["username"],{"requirement_id":requirement_id,**changes})
+            conn.commit()
+        return jsonify({"success":True})
+    except psycopg2.Error:
+        app.logger.exception("Leasing requirement update failed")
+        return jsonify({"success":False,"message":"Gagal memperbarui requirement."}),400
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5001))
     
