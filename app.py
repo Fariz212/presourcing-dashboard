@@ -260,34 +260,74 @@ def _parse_boq_rows(df):
     return rows, issues
 
 # ============================================================================
-# PAGE ROUTES
+# WORKSPACE ACCESS & PAGE ROUTES
 # ============================================================================
+# Keep the legacy `admin` role mapped to Presourcing M&S for backward compatibility.
+# Leasing gets separate roles; `platform_admin` is the only built-in cross-workspace role.
+MS_ADMIN_ROLES = frozenset({"admin", "ms_admin", "platform_admin"})
+LEASING_ROLES = frozenset({"buyer", "leasing_admin", "platform_admin"})
+
+
+def has_ms_access(role):
+    return role in MS_ADMIN_ROLES
+
+
+def has_leasing_access(role):
+    return role in LEASING_ROLES
+
+
+def preferred_landing_endpoint(role):
+    """Resolve a user's default workspace after login or when /portal is requested."""
+    if role in {"buyer", "leasing_admin"}:
+        return "leasing_dashboard_page"
+    if has_ms_access(role):
+        # A cross-workspace platform admin defaults to M&S and can switch to Leasing.
+        return "index"
+    return "sa_portal"
+
+
 @app.route("/")
 def index():
-    if "username" not in session or session.get("role") != "admin":
+    if not session.get("username"):
         return redirect(url_for("login_page"))
-    return render_template("presourcing-dashboard.html")
+    if not has_ms_access(session.get("role")):
+        return redirect(url_for(preferred_landing_endpoint(session.get("role"))))
+    return render_template(
+        "presourcing-dashboard.html",
+        can_access_leasing=has_leasing_access(session.get("role")),
+    )
+
 
 @app.route("/login")
 def login_page():
     if "username" in session:
-        return redirect(url_for("index") if session.get("role") == "admin" else url_for("sa_portal"))
+        return redirect(url_for(preferred_landing_endpoint(session.get("role"))))
     return render_template("login.html")
+
 
 @app.route("/portal")
 def sa_portal():
-    if "username" not in session: 
+    if "username" not in session:
         return redirect(url_for("login_page"))
+    # Also catches legacy login.html scripts that always redirect to /portal.
+    # Buyer/Leasing Admin goes to Leasing; M&S admins go to M&S; SA remains in portal.
+    target = preferred_landing_endpoint(session.get("role"))
+    if target != "sa_portal":
+        return redirect(url_for(target))
     return render_template("sa-portal.html")
+
 
 @app.route("/leasing")
 def leasing_dashboard_page():
-    """Separate Buyer/Admin workspace; does not replace the Presourcing M&S home."""
+    """Dedicated Leasing workspace for Buyer/Leasing Admin; M&S stays separate."""
     if not session.get("username"):
         return redirect(url_for("login_page"))
-    if session.get("role") not in {"admin", "buyer"}:
-        return "Akses Leasing hanya untuk Buyer/Admin.", 403
-    return render_template("leasing-dashboard.html")
+    if not has_leasing_access(session.get("role")):
+        return "Akses Leasing hanya untuk Buyer/Admin Leasing.", 403
+    return render_template(
+        "leasing-dashboard.html",
+        can_access_ms=has_ms_access(session.get("role")),
+    )
 
 # ============================================================================
 # DATABASE INITIALIZATION
@@ -311,7 +351,6 @@ def init_db():
                 ("admin", "admin123", "Admin Presourcing", "Presourcing Control", "admin"),
                 ("master", "master123", "Master Admin", "System Control", "admin"),
                 ("tester", "tester123", "QA Tester", "Testing Team", "sa"),
-                ("buyer", "buyer123", "Leasing", "Buy to Use", "buyer"),
             ]:
                 cursor.execute("SELECT COUNT(*) FROM users WHERE username = %s", (user_data[0],))
                 if cursor.fetchone()[0] == 0:
@@ -423,7 +462,11 @@ def login():
             user = cursor.fetchone()
             if user:
                 session.update({"username": user["username"], "full_name": user["full_name"], "department": user["department"], "role": user["role"]})
-                return jsonify({"success": True, "user": user}), 200
+                return jsonify({
+                    "success": True,
+                    "user": user,
+                    "redirect_url": url_for(preferred_landing_endpoint(user["role"])),
+                }), 200
             return jsonify({"success": False, "message": "Username atau Password salah!"}), 401
 
 @app.route("/api/logout", methods=["POST"])
@@ -498,7 +541,7 @@ def get_requests():
             with conn.cursor(cursor_factory=RealDictCursor) as cursor:
                 query = "SELECT r.*, u.full_name, u.department, p.pipeline_stage, p.progress_pct, p.target_rfs FROM requests r LEFT JOIN users u ON r.requester_username = u.username LEFT JOIN projects p ON r.ticket_id = p.id"
                 
-                if role != "admin":
+                if role not in MS_ADMIN_ROLES:
                     cursor.execute(query + " WHERE r.requester_username = %s ORDER BY r.created_at DESC", (username,))
                 else:
                     cursor.execute(query + " ORDER BY r.created_at DESC")
@@ -805,7 +848,7 @@ def delete_project(project_id):
 # ============================================================================
 @app.route("/api/download_report", methods=["GET"])
 def download_report():
-    if 'username' not in session or session.get('role') != 'admin':
+    if 'username' not in session or not has_ms_access(session.get('role')):
         return jsonify({"success": False, "message": "Akses ditolak!"}), 403
 
     target_project_id = str(request.args.get("project_id") or "").strip()
@@ -1346,10 +1389,8 @@ def leasing_login_required(fn):
     def wrapper(*args, **kwargs):
         if not session.get("username"):
             return jsonify({"success": False, "message": "Login diperlukan."}), 401
-        # Temporary MVP access: existing admins can operate Leasing until a Buyer role
-        # is formally provisioned. Explicit buyer role is also supported.
-        if session.get("role") not in {"admin", "buyer"}:
-            return jsonify({"success": False, "message": "Akses Leasing hanya untuk Buyer/Admin."}), 403
+        if not has_leasing_access(session.get("role")):
+            return jsonify({"success": False, "message": "Akses Leasing hanya untuk Buyer/Admin Leasing."}), 403
         return fn(*args, **kwargs)
     return wrapper
 
