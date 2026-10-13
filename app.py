@@ -280,6 +280,15 @@ def sa_portal():
         return redirect(url_for("login_page"))
     return render_template("sa-portal.html")
 
+@app.route("/leasing")
+def leasing_dashboard_page():
+    """Separate Buyer/Admin workspace; does not replace the Presourcing M&S home."""
+    if not session.get("username"):
+        return redirect(url_for("login_page"))
+    if session.get("role") not in {"admin", "buyer"}:
+        return "Akses Leasing hanya untuk Buyer/Admin.", 403
+    return render_template("leasing-dashboard.html")
+
 # ============================================================================
 # DATABASE INITIALIZATION
 # ============================================================================
@@ -1316,8 +1325,6 @@ def download_comparison(filename):
     if "username" not in session: 
         return jsonify({"success": False, "message": "Akses ditolak. Silakan login."}), 403
     return send_from_directory(os.path.join(app.root_path, "secure_data", "comparisons"), secure_filename(filename))
-
-
 
 # ============================================================================
 # LEASING MVP API (isolated from Presourcing M&S routes/tables)
