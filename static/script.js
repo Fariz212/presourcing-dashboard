@@ -413,27 +413,55 @@ function renderOverview() {
       .exec-kpi-meta { font-size: 8.5px; color: #94A3B8; margin-top: 4px; }
       .exec-kpi-progress { height: 4px; background: #E2E8F0; border-radius: 2px; margin-top: 6px; overflow: hidden; width: 100%; }
       .exec-kpi-progress span { display: block; height: 100%; border-radius: 2px; }
-      .exec-panel { min-width: 0; background: #FFFFFF; border: 1px solid #DCE4EE; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(15,23,42,.04); }
-      .exec-panel-head { min-height: 42px; padding: 11px 14px; display: flex; align-items: center; gap: 5px; background: linear-gradient(90deg, #0F5CA8 0%, #1672C8 100%); color: #FFFFFF; font-size: 12px; font-weight: 700; }
+      /* =====================================================
+         PANELS DIBUAT FLEXBOX
+         ===================================================== */
+      .exec-panel { 
+        min-width: 0; background: #FFFFFF; border: 1px solid #DCE4EE; border-radius: 8px; 
+        overflow: hidden; box-shadow: 0 2px 4px rgba(15,23,42,.04); 
+        display: flex; flex-direction: column; 
+      }
+      .exec-panel-head { 
+        min-height: 42px; padding: 11px 14px; display: flex; align-items: center; gap: 5px; 
+        background: linear-gradient(90deg, #0F5CA8 0%, #1672C8 100%); color: #FFFFFF; 
+        font-size: 12px; font-weight: 700; flex-shrink: 0; 
+      }
       .exec-panel.warning .exec-panel-head { background: linear-gradient(90deg, #DC2626 0%, #EF4444 100%); }
       .exec-panel.warning .exec-panel-sub { color: #FFFFFF; opacity: .9; }
       .exec-panel.warning { border-color: #FECACA; }
-      .exec-panel.warning .warning-summary { background: #FEF2F2; border-bottom-color: #FECACA; }
+      .exec-panel.warning .warning-summary { background: #FEF2F2; border-bottom-color: #FECACA; flex-shrink: 0; }
       .exec-panel.warning .warning-box { border-color: #FECACA; background: #FFFFFF; }
       .exec-panel.warning .warning-label { color: #B91C1C; }
       .exec-panel.warning .warning-value { color: #991B1B; }
       .exec-panel-sub { margin-left: auto; font-size: 9px; font-weight: 500; opacity: .8; }
-      .exec-panel-body { padding: 10px; }
-      .exec-panel.overview { grid-area: overview; min-height: auto; }
-      .exec-panel.status { grid-area: status; }
-      .exec-panel.pic { grid-area: pic; }
-      .exec-panel.pipeline { grid-area: pipeline; }
-      .exec-panel.rfs { grid-area: rfs; }
-      .exec-panel.top5 { grid-area: top5; }
-      .exec-panel.warning { grid-area: warning; }
-      .exec-table-wrap { width: 100%; overflow-x: auto; max-height:220px; }
-      .exec-table { width: 100%; border-collapse: collapse; table-layout: auto; }
-      .exec-table th { padding: 8px 7px; background: #F4F7FB; color: #64748B; border-bottom: 1px solid #DCE4EE; font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; text-align: left; }
+      
+      .exec-panel-body { padding: 10px; flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: center; }
+
+      /* =====================================================
+         KUNCI TINGGI BARIS (230px) AGAR SEJAJAR SEMPURNA
+         ===================================================== */
+      .exec-panel.overview { grid-area: overview; height: 230px; }
+      .exec-panel.status { grid-area: status; height: 230px; }
+      .exec-panel.pic { grid-area: pic; height: 230px; }
+      .exec-panel.pipeline { grid-area: pipeline; height: 215px; }
+      .exec-panel.rfs { grid-area: rfs; height: 215px; }
+      .exec-panel.top5 { grid-area: top5; height: 230px; }
+      .exec-panel.warning { grid-area: warning; height: 230px; }
+
+      /* =====================================================
+         TABEL MENGISI SISA RUANG & BISA DI-SCROLL
+         ===================================================== */
+      .exec-table-wrap { 
+        width: 100%; 
+        flex: 1; min-height: 0; 
+        overflow-y: auto; overflow-x: auto; 
+      }
+      .exec-table-wrap::-webkit-scrollbar { width: 6px; height: 6px; }
+      .exec-table-wrap::-webkit-scrollbar-track { background: transparent; }
+      .exec-table-wrap::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 10px; }
+      
+      .exec-table { width: 100%; border-collapse: separate; border-spacing: 0; table-layout: auto; }
+      .exec-table th { position: sticky; top: 0; z-index: 10; padding: 8px 7px; background: #F4F7FB; color: #64748B; font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; text-align: left; box-shadow: inset 0 -1px 0 #DCE4EE; }
       .exec-table td { padding: 8px 7px; border-bottom: 1px solid #EEF2F6; color: #334155; font-size: 9.5px; line-height: 1.3; vertical-align: middle; }
       .exec-table tbody tr:last-child td { border-bottom: 0; }
       .exec-table .mono { font-size: 9px; white-space: nowrap; }
