@@ -348,6 +348,11 @@ body{
       <div class="nav-user-role" id="display-dept">...</div>
     </div>
     
+    {% if can_access_leasing %}
+    <a class="btn-nav-outline" href="/leasing" style="text-decoration:none;">Leasing ↗</a>
+    {% endif %}
+
+
     <button class="btn-nav-outline" onclick="openGlobalInboxModal()">
       📥 Inbox
     </button>

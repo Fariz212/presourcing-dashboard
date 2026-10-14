@@ -175,8 +175,8 @@ document.getElementById('login-form').onsubmit = async (e) => {
     if (data.success) {
       // Simpan ID Card (Data Profil) ke memori browser
       localStorage.setItem('user', JSON.stringify(data.user));
-      // Lempar otomatis: Admin ke Dashboard (/), SA ke Portal Request (/portal)
-      window.location.href = data.user.role === 'admin' ? '/' : '/portal';
+      // Redirect sesuai workspace yang ditentukan backend dari role akun
+      window.location.href = data.redirect_url || '/portal';
     } else {
       const errEl = document.getElementById('login-error');
       errEl.innerText = data.message;
