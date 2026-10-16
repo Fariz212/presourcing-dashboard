@@ -48,6 +48,27 @@ def get_db_connection():
     finally:
         db_pool.putconn(conn)
 
+# Leasing uses its own PostgreSQL database; user identity remains in presourcing_db.public.users.
+LEASING_DB_NAME = os.getenv("LEASING_DB_NAME", "leasing_db")
+leasing_db_pool = ThreadedConnectionPool(
+    1, 10,
+    host=DB_HOST,
+    database=LEASING_DB_NAME,
+    user=DB_USER,
+    password=DB_PASS,
+)
+
+@contextlib.contextmanager
+def get_leasing_db_connection():
+    """Get a connection from the separate Leasing database pool."""
+    conn = None
+    try:
+        conn = leasing_db_pool.getconn()
+        yield conn
+    finally:
+        if conn is not None:
+            leasing_db_pool.putconn(conn)
+
 # ============================================================================
 # EXCEL TEMPLATE CONFIGURATION (14 KOLOM RIGID)
 # ============================================================================
@@ -1372,7 +1393,7 @@ def download_comparison(filename):
 
 # ============================================================================
 # LEASING MVP API (isolated from Presourcing M&S routes/tables)
-# Apply leasing_mvp_schema.sql once before using these endpoints.
+# Apply leasing_mvp_schema.sql to the separate leasing_db database before using these endpoints.
 # ============================================================================
 from functools import wraps
 
@@ -1407,7 +1428,7 @@ def leasing_activity(cursor, work_item_id, event_type, summary, actor, metadata=
 @leasing_login_required
 def leasing_dashboard():
     try:
-        with get_db_connection() as conn:
+        with get_leasing_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 cur.execute("""SELECT
                     COUNT(*) FILTER (WHERE case_status='open') AS open_cases,
@@ -1450,7 +1471,7 @@ def leasing_dashboard():
 def leasing_work_items():
     if request.method == "GET":
         try:
-            with get_db_connection() as conn:
+            with get_leasing_db_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
                     cur.execute("""SELECT w.*, c.customer_name,
                         COUNT(DISTINCT r.id) AS requirement_count,
@@ -1471,7 +1492,7 @@ def leasing_work_items():
         return jsonify({"success": False, "message": "customer_name, requester_name, dan minimal satu requirement wajib diisi."}), 400
     request_id = str(payload.get("request_id") or ("LEA-" + datetime.now().strftime("%Y%m%d") + "-" + uuid.uuid4().hex[:6].upper())).strip()
     try:
-        with get_db_connection() as conn:
+        with get_leasing_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 # Reuse the customer directory record, but never use customer name to group Work Items.
                 cur.execute("SELECT id FROM leasing.customers WHERE customer_name=%s ORDER BY id LIMIT 1", (customer_name,))
@@ -1525,7 +1546,7 @@ def leasing_work_item_detail(work_item_id):
         if "case_status" in changes:
             changes["closed_at"] = "NOW()" if changes["case_status"] == "closed" else None
         try:
-            with get_db_connection() as conn:
+            with get_leasing_db_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
                     cur.execute("SELECT id FROM leasing.work_items WHERE id=%s", (work_item_id,))
                     if not cur.fetchone(): return jsonify({"success": False, "message": "Work Item tidak ditemukan."}), 404
@@ -1551,7 +1572,7 @@ def leasing_work_item_detail(work_item_id):
             return jsonify({"success": False, "message": "Gagal memperbarui Work Item."}), 400
 
     try:
-        with get_db_connection() as conn:
+        with get_leasing_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 cur.execute("""SELECT w.*, c.customer_name FROM leasing.work_items w
                     LEFT JOIN leasing.customers c ON c.id=w.customer_id WHERE w.id=%s""", (work_item_id,))
@@ -1617,7 +1638,7 @@ def leasing_work_item_detail(work_item_id):
 def leasing_partners():
     payload = request.get_json(silent=True) or {}
     try:
-        with get_db_connection() as conn:
+        with get_leasing_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 if request.method == "POST":
                     name = str(payload.get("partner_name") or "").strip()
@@ -1642,7 +1663,7 @@ def leasing_create_outreach(work_item_id):
     try:
         partner_id = int(payload.get("partner_id"))
         requirement_ids = payload.get("requirement_ids") or []
-        with get_db_connection() as conn:
+        with get_leasing_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 cur.execute("SELECT id FROM leasing.work_items WHERE id=%s AND case_status='open'", (work_item_id,))
                 if not cur.fetchone(): return jsonify({"success": False, "message": "Work Item tidak ditemukan atau sudah ditutup."}), 404
@@ -1683,7 +1704,7 @@ def leasing_update_outreach(outreach_id):
     if "response_status" in changes and changes["response_status"] not in {"draft", "sent", "awaiting_response", "partial_response", "responded", "no_bid", "cancelled"}:
         return jsonify({"success": False, "message": "response_status tidak valid."}), 400
     try:
-        with get_db_connection() as conn:
+        with get_leasing_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 cur.execute("SELECT work_item_id FROM leasing.partner_outreaches WHERE id=%s", (outreach_id,)); row=cur.fetchone()
                 if not row: return jsonify({"success": False, "message": "Outreach tidak ditemukan."}), 404
@@ -1705,7 +1726,7 @@ def leasing_create_offer(outreach_id):
     payload = request.get_json(silent=True) or {}; lines = payload.get("lines") or []
     if not isinstance(lines, list): return jsonify({"success": False, "message": "lines harus berupa array."}), 400
     try:
-        with get_db_connection() as conn:
+        with get_leasing_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 cur.execute("SELECT work_item_id FROM leasing.partner_outreaches WHERE id=%s", (outreach_id,)); outreach=cur.fetchone()
                 if not outreach: return jsonify({"success": False, "message": "Outreach tidak ditemukan."}), 404
@@ -1739,7 +1760,7 @@ def leasing_create_offer(outreach_id):
 def leasing_commercial_targets(work_item_id):
     if request.method == "GET":
         try:
-            with get_db_connection() as conn:
+            with get_leasing_db_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
                     cur.execute("""SELECT ct.*, r.requirement_no, r.gedung_kawasan
                         FROM leasing.commercial_targets ct LEFT JOIN leasing.requirements r ON r.id=ct.requirement_id
@@ -1763,7 +1784,7 @@ def leasing_commercial_targets(work_item_id):
     if len(currency) != 3:
         return jsonify({"success": False, "message": "currency harus berupa kode 3 huruf, misalnya IDR."}), 400
     try:
-        with get_db_connection() as conn:
+        with get_leasing_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 cur.execute("SELECT id FROM leasing.work_items WHERE id=%s", (work_item_id,))
                 if not cur.fetchone():
@@ -1816,7 +1837,7 @@ def leasing_create_negotiation_event(offer_line_id):
         currency = (str(payload.get("currency") or "IDR").strip().upper() if mrc is not None or otc is not None else None)
         if currency is not None and len(currency) != 3:
             raise ValueError("Currency harus berupa kode 3 huruf.")
-        with get_db_connection() as conn:
+        with get_leasing_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 cur.execute("""SELECT o.work_item_id FROM leasing.partner_offer_lines pol
                     JOIN leasing.partner_offers po ON po.id=pol.offer_id
@@ -1846,7 +1867,7 @@ def leasing_create_result_submission(work_item_id):
     payload = request.get_json(silent=True) or {}; lines = payload.get("lines") or []
     if not isinstance(lines, list) or not lines: return jsonify({"success": False, "message": "Minimal satu hasil requirement harus dicatat."}), 400
     try:
-        with get_db_connection() as conn:
+        with get_leasing_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 cur.execute("SELECT id FROM leasing.work_items WHERE id=%s", (work_item_id,))
                 if not cur.fetchone(): return jsonify({"success": False, "message": "Work Item tidak ditemukan."}), 404
@@ -1886,7 +1907,7 @@ def leasing_update_requirement(requirement_id):
     if "status" in changes and changes["status"] not in LEASING_REQUIREMENT_STATUSES:
         return jsonify({"success":False,"message":"Status requirement tidak valid."}),400
     try:
-        with get_db_connection() as conn:
+        with get_leasing_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 cur.execute("SELECT work_item_id FROM leasing.requirements WHERE id=%s",(requirement_id,)); row=cur.fetchone()
                 if not row: return jsonify({"success":False,"message":"Requirement tidak ditemukan."}),404

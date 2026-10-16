@@ -1,7 +1,8 @@
 -- Leasing MVP schema (PostgreSQL)
 -- Standalone domain tables. Does not alter Presourcing M&S tables.
--- Aligned with app.py: existing auth table is public.users and the stable user key is username (TEXT).
--- Run after the Flask app has initialized public.users. Leasing remains isolated from M&S tables.
+-- Apply this file to the separate leasing_db database.
+-- Login identity remains in presourcing_db.public.users; usernames below are audit/owner values only.
+-- PostgreSQL foreign keys cannot reference tables in another database, so no cross-database user FKs are used.
 
 BEGIN;
 
@@ -39,7 +40,7 @@ CREATE TABLE IF NOT EXISTS leasing.work_items (
     requester_role TEXT,
     received_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     request_due_date DATE,
-    buyer_owner_id TEXT REFERENCES public.users(username) ON DELETE SET NULL,
+    buyer_owner_id TEXT,
     current_stage TEXT NOT NULL DEFAULT 'request_received'
         CHECK (current_stage IN (
             'request_received', 'requirement_review', 'vendor_sourcing',
@@ -51,7 +52,7 @@ CREATE TABLE IF NOT EXISTS leasing.work_items (
     closed_at TIMESTAMPTZ,
     source_reference TEXT,
     notes TEXT,
-    created_by TEXT REFERENCES public.users(username) ON DELETE SET NULL,
+    created_by TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CHECK (
@@ -93,11 +94,11 @@ CREATE TABLE IF NOT EXISTS leasing.partner_outreaches (
             'draft', 'sent', 'awaiting_response', 'partial_response',
             'responded', 'no_bid', 'cancelled'
         )),
-    follow_up_owner_id TEXT REFERENCES public.users(username) ON DELETE SET NULL,
+    follow_up_owner_id TEXT,
     next_follow_up_at TIMESTAMPTZ,
     responded_at TIMESTAMPTZ,
     notes TEXT,
-    created_by TEXT REFERENCES public.users(username) ON DELETE SET NULL,
+    created_by TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE (work_item_id, partner_id, outreach_round)
@@ -125,7 +126,7 @@ CREATE TABLE IF NOT EXISTS leasing.partner_offers (
     offer_status TEXT NOT NULL DEFAULT 'current'
         CHECK (offer_status IN ('current', 'superseded', 'withdrawn')),
     notes TEXT,
-    created_by TEXT REFERENCES public.users(username) ON DELETE SET NULL,
+    created_by TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE (outreach_id, version_no)
 );
@@ -165,7 +166,7 @@ CREATE TABLE IF NOT EXISTS leasing.negotiation_events (
     otc_amount NUMERIC(18,2),
     currency CHAR(3),
     notes TEXT,
-    created_by TEXT REFERENCES public.users(username) ON DELETE SET NULL,
+    created_by TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CHECK (mrc_amount IS NULL OR mrc_amount >= 0),
     CHECK (otc_amount IS NULL OR otc_amount >= 0)
@@ -182,7 +183,7 @@ CREATE TABLE IF NOT EXISTS leasing.commercial_targets (
         CHECK (target_source IN ('requester', 'buyer_benchmark', 'other')),
     effective_from TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     notes TEXT,
-    created_by TEXT REFERENCES public.users(username) ON DELETE SET NULL,
+    created_by TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CHECK (requirement_id IS NULL OR work_item_id IS NOT NULL)
 );
@@ -202,7 +203,7 @@ CREATE TABLE IF NOT EXISTS leasing.documents (
     storage_key TEXT NOT NULL UNIQUE,
     mime_type TEXT,
     size_bytes BIGINT CHECK (size_bytes IS NULL OR size_bytes >= 0),
-    uploaded_by TEXT REFERENCES public.users(username) ON DELETE SET NULL,
+    uploaded_by TEXT,
     uploaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -218,7 +219,7 @@ CREATE TABLE IF NOT EXISTS leasing.result_submissions (
         CHECK (channel IN ('email', 'other')),
     sent_at TIMESTAMPTZ,
     notes TEXT,
-    created_by TEXT REFERENCES public.users(username) ON DELETE SET NULL,
+    created_by TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE (work_item_id, submission_no),
     CHECK (submission_status <> 'sent' OR sent_at IS NOT NULL)
@@ -246,7 +247,7 @@ CREATE TABLE IF NOT EXISTS leasing.activity_events (
     work_item_id BIGINT NOT NULL REFERENCES leasing.work_items(id) ON DELETE CASCADE,
     event_type TEXT NOT NULL,
     event_summary TEXT NOT NULL,
-    actor_id TEXT REFERENCES public.users(username) ON DELETE SET NULL,
+    actor_id TEXT,
     metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
     occurred_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
