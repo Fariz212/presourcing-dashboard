@@ -1,6 +1,6 @@
 from flask import Flask, request, jsonify, render_template, session, redirect, url_for, send_file, send_from_directory
 from flask_cors import CORS
-from openpyxl import load_workbook, Workbook
+from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from copy import copy
 from openpyxl.cell.cell import MergedCell
@@ -10,11 +10,12 @@ from psycopg2.pool import ThreadedConnectionPool
 from psycopg2.extras import RealDictCursor, execute_values
 import json
 import os
+from io import BytesIO
 import io
 import uuid
 import csv
-import re
 import math
+import re
 import unicodedata
 from datetime import datetime
 import contextlib
@@ -45,20 +46,20 @@ db_pool = ThreadedConnectionPool(
 
 @contextlib.contextmanager
 def get_db_connection():
-    """Borrow a connection and return it to the pool with no open transaction."""
+    """Borrow a connection and return it to the pool with a clean transaction state."""
     conn = None
     try:
         conn = db_pool.getconn()
         yield conn
     except Exception:
-        if conn is not None and not conn.closed:
-            conn.rollback()
+        if conn is not None:
+            try: conn.rollback()
+            except Exception: app.logger.exception("Identity/M&S connection rollback failed")
         raise
     finally:
         if conn is not None:
-            if not conn.closed:
-                # Explicit commits in write routes are preserved; uncommitted reads/errors are cleared.
-                conn.rollback()
+            try: conn.rollback()
+            except Exception: app.logger.exception("Identity/M&S connection reset failed")
             db_pool.putconn(conn)
 
 # Leasing uses its own PostgreSQL database; user identity remains in presourcing_db.public.users.
@@ -73,19 +74,20 @@ leasing_db_pool = ThreadedConnectionPool(
 
 @contextlib.contextmanager
 def get_leasing_db_connection():
-    """Borrow a Leasing connection and return it to the pool without an open transaction."""
+    """Borrow a Leasing connection and return it to the pool cleanly."""
     conn = None
     try:
         conn = leasing_db_pool.getconn()
         yield conn
     except Exception:
-        if conn is not None and not conn.closed:
-            conn.rollback()
+        if conn is not None:
+            try: conn.rollback()
+            except Exception: app.logger.exception("Leasing connection rollback failed")
         raise
     finally:
         if conn is not None:
-            if not conn.closed:
-                conn.rollback()
+            try: conn.rollback()
+            except Exception: app.logger.exception("Leasing connection reset failed")
             leasing_db_pool.putconn(conn)
 
 # ============================================================================
@@ -1422,82 +1424,6 @@ LEASING_STAGES = {
 }
 LEASING_CASE_STATUSES = {"open", "closed", "cancelled"}
 LEASING_REQUIREMENT_STATUSES = {"open", "in_progress", "resolved", "stopped"}
-LEASING_BANDWIDTH_UNITS = {"mbps": "Mbps", "gbps": "Gbps", "kbps": "Kbps", "other": "Other"}
-LEASING_REQUIREMENT_CORE_FIELDS = {
-    "order_type", "si", "area", "address", "gedung_kawasan", "a_end", "z_end",
-    "bandwidth", "bandwidth_unit", "service_type", "special_features",
-    "existing_mrc_amount", "existing_mrc_currency",
-}
-
-
-def leasing_is_psb(order_type):
-    """True only for recognized Pasang Baru (PSB) labels; never infer from Jasa."""
-    value = unicodedata.normalize("NFKD", str(order_type or "")).encode("ascii", "ignore").decode("ascii")
-    normalized = re.sub(r"[^a-z0-9]+", " ", value.lower()).strip()
-    return normalized in {"psb", "pasang baru", "pasang baru psb"}
-
-
-def leasing_normalize_requirement(values, label="Requirement"):
-    """Normalize intake fields and return (values, validation_errors). Shared by UI/API/import."""
-    result = dict(values or {})
-    errors = []
-    text_fields = ("order_type", "si", "area", "address", "gedung_kawasan", "a_end", "z_end", "service_type", "special_features")
-    for field in text_fields:
-        value = result.get(field)
-        result[field] = str(value).strip() if value is not None and str(value).strip() else None
-
-    required_labels = {
-        "order_type": "Jenis Order", "area": "Area", "address": "Alamat", "a_end": "A End",
-        "service_type": "Jasa", "special_features": "Fitur Khusus",
-    }
-    for field, display in required_labels.items():
-        if not result.get(field):
-            errors.append(f"{label}: {display} wajib diisi.")
-
-    if result.get("order_type") and not leasing_is_psb(result.get("order_type")) and not result.get("si"):
-        errors.append(f"{label}: SI wajib diisi untuk Jenis Order selain Pasang Baru (PSB).")
-
-    raw_bandwidth = result.get("bandwidth")
-    if raw_bandwidth in (None, ""):
-        result["bandwidth"] = None
-        errors.append(f"{label}: Bandwidth wajib diisi.")
-    else:
-        try:
-            result["bandwidth"] = float(raw_bandwidth)
-            if not math.isfinite(result["bandwidth"]) or result["bandwidth"] <= 0:
-                errors.append(f"{label}: Bandwidth harus berupa angka lebih besar dari nol.")
-        except (TypeError, ValueError):
-            result["bandwidth"] = None
-            errors.append(f"{label}: Bandwidth harus berupa angka lebih besar dari nol.")
-
-    raw_unit = str(result.get("bandwidth_unit") or "").strip().lower()
-    if not raw_unit:
-        result["bandwidth_unit"] = "Mbps"
-    elif raw_unit in LEASING_BANDWIDTH_UNITS:
-        result["bandwidth_unit"] = LEASING_BANDWIDTH_UNITS[raw_unit]
-    else:
-        errors.append(f"{label}: Satuan harus Mbps, Gbps, Kbps, atau Other; kosong berarti Mbps.")
-
-    raw_mrc = result.get("existing_mrc_amount")
-    if raw_mrc in (None, ""):
-        result["existing_mrc_amount"] = None
-        result["existing_mrc_currency"] = None
-    else:
-        try:
-            result["existing_mrc_amount"] = float(raw_mrc)
-            if not math.isfinite(result["existing_mrc_amount"]) or result["existing_mrc_amount"] < 0:
-                errors.append(f"{label}: MRC Eksisting harus berupa angka nol atau lebih besar.")
-        except (TypeError, ValueError):
-            result["existing_mrc_amount"] = None
-            errors.append(f"{label}: MRC Eksisting harus berupa angka nol atau lebih besar.")
-        if result["existing_mrc_amount"] is not None:
-            currency = str(result.get("existing_mrc_currency") or "IDR").strip().upper()
-            if len(currency) != 3 or not currency.isalpha():
-                errors.append(f"{label}: Currency MRC Eksisting harus berupa kode 3 huruf, misalnya IDR.")
-            else:
-                result["existing_mrc_currency"] = currency
-
-    return result, errors
 
 
 def leasing_login_required(fn):
@@ -1664,20 +1590,15 @@ def leasing_work_items():
     customer_name = str(payload.get("customer_name") or "").strip()
     requirements = payload.get("requirements") or []
     if not requester_name or not customer_name or not isinstance(requirements, list) or not requirements:
-        return jsonify({"success": False, "message": "Customer, Requester, dan minimal satu requirement wajib diisi."}), 400
-
-    normalized_requirements = []
-    validation_errors = []
-    for index, requirement in enumerate(requirements, start=1):
-        if not isinstance(requirement, dict):
-            validation_errors.append(f"Requirement {index}: data harus berupa object.")
-            continue
-        normalized, errors = leasing_normalize_requirement(requirement, f"Requirement {index}")
-        normalized_requirements.append({**requirement, **normalized})
-        validation_errors.extend(errors)
-    if validation_errors:
-        return jsonify({"success": False, "message": "Periksa field wajib requirement.", "issues": validation_errors}), 400
-
+        return jsonify({"success": False, "message": "customer_name, requester_name, dan minimal satu requirement wajib diisi."}), 400
+    try:
+        normalized_requirements = []
+        for idx, req in enumerate(requirements, start=1):
+            if not isinstance(req, dict):
+                raise ValueError(f"Requirement {idx} harus berupa object.")
+            normalized_requirements.append(_leasing_validate_requirement_payload(req, f"Requirement {idx}"))
+    except ValueError as exc:
+        return jsonify({"success": False, "message": str(exc)}), 400
     request_id = str(payload.get("request_id") or ("LEA-" + datetime.now().strftime("%Y%m%d") + "-" + uuid.uuid4().hex[:6].upper())).strip()
     owner = str(payload.get("buyer_owner_id") or session["username"]).strip()
     if not leasing_owner_is_valid(owner):
@@ -1685,6 +1606,7 @@ def leasing_work_items():
     try:
         with get_leasing_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                # Reuse the customer directory record, but never use customer name to group Work Items.
                 cur.execute("SELECT id FROM leasing.customers WHERE customer_name=%s ORDER BY id LIMIT 1", (customer_name,))
                 customer = cur.fetchone()
                 if not customer:
@@ -1694,18 +1616,21 @@ def leasing_work_items():
                     (request_id, customer_id, requester_name, requester_email, requester_division,
                      requester_role, request_due_date, buyer_owner_id, source_reference, notes, created_by)
                     VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
-                    (request_id, customer["id"], requester_name, None, None, None,
-                     payload.get("request_due_date") or None, owner, None, payload.get("notes"), session["username"]))
+                    (request_id, customer["id"], requester_name, payload.get("requester_email"),
+                     payload.get("requester_division"), payload.get("requester_role"),
+                     payload.get("request_due_date") or None, owner,
+                     payload.get("source_reference"), payload.get("notes"), session["username"]))
                 work_item_id = cur.fetchone()["id"]
                 for idx, req in enumerate(normalized_requirements, start=1):
                     cur.execute("""INSERT INTO leasing.requirements
-                        (work_item_id, requirement_no, order_type, si, area, address, gedung_kawasan, a_end, z_end,
-                         bandwidth, bandwidth_unit, service_type, special_features, existing_mrc_amount, existing_mrc_currency)
-                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
-                        (work_item_id, req.get("requirement_no") or idx, req.get("order_type"), req.get("si"),
-                         req.get("area"), req.get("address"), req.get("gedung_kawasan"), req.get("a_end"), req.get("z_end"),
-                         req.get("bandwidth"), req.get("bandwidth_unit") or "Mbps", req.get("service_type"), req.get("special_features"),
-                         req.get("existing_mrc_amount"), req.get("existing_mrc_currency")))
+                        (work_item_id, requirement_no, order_type, si, area, address, gedung_kawasan, latitude, longitude,
+                         a_end, z_end, bandwidth, bandwidth_unit, service_type, special_features,
+                         existing_mrc_amount, existing_mrc_currency)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                        (work_item_id, idx, req["order_type"], req["si"], req["area"], req["address"],
+                         req["gedung_kawasan"], req["latitude"], req["longitude"], req["a_end"], req["z_end"], req["bandwidth"],
+                         req["bandwidth_unit"], req["service_type"], req["special_features"],
+                         req["existing_mrc_amount"], req["existing_mrc_currency"]))
                 leasing_activity(cur, work_item_id, "work_item_created", "Work Item Leasing dibuat", session["username"], {"request_id": request_id})
             conn.commit()
         return jsonify({"success": True, "id": work_item_id, "request_id": request_id, "message": "Work Item Leasing berhasil dibuat."}), 201
@@ -1785,7 +1710,7 @@ def leasing_work_item_detail(work_item_id):
                     WHERE o.work_item_id=%s ORDER BY po.created_at DESC""", (work_item_id,))
                 offers = [dict(x) for x in cur.fetchall()]
                 cur.execute("""SELECT pol.*, po.outreach_id, po.version_no, po.received_at,
-                    o.partner_id, p.partner_name, r.requirement_no, r.order_type, r.si, r.area, r.address, r.gedung_kawasan, r.a_end, r.z_end
+                    o.partner_id, p.partner_name, r.requirement_no, r.gedung_kawasan, r.a_end, r.z_end
                     FROM leasing.partner_offer_lines pol
                     JOIN leasing.partner_offers po ON po.id=pol.offer_id
                     JOIN leasing.partner_outreaches o ON o.id=po.outreach_id
@@ -2092,10 +2017,8 @@ def leasing_create_result_submission(work_item_id):
 @leasing_login_required
 def leasing_create_requirement(work_item_id):
     payload = request.get_json(silent=True) or {}
-    normalized, issues = leasing_normalize_requirement(payload, "Requirement baru")
-    if issues:
-        return jsonify({"success": False, "message": "Periksa field wajib requirement.", "issues": issues}), 400
     try:
+        values = _leasing_validate_requirement_payload(payload, "Requirement baru")
         with get_leasing_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 cur.execute("SELECT case_status FROM leasing.work_items WHERE id=%s FOR UPDATE", (work_item_id,))
@@ -2107,68 +2030,145 @@ def leasing_create_requirement(work_item_id):
                 cur.execute("SELECT COALESCE(MAX(requirement_no),0)+1 AS next_no FROM leasing.requirements WHERE work_item_id=%s", (work_item_id,))
                 next_no = cur.fetchone()["next_no"]
                 cur.execute("""INSERT INTO leasing.requirements
-                    (work_item_id, requirement_no, order_type, si, area, address, gedung_kawasan, a_end, z_end,
-                     bandwidth, bandwidth_unit, service_type, special_features, existing_mrc_amount, existing_mrc_currency)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id, requirement_no""",
-                    (work_item_id, next_no, normalized.get("order_type"), normalized.get("si"), normalized.get("area"),
-                     normalized.get("address"), normalized.get("gedung_kawasan"), normalized.get("a_end"), normalized.get("z_end"),
-                     normalized.get("bandwidth"), normalized.get("bandwidth_unit") or "Mbps", normalized.get("service_type"),
-                     normalized.get("special_features"), normalized.get("existing_mrc_amount"), normalized.get("existing_mrc_currency")))
+                    (work_item_id, requirement_no, order_type, si, area, address, gedung_kawasan, latitude, longitude,
+                     a_end, z_end, bandwidth, bandwidth_unit, service_type, special_features,
+                     existing_mrc_amount, existing_mrc_currency)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    RETURNING id, requirement_no""",
+                    (work_item_id, next_no, values["order_type"], values["si"], values["area"], values["address"],
+                     values["gedung_kawasan"], values["latitude"], values["longitude"], values["a_end"], values["z_end"], values["bandwidth"], values["bandwidth_unit"],
+                     values["service_type"], values["special_features"], values["existing_mrc_amount"], values["existing_mrc_currency"]))
                 created = dict(cur.fetchone())
                 leasing_activity(cur, work_item_id, "requirement_added", f"Requirement #{next_no} ditambahkan", session["username"], {"requirement_id": created["id"], "requirement_no": next_no})
             conn.commit()
         return jsonify({"success": True, **created, "message": "Requirement berhasil ditambahkan."}), 201
+    except ValueError as exc:
+        return jsonify({"success": False, "message": str(exc)}), 400
     except psycopg2.Error:
         app.logger.exception("Leasing requirement create failed")
-        return jsonify({"success": False, "message": "Gagal menambahkan requirement. Periksa log server untuk detail."}), 400
+        return jsonify({"success": False, "message": "Gagal menambahkan requirement. Periksa log server."}), 400
 
 
 @app.route("/api/leasing/requirements/<int:requirement_id>", methods=["PATCH"])
 @leasing_login_required
 def leasing_update_requirement(requirement_id):
     payload = request.get_json(silent=True) or {}
-    allowed = LEASING_REQUIREMENT_CORE_FIELDS | {"status", "resolution_note"}
+    allowed = {"status", "resolution_note", "order_type", "si", "area", "address", "gedung_kawasan", "latitude", "longitude", "a_end", "z_end", "bandwidth", "bandwidth_unit", "service_type", "special_features", "existing_mrc_amount", "existing_mrc_currency"}
     changes = {k: payload[k] for k in allowed if k in payload}
     if not changes:
         return jsonify({"success": False, "message": "Tidak ada field yang diperbarui."}), 400
     if "status" in changes and changes["status"] not in LEASING_REQUIREMENT_STATUSES:
         return jsonify({"success": False, "message": "Status requirement tidak valid."}), 400
-    core_changed = bool(set(changes) & LEASING_REQUIREMENT_CORE_FIELDS)
+    detail_fields = {"order_type", "si", "area", "address", "gedung_kawasan", "latitude", "longitude", "a_end", "z_end", "bandwidth", "bandwidth_unit", "service_type", "special_features", "existing_mrc_amount", "existing_mrc_currency"}
     try:
         with get_leasing_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                cur.execute("""SELECT id, work_item_id, order_type, si, area, address, gedung_kawasan, a_end, z_end,
-                    bandwidth, bandwidth_unit, service_type, special_features, existing_mrc_amount, existing_mrc_currency
-                    FROM leasing.requirements WHERE id=%s FOR UPDATE""", (requirement_id,))
+                cur.execute("SELECT * FROM leasing.requirements WHERE id=%s FOR UPDATE", (requirement_id,))
                 existing = cur.fetchone()
                 if not existing:
                     return jsonify({"success": False, "message": "Requirement tidak ditemukan."}), 404
-                if core_changed:
-                    merged = {key: existing.get(key) for key in LEASING_REQUIREMENT_CORE_FIELDS}
-                    merged.update({key: value for key, value in changes.items() if key in LEASING_REQUIREMENT_CORE_FIELDS})
-                    normalized, issues = leasing_normalize_requirement(merged, "Requirement")
-                    if issues:
-                        return jsonify({"success": False, "message": "Periksa field wajib requirement.", "issues": issues}), 400
-                    # Save the complete validated core set to keep conditional rules and defaults coherent.
-                    changes.update({key: normalized.get(key) for key in LEASING_REQUIREMENT_CORE_FIELDS})
-                assignments, values = [], []
+                if detail_fields.intersection(changes):
+                    merged = {key: existing.get(key) for key in detail_fields}
+                    merged.update({k: v for k, v in changes.items() if k in detail_fields})
+                    changes.update(_leasing_validate_requirement_payload(merged, f"Requirement #{requirement_id}"))
+                sets, vals = [], []
                 for key, value in changes.items():
-                    assignments.append(f"{key}=%s")
-                    values.append(value)
-                values.append(requirement_id)
-                cur.execute(f"UPDATE leasing.requirements SET {', '.join(assignments)} WHERE id=%s", values)
+                    sets.append(f"{key}=%s")
+                    vals.append(value)
+                vals.append(requirement_id)
+                cur.execute(f"UPDATE leasing.requirements SET {', '.join(sets)} WHERE id=%s", vals)
                 leasing_activity(cur, existing["work_item_id"], "requirement_updated", "Requirement diperbarui", session["username"], {"requirement_id": requirement_id, **changes})
             conn.commit()
-        return jsonify({"success": True, "message": "Requirement diperbarui."})
+        return jsonify({"success": True})
+    except ValueError as exc:
+        return jsonify({"success": False, "message": str(exc)}), 400
     except psycopg2.Error:
         app.logger.exception("Leasing requirement update failed")
-        return jsonify({"success": False, "message": "Gagal memperbarui requirement. Periksa log server untuk detail."}), 400
+        return jsonify({"success": False, "message": "Gagal memperbarui requirement."}), 400
 
 
 # ---------------------------------------------------------------------------
+@app.route("/api/leasing/export.xlsx", methods=["GET"])
+@leasing_login_required
+def leasing_export_xlsx():
+    """Export one row per requirement, with work-item and partner context, suitable for large-site reporting."""
+    try:
+        work_item_id = request.args.get("work_item_id", type=int)
+        partner_id = request.args.get("partner_id", type=int)
+        from_date = request.args.get("from_date")
+        to_date = request.args.get("to_date")
+        for date_value, label in ((from_date, "from_date"), (to_date, "to_date")):
+            if date_value:
+                try: datetime.strptime(date_value, "%Y-%m-%d")
+                except ValueError: return jsonify({"success": False, "message": f"{label} harus berformat YYYY-MM-DD."}), 400
+        if from_date and to_date and from_date > to_date:
+            return jsonify({"success": False, "message": "from_date tidak boleh setelah to_date."}), 400
+        with get_leasing_db_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                sql = """SELECT w.id AS work_item_db_id, w.request_id, c.customer_name, w.requester_name,
+                    w.request_due_date, w.current_stage, w.case_status, w.buyer_owner_id, w.created_at,
+                    r.requirement_no, r.order_type, r.si, r.area, r.address, r.gedung_kawasan,
+                    r.latitude, r.longitude, r.a_end, r.z_end, r.bandwidth, r.bandwidth_unit,
+                    r.service_type, r.special_features, r.status AS requirement_status,
+                    r.existing_mrc_amount, r.existing_mrc_currency,
+                    p.partner_name, o.response_status AS partner_response_status,
+                    o.next_follow_up_at, po.offer_status, pol.feasibility_status, pol.mrc_amount AS offered_mrc,
+                    pol.otc_amount AS offered_otc, pol.currency AS offer_currency
+                    FROM leasing.work_items w
+                    LEFT JOIN leasing.customers c ON c.id=w.customer_id
+                    LEFT JOIN leasing.requirements r ON r.work_item_id=w.id
+                    LEFT JOIN leasing.partner_outreaches o ON o.work_item_id=w.id
+                    LEFT JOIN leasing.partners p ON p.id=o.partner_id
+                    LEFT JOIN leasing.partner_offers po ON po.outreach_id=o.id
+                    LEFT JOIN leasing.partner_offer_lines pol ON pol.offer_id=po.id AND pol.requirement_id=r.id
+                    WHERE (%s IS NULL OR w.id=%s) AND (%s IS NULL OR p.id=%s)
+                      AND (%s IS NULL OR COALESCE(po.received_at, o.sent_at, w.created_at)::date >= %s::date)
+                      AND (%s IS NULL OR COALESCE(po.received_at, o.sent_at, w.created_at)::date <= %s::date)
+                    ORDER BY w.created_at DESC, w.id, r.requirement_no, p.partner_name, po.version_no DESC"""
+                cur.execute(sql, (work_item_id, work_item_id, partner_id, partner_id,
+                                  from_date, from_date, to_date, to_date))
+                rows = [dict(row) for row in cur.fetchall()]
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Leasing Report"
+        headers = ["Work Item DB ID", "Request ID", "Customer", "Requester", "Due Date", "Stage", "Case Status", "Buyer Username",
+            "Requirement No", "Jenis Order", "SI", "Area", "Alamat", "Gedung/Kawasan", "Latitude", "Longitude", "A End", "Z End",
+            "Bandwidth", "Satuan", "Jasa", "Fitur Khusus", "Requirement Status", "MRC Eksisting", "Currency MRC Eksisting",
+            "Partner", "Partner Response", "Next Follow-up", "Offer Status", "Feasibility", "MRC Offer", "OTC Offer", "Currency Offer"]
+        ws.append(headers)
+        def safe_excel_value(value):
+            if isinstance(value, str) and value.startswith(("=", "+", "-", "@")):
+                return "'" + value
+            return value
+        for row in rows:
+            vals = [row.get(k) for k in ["work_item_db_id", "request_id", "customer_name", "requester_name", "request_due_date", "current_stage", "case_status", "buyer_owner_id",
+                "requirement_no", "order_type", "si", "area", "address", "gedung_kawasan", "latitude", "longitude", "a_end", "z_end", "bandwidth", "bandwidth_unit",
+                "service_type", "special_features", "requirement_status", "existing_mrc_amount", "existing_mrc_currency", "partner_name", "partner_response_status", "next_follow_up_at", "offer_status", "feasibility_status", "offered_mrc", "offered_otc", "offer_currency"]]
+            ws.append([safe_excel_value(v.isoformat() if hasattr(v, "isoformat") else v) for v in vals])
+        ws.freeze_panes = "A2"
+        ws.auto_filter.ref = ws.dimensions
+        ws.row_dimensions[1].height = 30
+        for cell in ws[1]:
+            cell.font = Font(bold=True, color="FFFFFF")
+            cell.fill = PatternFill("solid", fgColor="35266E")
+            cell.alignment = Alignment(vertical="center", wrap_text=True)
+        for col in ws.columns:
+            letter = col[0].column_letter
+            max_len = min(36, max(12, max(len(str(c.value or "")) for c in col[:200])))
+            ws.column_dimensions[letter].width = max_len
+        output = BytesIO(); wb.save(output); output.seek(0)
+        suffix = f"_work_item_{work_item_id}" if work_item_id else (f"_partner_{partner_id}" if partner_id else "")
+        return send_file(output, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", as_attachment=True,
+                         download_name=f"leasing_report{suffix}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx")
+    except Exception:
+        app.logger.exception("Leasing Excel export failed")
+        return jsonify({"success": False, "message": "Export Excel gagal. Periksa log aplikasi."}), 500
+
+
 # Leasing bulk intake: Excel upload or raw TSV/CSV paste.
-# Only explicit Request ID values are used for grouping; customer name is never
-# a grouping key. Rows with blank Request ID become independent Work Items.
+# Each non-empty source row becomes a requirement. Rows with the same non-empty
+# Request ID group into one Work Item; rows with blank Request ID each create a
+# separate Work Item. Customer name is never used as a grouping key.
 # ---------------------------------------------------------------------------
 LEASING_IMPORT_ALIASES = {
     "request_id": {"request_id", "request id", "work_item_id", "work item id", "work_item", "work item", "ticket_id", "ticket id", "id request", "id_request"},
@@ -2176,15 +2176,17 @@ LEASING_IMPORT_ALIASES = {
     "requester_name": {"requester", "requester_name", "requester name", "nama requester", "pemohon"},
     "request_due_date": {"request_due_date", "request due date", "due date", "due_date", "due date submit", "due date requester", "target submit"},
     "notes": {"notes", "catatan", "catatan request", "feedback sales"},
-    "order_type": {"jenis order", "jenis_order", "order type", "order_type", "jenis permintaan", "tipe order"},
-    "si": {"si", "nomor si", "no si", "si number", "si reference", "referensi si"},
-    "area": {"area", "wilayah", "area lokasi"},
-    "address": {"alamat", "address", "alamat lokasi", "alamat site"},
-    "gedung_kawasan": {"gedung_kawasan", "gedung kawasan", "gedung/kawasan", "gedung", "kawasan", "site", "location", "lokasi", "building"},
+    "order_type": {"order_type", "order type", "jenis order", "jenis_order"},
+    "si": {"si", "nomor si", "no si", "si number", "service id"},
+    "area": {"area", "wilayah", "regional area"},
+    "address": {"address", "alamat", "alamat site", "site address"},
+    "latitude": {"latitude", "lat", "lintang"},
+    "longitude": {"longitude", "long", "lng", "bujur"},
+    "gedung_kawasan": {"gedung_kawasan", "gedung kawasan", "gedung/kawasan", "gedung", "kawasan", "building"},
     "a_end": {"a_end", "a end", "a-end", "aend"},
     "z_end": {"z_end", "z end", "z-end", "zend"},
     "bandwidth": {"bandwidth", "bw", "bandwidth value"},
-    "bandwidth_unit": {"bandwidth_unit", "bandwidth unit", "satuan bandwidth", "satuan (default mbps)", "satuan default mbps", "satuan", "unit"},
+    "bandwidth_unit": {"bandwidth_unit", "bandwidth unit", "satuan bandwidth", "satuan (default mbps)", "satuan", "unit"},
     "service_type": {"service_type", "service type", "jenis layanan", "jasa", "service", "product"},
     "special_features": {"special_features", "special features", "fitur khusus", "special requirement", "fitur"},
     "existing_mrc_amount": {"existing_mrc_amount", "existing mrc", "mrc eksisting", "mrc existing", "mrc berjalan"},
@@ -2268,6 +2270,8 @@ def _leasing_parse_number(value, field_name, row_no):
         number = float(raw)
     except (TypeError, ValueError):
         raise ValueError(f"Baris {row_no}: {field_name} harus berupa angka: {value}")
+    if not math.isfinite(number):
+        raise ValueError(f"Baris {row_no}: {field_name} harus berupa angka yang valid.")
     if number < 0:
         raise ValueError(f"Baris {row_no}: {field_name} tidak boleh negatif.")
     return number
@@ -2312,19 +2316,74 @@ def _leasing_read_import_source():
     return raw_rows, source_headers, source_name
 
 
+def _leasing_is_psb(value):
+    normalized = unicodedata.normalize("NFKD", str(value or ""))
+    normalized = "".join(ch for ch in normalized if not unicodedata.combining(ch))
+    normalized = re.sub(r"[^a-z0-9]+", " ", normalized.lower()).strip()
+    return normalized in {"psb", "pasang baru", "pasang baru psb"}
+
+
+def _leasing_validate_requirement_payload(payload, label="Requirement"):
+    data = {key: _leasing_cell_value(payload.get(key)) for key in (
+        "order_type", "si", "area", "address", "gedung_kawasan", "latitude", "longitude", "a_end", "z_end",
+        "bandwidth", "bandwidth_unit", "service_type", "special_features", "existing_mrc_amount", "existing_mrc_currency"
+    )}
+    required = (("order_type", "Jenis Order"), ("area", "Area"), ("address", "Alamat"), ("a_end", "A End"), ("service_type", "Jasa"), ("special_features", "Fitur Khusus"))
+    for key, title in required:
+        if not data.get(key): raise ValueError(f"{label}: {title} wajib diisi.")
+    if not _leasing_is_psb(data["order_type"]) and not data.get("si"):
+        raise ValueError(f"{label}: SI wajib diisi untuk Jenis Order selain Pasang Baru (PSB).")
+    order_aliases = {
+        "psb": "PSB", "pasang baru": "PSB", "pasang baru psb": "PSB",
+        "relokasi": "Relokasi", "upgrade": "Upgrade", "downgrade": "Downgrade",
+        "change mitra": "Change Mitra", "change service": "Change Service"
+    }
+    normalized_order = re.sub(r"\s+", " ", str(data["order_type"]).strip().lower())
+    if normalized_order not in order_aliases:
+        raise ValueError(f"{label}: Jenis Order harus PSB, Relokasi, Upgrade, Downgrade, Change Mitra, atau Change Service.")
+    data["order_type"] = order_aliases[normalized_order]
+    for coord_key, coord_label, low, high in (("latitude", "Latitude", -90, 90), ("longitude", "Longitude", -180, 180)):
+        raw = data.get(coord_key)
+        if raw not in (None, ""):
+            try: coord = float(str(raw).replace(",", "."))
+            except (TypeError, ValueError): raise ValueError(f"{label}: {coord_label} harus berupa angka desimal.")
+            if not math.isfinite(coord) or not low <= coord <= high:
+                raise ValueError(f"{label}: {coord_label} di luar rentang yang valid ({low} sampai {high}).")
+            data[coord_key] = coord
+        else:
+            data[coord_key] = None
+    try:
+        bandwidth = float(str(data.get("bandwidth") or "").replace(",", "."))
+    except (TypeError, ValueError):
+        raise ValueError(f"{label}: Bandwidth wajib berupa angka lebih besar dari nol.")
+    if not math.isfinite(bandwidth) or bandwidth <= 0:
+        raise ValueError(f"{label}: Bandwidth wajib berupa angka lebih besar dari nol.")
+    data["bandwidth"] = bandwidth
+    unit_map = {"mbps": "Mbps", "gbps": "Gbps", "kbps": "Kbps", "other": "Other"}
+    unit = str(data.get("bandwidth_unit") or "Mbps").strip().lower()
+    if unit not in unit_map: raise ValueError(f"{label}: Satuan harus Mbps, Gbps, Kbps, atau Other.")
+    data["bandwidth_unit"] = unit_map[unit]
+    if data.get("existing_mrc_amount") not in (None, ""):
+        try: mrc = float(str(data["existing_mrc_amount"]).replace(",", "."))
+        except (TypeError, ValueError): raise ValueError(f"{label}: MRC Eksisting harus berupa angka nol atau lebih besar.")
+        if not math.isfinite(mrc) or mrc < 0: raise ValueError(f"{label}: MRC Eksisting harus berupa angka nol atau lebih besar.")
+        data["existing_mrc_amount"] = mrc
+        currency = str(data.get("existing_mrc_currency") or "IDR").strip().upper()
+        if not re.fullmatch(r"[A-Z]{3}", currency): raise ValueError(f"{label}: Currency MRC harus berupa kode 3 huruf.")
+        data["existing_mrc_currency"] = currency
+    else:
+        data["existing_mrc_amount"] = None
+        data["existing_mrc_currency"] = None
+    return data
+
+
 def _leasing_normalize_import_rows(raw_rows, source_headers):
-    mapped_headers = {}
-    unmapped_headers = []
+    mapped_headers, unmapped_headers = {}, []
     for header in source_headers:
         canonical = LEASING_IMPORT_ALIAS_LOOKUP.get(_leasing_header_key(header))
-        if canonical:
-            # Prefer the first explicitly recognized header if aliases are duplicated.
-            mapped_headers.setdefault(canonical, header)
-        elif any(_leasing_cell_value(row.get(header)) is not None for row in raw_rows):
-            unmapped_headers.append(header)
-
-    normalized = []
-    issues = []
+        if canonical: mapped_headers.setdefault(canonical, header)
+        elif any(_leasing_cell_value(row.get(header)) is not None for row in raw_rows): unmapped_headers.append(header)
+    normalized, issues = [], []
     for row_idx, source in enumerate(raw_rows, start=2):
         obj = {canonical: _leasing_cell_value(source.get(header)) for canonical, header in mapped_headers.items()}
         obj["_row_no"] = row_idx
@@ -2332,52 +2391,45 @@ def _leasing_normalize_import_rows(raw_rows, source_headers):
             obj["request_due_date"] = _leasing_parse_date(obj.get("request_due_date"), "Due date", row_idx)
             obj["bandwidth"] = _leasing_parse_number(obj.get("bandwidth"), "Bandwidth", row_idx)
             obj["existing_mrc_amount"] = _leasing_parse_number(obj.get("existing_mrc_amount"), "MRC eksisting", row_idx)
-            if obj.get("request_id"):
-                obj["request_id"] = str(obj["request_id"]).strip()
-            req_fields, requirement_issues = leasing_normalize_requirement(obj, f"Baris {row_idx}")
-            obj.update(req_fields)
-            issues.extend(requirement_issues)
-            # Request ID groups may leave Customer/Requester blank on continuation rows.
-            # Rows without a Request ID form their own group and need both values in this row.
-            if not obj.get("request_id") and not obj.get("customer_name"):
-                issues.append(f"Baris {row_idx}: kolom Customer/Pelanggan wajib untuk baris tanpa Request ID.")
-            if not obj.get("request_id") and not obj.get("requester_name"):
-                issues.append(f"Baris {row_idx}: kolom Requester wajib untuk baris tanpa Request ID.")
+            if obj.get("request_id"): obj["request_id"] = str(obj["request_id"]).strip()
+            obj.update(_leasing_validate_requirement_payload(obj, f"Baris {row_idx}"))
             normalized.append(obj)
         except ValueError as exc:
             issues.append(str(exc))
     return normalized, mapped_headers, unmapped_headers, issues
 
+
 def _leasing_import_groups(rows):
-    groups = {}
+    """Legacy grouping: identical non-empty Request ID values group rows; blank IDs each form a separate Work Item."""
+    if not rows: return [], ["Tidak ada baris data requirement untuk diimport."]
+    issues, groups, by_request_id = [], [], {}
     for row in rows:
-        request_id = row.get("request_id")
-        key = ("request_id", request_id) if request_id else ("row", row["_row_no"])
-        groups.setdefault(key, []).append(row)
-    group_items = []
-    issues = []
-    request_fields = ("customer_name", "requester_name", "request_due_date", "notes")
-    for key, group_rows in groups.items():
-        first = group_rows[0]
-        for field in request_fields:
-            nonempty = []
-            for row in group_rows:
-                value = row.get(field)
-                if value is not None and str(value).strip():
-                    nonempty.append((row["_row_no"], str(value).strip()))
-            distinct = {value.casefold() for _, value in nonempty}
-            if len(distinct) > 1:
-                rows_desc = ", ".join(str(n) for n, _ in nonempty)
-                issues.append(f"Request ID {key[1]!r}: kolom {field} berbeda antar baris ({rows_desc}); samakan nilai request-level atau pisahkan Request ID.")
-            elif nonempty:
-                # Fill an initially blank request-level field from the first nonblank continuation row.
-                first[field] = nonempty[0][1]
-        if not first.get("customer_name"):
-            issues.append(f"Request ID {key[1]!r}: kolom Customer/Pelanggan wajib tersedia pada salah satu baris grup.")
-        if not first.get("requester_name"):
-            issues.append(f"Request ID {key[1]!r}: kolom Requester wajib tersedia pada salah satu baris grup.")
-        group_items.append({"request_id": first.get("request_id"), "rows": group_rows, "customer_name": first.get("customer_name"), "requester_name": first.get("requester_name")})
-    return group_items, issues
+        rid = str(row.get("request_id") or "").strip()
+        if rid:
+            if rid not in by_request_id:
+                group = {"request_id": rid, "rows": [], "customer_name": None, "requester_name": None}
+                by_request_id[rid] = group
+                groups.append(group)
+            group = by_request_id[rid]
+        else:
+            group = {"request_id": None, "rows": [], "customer_name": None, "requester_name": None}
+            groups.append(group)
+        group["rows"].append(row)
+    request_fields = (("customer_name", "Customer"), ("requester_name", "Requester"), ("request_due_date", "Due Date"), ("notes", "Notes"))
+    for group in groups:
+        rows_in_group = group["rows"]
+        for field, label in request_fields:
+            values = [(r["_row_no"], str(r[field]).strip()) for r in rows_in_group if r.get(field) is not None and str(r[field]).strip()]
+            if len({v.casefold() for _, v in values}) > 1:
+                issues.append(f"Request ID {group['request_id'] or '(kosong / baris terpisah)'}: {label} berbeda pada baris {', '.join(str(n) for n,_ in values)}.")
+            elif values:
+                value = values[0][1]
+                for r in rows_in_group: r[field] = value
+        group["customer_name"] = next((r.get("customer_name") for r in rows_in_group if r.get("customer_name")), None)
+        group["requester_name"] = next((r.get("requester_name") for r in rows_in_group if r.get("requester_name")), None)
+        if not group["customer_name"]: issues.append(f"Customer wajib diisi untuk Work Item dari baris {rows_in_group[0]['_row_no']}.")
+        if not group["requester_name"]: issues.append(f"Requester wajib diisi untuk Work Item dari baris {rows_in_group[0]['_row_no']}.")
+    return groups, issues
 
 
 def _leasing_import_preview_data():
@@ -2416,22 +2468,17 @@ def _leasing_import_response_preview(data):
             "row_count": len(rows), "work_item_count": len(data["groups"]),
             "requirement_count": len(rows), "issues": data["issues"], "warnings": data["warnings"],
             "sample_rows": [{k: v for k, v in row.items() if not k.startswith("_")} for row in rows[:8]],
-            "grouping_rule": "Baris dengan Request ID eksplisit yang sama digabung menjadi satu Work Item; jika Request ID kosong, setiap baris menjadi Work Item terpisah. Nama Customer tidak pernah digunakan untuk menggabungkan Work Item."}
+            "grouping_rule": "Baris dengan Request ID sama digabung menjadi satu Work Item; baris dengan Request ID kosong masing-masing menjadi Work Item terpisah. Customer, Requester, Due Date, dan Notes harus konsisten dalam tiap grup."}
 
 
 @app.route("/api/leasing/import/template", methods=["GET"])
 @leasing_login_required
 def leasing_import_template():
-    template_path = os.path.join(app.root_path, "Template_Import_Leasing.xlsx")
+    template_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Template_Import_Leasing.xlsx")
     if not os.path.isfile(template_path):
-        app.logger.error("Leasing import template XLSX missing at %s", template_path)
-        return jsonify({"success": False, "message": "Template XLSX belum terpasang di folder aplikasi. Deploy Template_Import_Leasing.xlsx lalu restart aplikasi."}), 500
-    return send_file(
-        template_path,
-        as_attachment=True,
-        download_name="Template_Import_Leasing.xlsx",
-        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    )
+        app.logger.error("Leasing XLSX template missing: %s", template_path)
+        return jsonify({"success": False, "message": "Template XLSX belum tersedia di folder aplikasi. Deploy Template_Import_Leasing.xlsx bersama app.py."}), 500
+    return send_file(template_path, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", as_attachment=True, download_name="Template_Import_Leasing.xlsx", conditional=True)
 
 
 @app.route("/api/leasing/import/preview", methods=["POST"])
@@ -2456,47 +2503,40 @@ def leasing_import():
             return jsonify({"success": False, "message": "Import dibatalkan karena ada masalah pada data.", "issues": data["issues"], "warnings": data["warnings"]}), 400
         rows, groups = data["rows"], data["groups"]
         username = session["username"]
-        # Owner is assigned from the logged-in Leasing user; it is not accepted from intake spreadsheets.
         default_owner = username if leasing_owner_is_valid(username) else None
-        created_ids, created_request_ids = [], []
+        created_ids = []
         with get_leasing_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 for group in groups:
-                    first = group["rows"][0]
-                    customer_name = str(first["customer_name"]).strip()
+                    group_rows = group["rows"]
+                    first = group_rows[0]
+                    customer_name = str(group["customer_name"] or "").strip()
+                    requester_name = str(group["requester_name"] or "").strip()
+                    request_id = group["request_id"] or ("LEA-" + datetime.now().strftime("%Y%m%d") + "-" + uuid.uuid4().hex[:8].upper())
                     cur.execute("SELECT id FROM leasing.customers WHERE lower(customer_name)=lower(%s) ORDER BY id LIMIT 1", (customer_name,))
                     customer = cur.fetchone()
                     if not customer:
                         cur.execute("INSERT INTO leasing.customers (customer_name) VALUES (%s) RETURNING id", (customer_name,))
                         customer = cur.fetchone()
-                    request_id = group["request_id"] or ("LEA-" + datetime.now().strftime("%Y%m%d") + "-" + uuid.uuid4().hex[:8].upper())
-                    first_owner = default_owner
-                    received_at = first.get("received_at")
                     cur.execute("""INSERT INTO leasing.work_items
-                        (request_id, customer_id, requester_name, requester_email, requester_division,
-                         requester_role, received_at, request_due_date, buyer_owner_id, source_reference, notes, created_by)
-                        VALUES (%s,%s,%s,%s,%s,%s,COALESCE(%s::date::timestamptz,NOW()),%s,%s,%s,%s,%s)
-                        RETURNING id""",
-                        (request_id, customer["id"], first["requester_name"], first.get("requester_email"),
-                         first.get("requester_division"), first.get("requester_role"), received_at,
-                         first.get("request_due_date"), first_owner, first.get("source_reference"), first.get("notes"), username))
+                        (request_id, customer_id, requester_name, request_due_date, buyer_owner_id, notes, created_by)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
+                        (request_id, customer["id"], requester_name, first.get("request_due_date"), default_owner, first.get("notes"), username))
                     work_id = cur.fetchone()["id"]
-                    created_ids.append(work_id); created_request_ids.append(request_id)
-                    for idx, row in enumerate(group["rows"], start=1):
-                        amount = row.get("existing_mrc_amount")
+                    created_ids.append({"id": work_id, "request_id": request_id, "requirement_count": len(group_rows)})
+                    for idx, row in enumerate(group_rows, start=1):
+                        fields = _leasing_validate_requirement_payload(row, f"Baris {row['_row_no']}")
                         cur.execute("""INSERT INTO leasing.requirements
-                            (work_item_id, requirement_no, order_type, si, area, address, gedung_kawasan, a_end, z_end,
-                             bandwidth, bandwidth_unit, service_type, special_features, existing_mrc_amount, existing_mrc_currency)
-                            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
-                            (work_id, idx, row.get("order_type"), row.get("si"), row.get("area"), row.get("address"),
-                             row.get("gedung_kawasan"), row.get("a_end"), row.get("z_end"), row.get("bandwidth"),
-                             row.get("bandwidth_unit") or "Mbps", row.get("service_type"), row.get("special_features"),
-                             amount, row.get("existing_mrc_currency")))
+                            (work_item_id, requirement_no, order_type, si, area, address, gedung_kawasan, latitude, longitude,
+                             a_end, z_end, bandwidth, bandwidth_unit, service_type, special_features,
+                             existing_mrc_amount, existing_mrc_currency)
+                            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                            (work_id, idx, fields["order_type"], fields["si"], fields["area"], fields["address"], fields["gedung_kawasan"], fields["latitude"], fields["longitude"], fields["a_end"], fields["z_end"], fields["bandwidth"], fields["bandwidth_unit"], fields["service_type"], fields["special_features"], fields["existing_mrc_amount"], fields["existing_mrc_currency"]))
                     leasing_activity(cur, work_id, "work_item_imported", f"Work Item diimpor dari {data['source_name']}", username,
-                                     {"request_id": request_id, "source_row_numbers": [r["_row_no"] for r in group["rows"]], "requirement_count": len(group["rows"])})
+                        {"request_id": request_id, "source_row_numbers": [r["_row_no"] for r in group_rows], "requirement_count": len(group_rows), "import_mode": "request_id_grouping"})
             conn.commit()
         return jsonify({"success": True, "message": f"Import berhasil: {len(created_ids)} Work Item, {len(rows)} requirement.",
-                        "work_item_count": len(created_ids), "requirement_count": len(rows), "request_ids": created_request_ids,
+                        "work_item_count": len(created_ids), "requirement_count": len(rows), "created_work_items": created_ids,
                         "warnings": data["warnings"]}), 201
     except ValueError as exc:
         return jsonify({"success": False, "message": str(exc)}), 400
