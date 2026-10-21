@@ -1498,18 +1498,19 @@ def leasing_dashboard():
                     ORDER BY open_cases DESC, buyer_owner_id""")
                 buyer_workload = [dict(row) for row in cur.fetchall()]
                 cur.execute("""SELECT
-                    COALESCE(NULLIF(w.buyer_owner_id, ''), '__unassigned__') AS buyer_owner_id,
+                    COALESCE(NULLIF(o.follow_up_owner_id, ''), NULLIF(w.buyer_owner_id, ''), '__unassigned__') AS buyer_owner_id,
                     COUNT(*) AS pending_followups
                     FROM leasing.partner_outreaches o
                     JOIN leasing.work_items w ON w.id=o.work_item_id
                     WHERE w.case_status='open'
                       AND o.response_status IN ('sent','awaiting_response','partial_response')
-                    GROUP BY COALESCE(NULLIF(w.buyer_owner_id, ''), '__unassigned__')""")
+                    GROUP BY COALESCE(NULLIF(o.follow_up_owner_id, ''), NULLIF(w.buyer_owner_id, ''), '__unassigned__')""")
                 followup_counts = {row['buyer_owner_id']: row['pending_followups'] for row in cur.fetchall()}
                 for owner_row in buyer_workload:
                     owner_row['pending_followups'] = followup_counts.get(owner_row['buyer_owner_id'], 0)
                 cur.execute("""SELECT o.id, o.work_item_id, w.request_id, p.partner_name,
-                    o.response_status, o.next_follow_up_at, o.sent_at, w.buyer_owner_id,
+                    o.response_status, o.next_follow_up_at, o.sent_at,
+                    COALESCE(NULLIF(o.follow_up_owner_id, ''), NULLIF(w.buyer_owner_id, ''), '__unassigned__') AS buyer_owner_id,
                     c.customer_name
                     FROM leasing.partner_outreaches o
                     JOIN leasing.work_items w ON w.id=o.work_item_id
@@ -1798,12 +1799,18 @@ def leasing_create_outreach(work_item_id):
     payload = request.get_json(silent=True) or {}
     try:
         partner_id = int(payload.get("partner_id"))
+        response_status = str(payload.get("response_status") or "draft").strip().lower()
+        if response_status not in {"draft", "sent", "awaiting_response", "partial_response", "responded", "no_bid", "cancelled"}:
+            return jsonify({"success": False, "message": "Status outreach tidak valid."}), 400
         raw_requirement_ids = payload.get("requirement_ids") or []
         if not isinstance(raw_requirement_ids, list):
             raise ValueError("requirement_ids harus berupa daftar.")
         requirement_ids = list(dict.fromkeys(int(x) for x in raw_requirement_ids))
         if not requirement_ids:
             return jsonify({"success": False, "message": "Pilih minimal satu requirement yang benar-benar dikirim ke partner."}), 400
+        follow_up_owner_id = str(payload.get("follow_up_owner_id") or session["username"]).strip()
+        if not leasing_owner_is_valid(follow_up_owner_id):
+            return jsonify({"success": False, "message": "PIC follow-up tidak ditemukan atau tidak memiliki role Leasing."}), 400
         with get_leasing_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 cur.execute("SELECT id FROM leasing.work_items WHERE id=%s AND case_status='open'", (work_item_id,))
@@ -1820,8 +1827,8 @@ def leasing_create_outreach(work_item_id):
                     (work_item_id, partner_id, outreach_round, sent_at, response_status, follow_up_owner_id, next_follow_up_at, notes, created_by)
                     VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
                     (work_item_id, partner_id, round_no,
-                     payload.get("sent_at") or (datetime.now() if payload.get("response_status", "draft") == "sent" else None),
-                     payload.get("response_status", "draft"), payload.get("follow_up_owner_id") or session["username"],
+                     payload.get("sent_at") or (datetime.now() if response_status in {"sent", "awaiting_response", "partial_response", "responded", "no_bid"} else None),
+                     response_status, follow_up_owner_id,
                      payload.get("next_follow_up_at") or None, payload.get("notes"), session["username"]))
                 outreach_id = cur.fetchone()["id"]
                 for req_id in requirement_ids:
@@ -1845,6 +1852,11 @@ def leasing_update_outreach(outreach_id):
     if not changes: return jsonify({"success": False, "message": "Tidak ada field yang diperbarui."}), 400
     if "response_status" in changes and changes["response_status"] not in {"draft", "sent", "awaiting_response", "partial_response", "responded", "no_bid", "cancelled"}:
         return jsonify({"success": False, "message": "response_status tidak valid."}), 400
+    if "follow_up_owner_id" in changes:
+        owner = str(changes.get("follow_up_owner_id") or "").strip()
+        if owner and not leasing_owner_is_valid(owner):
+            return jsonify({"success": False, "message": "PIC follow-up tidak ditemukan atau tidak memiliki role Leasing."}), 400
+        changes["follow_up_owner_id"] = owner or None
     try:
         with get_leasing_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -3042,7 +3054,15 @@ def leasing_import():
             return jsonify({"success": False, "message": "Import dibatalkan karena ada masalah pada data.", "issues": data["issues"], "warnings": data["warnings"]}), 400
         rows, groups = data["rows"], data["groups"]
         username = session["username"]
-        default_owner = username if leasing_owner_is_valid(username) else None
+        # Older clients may not send buyer_owner_id; preserve the historical self-assign behavior.
+        # The current UI sends a selected owner explicitly for each import batch.
+        owner_payload = request.form if request.form else (request.get_json(silent=True) or {})
+        if "buyer_owner_id" in owner_payload:
+            default_owner = str(owner_payload.get("buyer_owner_id") or "").strip()
+            if not default_owner or not leasing_owner_is_valid(default_owner):
+                return jsonify({"success": False, "message": "Buyer/PIC owner tidak valid. Pilih akun dengan role Buyer/Admin Leasing."}), 400
+        else:
+            default_owner = username if leasing_owner_is_valid(username) else None
         created_ids = []
         with get_leasing_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
