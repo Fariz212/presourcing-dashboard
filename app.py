@@ -19,6 +19,7 @@ import math
 import re
 import unicodedata
 from datetime import datetime
+from zoneinfo import ZoneInfo
 import contextlib
 from werkzeug.utils import secure_filename
 
@@ -1729,8 +1730,9 @@ def leasing_work_item_detail(work_item_id):
                 offers = [dict(x) for x in cur.fetchall()]
                 cur.execute("""SELECT pol.*, po.outreach_id, po.version_no, po.offer_status, po.received_at, po.valid_until,
                     po.notes AS offer_notes, po.created_at AS offer_created_at,
-                    o.partner_id, p.partner_name, r.requirement_no, r.order_type, r.si, r.area, r.address, r.gedung_kawasan, r.a_end, r.z_end,
-                    r.bandwidth, r.bandwidth_unit, r.service_type
+                    o.partner_id, p.partner_name, r.requirement_no, r.order_type, r.si, r.area, r.address, r.gedung_kawasan, r.zone,
+                    r.site_name, r.postal_code, r.project_mrc_inet_dedicated_25, r.project_mrc_metro_25, r.requested_otc,
+                    r.a_end, r.z_end, r.bandwidth, r.bandwidth_unit, r.service_type
                     FROM leasing.partner_offer_lines pol
                     JOIN leasing.partner_offers po ON po.id=pol.offer_id
                     JOIN leasing.partner_outreaches o ON o.id=po.outreach_id
@@ -1896,7 +1898,9 @@ def leasing_create_offer(outreach_id):
             if feasibility not in allowed_feasibility:
                 raise ValueError(f"Baris {index}: status feasibility tidak valid.")
             amounts = {}
-            for field, label in (("mrc_amount", "MRC"), ("otc_amount", "OTC")):
+            price_fields = (("mrc_amount", "MRC"), ("mrc_inet_dedicated_25_amount", "MRC Inet Dedicated 25 Mbps"),
+                            ("mrc_metro_25_amount", "MRC Metro 25 Mbps"), ("otc_amount", "OTC"))
+            for field, label in price_fields:
                 raw = line.get(field)
                 if raw in (None, ""):
                     amounts[field] = None
@@ -1908,7 +1912,7 @@ def leasing_create_offer(outreach_id):
                     amounts[field] = number
             currency = str(line.get("currency") or "").strip().upper()
             notes = str(line.get("notes") or "").strip() or None
-            has_price = amounts["mrc_amount"] is not None or amounts["otc_amount"] is not None
+            has_price = any(amounts[field] is not None for field, _ in price_fields)
             if has_price and feasibility == "pending":
                 raise ValueError(f"Baris {index}: pilih Can Provide sebelum memasukkan harga.")
             if has_price and feasibility == "cannot_provide":
@@ -2014,14 +2018,17 @@ def leasing_create_negotiation_event(offer_line_id):
             number = float(value)
         except (TypeError, ValueError):
             raise ValueError(f"{field_name} harus berupa angka.")
-        if number < 0:
-            raise ValueError(f"{field_name} tidak boleh negatif.")
+        if not math.isfinite(number) or number < 0:
+            raise ValueError(f"{field_name} harus angka terbatas dan tidak boleh negatif.")
         return number
     try:
         mrc = optional_nonnegative_number(payload.get("mrc_amount"), "MRC")
+        inet_mrc = optional_nonnegative_number(payload.get("mrc_inet_dedicated_25_amount"), "MRC Inet Dedicated 25 Mbps")
+        metro_mrc = optional_nonnegative_number(payload.get("mrc_metro_25_amount"), "MRC Metro 25 Mbps")
         otc = optional_nonnegative_number(payload.get("otc_amount"), "OTC")
-        currency = (str(payload.get("currency") or "IDR").strip().upper() if mrc is not None or otc is not None else None)
-        if currency is not None and len(currency) != 3:
+        has_amount = any(x is not None for x in (mrc, inet_mrc, metro_mrc, otc))
+        currency = (str(payload.get("currency") or "IDR").strip().upper() if has_amount else None)
+        if currency is not None and not re.fullmatch(r"[A-Z]{3}", currency):
             raise ValueError("Currency harus berupa kode 3 huruf.")
         with get_leasing_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -2032,9 +2039,10 @@ def leasing_create_negotiation_event(offer_line_id):
                 if not line:
                     return jsonify({"success": False, "message": "Offer line tidak ditemukan."}), 404
                 cur.execute("""INSERT INTO leasing.negotiation_events
-                    (offer_line_id, event_type, mrc_amount, otc_amount, currency, notes, created_by)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
-                    (offer_line_id, event_type, mrc, otc, currency, payload.get("notes"), session["username"]))
+                    (offer_line_id, event_type, mrc_amount, mrc_inet_dedicated_25_amount,
+                     mrc_metro_25_amount, otc_amount, currency, notes, created_by)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
+                    (offer_line_id, event_type, mrc, inet_mrc, metro_mrc, otc, currency, payload.get("notes"), session["username"]))
                 event_id = cur.fetchone()["id"]
                 leasing_activity(cur, line["work_item_id"], "negotiation_event_recorded", "Event negosiasi dicatat", session["username"],
                                  {"negotiation_event_id": event_id, "offer_line_id": offer_line_id, "event_type": event_type})
@@ -2088,26 +2096,36 @@ def leasing_create_result_submission(work_item_id):
 def leasing_create_requirement(work_item_id):
     payload = request.get_json(silent=True) or {}
     try:
-        values = _leasing_validate_requirement_payload(payload, "Requirement baru")
         with get_leasing_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                cur.execute("SELECT case_status FROM leasing.work_items WHERE id=%s FOR UPDATE", (work_item_id,))
+                cur.execute("SELECT id, case_status, work_type, project_name FROM leasing.work_items WHERE id=%s FOR UPDATE", (work_item_id,))
                 work_item = cur.fetchone()
                 if not work_item:
                     return jsonify({"success": False, "message": "Work Item tidak ditemukan."}), 404
                 if work_item["case_status"] != "open":
                     return jsonify({"success": False, "message": "Requirement baru hanya bisa ditambahkan ke Work Item yang masih open."}), 409
+                values = _leasing_validate_requirement_payload({**payload, "project_name": work_item.get("project_name")}, "Requirement baru", work_item.get("work_type"))
                 cur.execute("SELECT COALESCE(MAX(requirement_no),0)+1 AS next_no FROM leasing.requirements WHERE work_item_id=%s", (work_item_id,))
                 next_no = cur.fetchone()["next_no"]
-                cur.execute("""INSERT INTO leasing.requirements
-                    (work_item_id, requirement_no, order_type, si, area, address, gedung_kawasan, latitude, longitude,
-                     a_end, z_end, bandwidth, bandwidth_unit, service_type, special_features,
-                     existing_mrc_amount, existing_mrc_currency)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                    RETURNING id, requirement_no""",
-                    (work_item_id, next_no, values["order_type"], values["si"], values["area"], values["address"],
-                     values["gedung_kawasan"], values["latitude"], values["longitude"], values["a_end"], values["z_end"], values["bandwidth"], values["bandwidth_unit"],
-                     values["service_type"], values["special_features"], values["existing_mrc_amount"], values["existing_mrc_currency"]))
+                if work_item.get("work_type") == "project":
+                    cur.execute("""INSERT INTO leasing.requirements
+                        (work_item_id, requirement_no, zone, site_name, address, postal_code, latitude, longitude,
+                         project_mrc_inet_dedicated_25, project_mrc_metro_25, requested_otc, project_notes, area)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                        RETURNING id, requirement_no""",
+                        (work_item_id, next_no, values.get("zone"), values["site_name"], values["address"], values.get("postal_code"),
+                         values.get("latitude"), values.get("longitude"), values.get("project_mrc_inet_dedicated_25"),
+                         values.get("project_mrc_metro_25"), values.get("requested_otc"), values.get("project_notes"), values.get("area")))
+                else:
+                    cur.execute("""INSERT INTO leasing.requirements
+                        (work_item_id, requirement_no, order_type, si, area, address, gedung_kawasan, latitude, longitude,
+                         a_end, z_end, bandwidth, bandwidth_unit, service_type, special_features,
+                         existing_mrc_amount, existing_mrc_currency)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                        RETURNING id, requirement_no""",
+                        (work_item_id, next_no, values["order_type"], values["si"], values["area"], values["address"],
+                         values["gedung_kawasan"], values["latitude"], values["longitude"], values["a_end"], values["z_end"], values["bandwidth"], values["bandwidth_unit"],
+                         values["service_type"], values["special_features"], values["existing_mrc_amount"], values["existing_mrc_currency"]))
                 created = dict(cur.fetchone())
                 leasing_activity(cur, work_item_id, "requirement_added", f"Requirement #{next_no} ditambahkan", session["username"], {"requirement_id": created["id"], "requirement_no": next_no})
             conn.commit()
@@ -2123,24 +2141,30 @@ def leasing_create_requirement(work_item_id):
 @leasing_login_required
 def leasing_update_requirement(requirement_id):
     payload = request.get_json(silent=True) or {}
-    allowed = {"status", "resolution_note", "order_type", "si", "area", "address", "gedung_kawasan", "latitude", "longitude", "a_end", "z_end", "bandwidth", "bandwidth_unit", "service_type", "special_features", "existing_mrc_amount", "existing_mrc_currency"}
+    allowed = {"status", "resolution_note", "order_type", "si", "area", "address", "gedung_kawasan", "latitude", "longitude", "a_end", "z_end", "bandwidth", "bandwidth_unit", "service_type", "special_features", "existing_mrc_amount", "existing_mrc_currency", "zone", "site_name", "postal_code", "project_mrc_inet_dedicated_25", "project_mrc_metro_25", "requested_otc", "project_notes"}
     changes = {k: payload[k] for k in allowed if k in payload}
     if not changes:
         return jsonify({"success": False, "message": "Tidak ada field yang diperbarui."}), 400
     if "status" in changes and changes["status"] not in LEASING_REQUIREMENT_STATUSES:
         return jsonify({"success": False, "message": "Status requirement tidak valid."}), 400
-    detail_fields = {"order_type", "si", "area", "address", "gedung_kawasan", "latitude", "longitude", "a_end", "z_end", "bandwidth", "bandwidth_unit", "service_type", "special_features", "existing_mrc_amount", "existing_mrc_currency"}
+    detail_fields = {"order_type", "si", "area", "address", "gedung_kawasan", "latitude", "longitude", "a_end", "z_end", "bandwidth", "bandwidth_unit", "service_type", "special_features", "existing_mrc_amount", "existing_mrc_currency", "zone", "site_name", "postal_code", "project_mrc_inet_dedicated_25", "project_mrc_metro_25", "requested_otc", "project_notes"}
     try:
         with get_leasing_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                cur.execute("SELECT * FROM leasing.requirements WHERE id=%s FOR UPDATE", (requirement_id,))
+                cur.execute("""SELECT r.*, w.work_type, w.project_name FROM leasing.requirements r
+                    JOIN leasing.work_items w ON w.id=r.work_item_id WHERE r.id=%s FOR UPDATE OF r""", (requirement_id,))
                 existing = cur.fetchone()
                 if not existing:
                     return jsonify({"success": False, "message": "Requirement tidak ditemukan."}), 404
                 if detail_fields.intersection(changes):
                     merged = {key: existing.get(key) for key in detail_fields}
                     merged.update({k: v for k, v in changes.items() if k in detail_fields})
-                    changes.update(_leasing_validate_requirement_payload(merged, f"Requirement #{requirement_id}"))
+                    merged["project_name"] = existing.get("project_name")
+                    validated = _leasing_validate_requirement_payload(merged, f"Requirement #{requirement_id}", existing.get("work_type"))
+                    if existing.get("work_type") == "project":
+                        changes.update({k: validated.get(k) for k in ("zone", "site_name", "address", "postal_code", "latitude", "longitude", "project_mrc_inet_dedicated_25", "project_mrc_metro_25", "requested_otc", "project_notes", "area")})
+                    else:
+                        changes.update({k: validated.get(k) for k in ("order_type", "si", "area", "address", "gedung_kawasan", "latitude", "longitude", "a_end", "z_end", "bandwidth", "bandwidth_unit", "service_type", "special_features", "existing_mrc_amount", "existing_mrc_currency")})
                 sets, vals = [], []
                 for key, value in changes.items():
                     sets.append(f"{key}=%s")
@@ -2175,15 +2199,17 @@ def leasing_export_xlsx():
             return jsonify({"success": False, "message": "from_date tidak boleh setelah to_date."}), 400
         with get_leasing_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                sql = """SELECT w.id AS work_item_db_id, w.request_id, c.customer_name, w.requester_name,
+                sql = """SELECT w.id AS work_item_db_id, w.request_id, w.work_type, w.project_name, c.customer_name, w.requester_name,
                     w.request_due_date, w.current_stage, w.case_status, w.buyer_owner_id, w.created_at,
-                    r.requirement_no, r.order_type, r.si, r.area, r.address, r.gedung_kawasan,
+                    r.requirement_no, r.zone, r.site_name, r.postal_code, r.project_mrc_inet_dedicated_25, r.project_mrc_metro_25, r.requested_otc, r.project_notes,
+                    r.order_type, r.si, r.area, r.address, r.gedung_kawasan,
                     r.latitude, r.longitude, r.a_end, r.z_end, r.bandwidth, r.bandwidth_unit,
                     r.service_type, r.special_features, r.status AS requirement_status,
                     r.existing_mrc_amount, r.existing_mrc_currency,
                     p.partner_name, o.response_status AS partner_response_status,
                     o.next_follow_up_at, po.offer_status, pol.feasibility_status, pol.mrc_amount AS offered_mrc,
-                    pol.otc_amount AS offered_otc, pol.currency AS offer_currency
+                    pol.otc_amount AS offered_otc, pol.mrc_inet_dedicated_25_amount AS offered_mrc_inet_dedicated_25,
+                    pol.mrc_metro_25_amount AS offered_mrc_metro_25, pol.currency AS offer_currency
                     FROM leasing.work_items w
                     LEFT JOIN leasing.customers c ON c.id=w.customer_id
                     LEFT JOIN leasing.requirements r ON r.work_item_id=w.id
@@ -2201,18 +2227,18 @@ def leasing_export_xlsx():
         wb = Workbook()
         ws = wb.active
         ws.title = "Leasing Report"
-        headers = ["Work Item DB ID", "Request ID", "Customer", "Requester", "Due Date", "Stage", "Case Status", "Buyer Username",
-            "Requirement No", "Jenis Order", "SI", "Area", "Alamat", "Gedung/Kawasan", "Latitude", "Longitude", "A End", "Z End",
+        headers = ["Work Item DB ID", "Request ID", "Work Type", "Project Name", "Customer", "Requester", "Due Date", "Stage", "Case Status", "Buyer Username",
+            "Requirement No", "Zona", "Site", "Kode Pos", "MRC Inet Dedicated 25 Mbps (Request)", "MRC Metro 25 Mbps (Request)", "OTC (Request)", "Keterangan Site", "Jenis Order", "SI", "Area", "Alamat", "Gedung/Kawasan", "Latitude", "Longitude", "A End", "Z End",
             "Bandwidth", "Satuan", "Jasa", "Fitur Khusus", "Requirement Status", "MRC Eksisting", "Currency MRC Eksisting",
-            "Partner", "Partner Response", "Next Follow-up", "Offer Status", "Feasibility", "MRC Offer", "OTC Offer", "Currency Offer"]
+            "Partner", "Partner Response", "Next Follow-up", "Offer Status", "Feasibility", "MRC Offer", "MRC Inet Dedicated 25 Mbps Offer", "MRC Metro 25 Mbps Offer", "OTC Offer", "Currency Offer"]
         ws.append(headers)
         def safe_excel_value(value):
             # Use the shared sanitizer: it also catches formula-like values preceded by whitespace.
             return _leasing_excel_safe(value)
         for row in rows:
-            vals = [row.get(k) for k in ["work_item_db_id", "request_id", "customer_name", "requester_name", "request_due_date", "current_stage", "case_status", "buyer_owner_id",
-                "requirement_no", "order_type", "si", "area", "address", "gedung_kawasan", "latitude", "longitude", "a_end", "z_end", "bandwidth", "bandwidth_unit",
-                "service_type", "special_features", "requirement_status", "existing_mrc_amount", "existing_mrc_currency", "partner_name", "partner_response_status", "next_follow_up_at", "offer_status", "feasibility_status", "offered_mrc", "offered_otc", "offer_currency"]]
+            vals = [row.get(k) for k in ["work_item_db_id", "request_id", "work_type", "project_name", "customer_name", "requester_name", "request_due_date", "current_stage", "case_status", "buyer_owner_id",
+                "requirement_no", "zone", "site_name", "postal_code", "project_mrc_inet_dedicated_25", "project_mrc_metro_25", "requested_otc", "project_notes", "order_type", "si", "area", "address", "gedung_kawasan", "latitude", "longitude", "a_end", "z_end", "bandwidth", "bandwidth_unit",
+                "service_type", "special_features", "requirement_status", "existing_mrc_amount", "existing_mrc_currency", "partner_name", "partner_response_status", "next_follow_up_at", "offer_status", "feasibility_status", "offered_mrc", "offered_mrc_inet_dedicated_25", "offered_mrc_metro_25", "offered_otc", "offer_currency"]]
             ws.append([safe_excel_value(v.isoformat() if hasattr(v, "isoformat") else v) for v in vals])
         ws.freeze_panes = "A2"
         ws.auto_filter.ref = ws.dimensions
@@ -2232,6 +2258,188 @@ def leasing_export_xlsx():
     except Exception:
         app.logger.exception("Leasing Excel export failed")
         return jsonify({"success": False, "message": "Export Excel gagal. Periksa log aplikasi."}), 500
+
+
+@app.route("/api/leasing/monthly-report.xlsx", methods=["GET"])
+@leasing_login_required
+def leasing_monthly_report_xlsx():
+    """Monthly buyer/vendor report. Vendor request counts use distinct Work Items per partner."""
+    report_tz = ZoneInfo("Asia/Jakarta")
+    month_key = (request.args.get("month") or datetime.now(report_tz).strftime("%Y-%m")).strip()
+    if not re.fullmatch(r"\d{4}-\d{2}", month_key):
+        return jsonify({"success": False, "message": "Parameter month wajib berformat YYYY-MM."}), 400
+    try:
+        parsed_month = datetime.strptime(month_key, "%Y-%m")
+        start = datetime(parsed_month.year, parsed_month.month, 1, tzinfo=report_tz)
+    except ValueError:
+        return jsonify({"success": False, "message": "Bulan tidak valid."}), 400
+    end = datetime(start.year + (1 if start.month == 12 else 0), 1 if start.month == 12 else start.month + 1, 1, tzinfo=report_tz)
+    buyer = (request.args.get("buyer") or "").strip() or None
+    # A Buyer may only download their own monthly activity; Leasing/platform admins may select any buyer.
+    if session.get("role") == "buyer":
+        buyer = session.get("username")
+    partner_raw = (request.args.get("partner_id") or "").strip()
+    partner_id = None
+    if partner_raw:
+        try: partner_id = int(partner_raw)
+        except ValueError: return jsonify({"success": False, "message": "partner_id tidak valid."}), 400
+        if partner_id < 1: return jsonify({"success": False, "message": "partner_id tidak valid."}), 400
+    try:
+        with get_leasing_db_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("""SELECT
+                    COUNT(DISTINCT w.id) FILTER (WHERE w.received_at >= %s AND w.received_at < %s) AS items_received,
+                    COUNT(DISTINCT w.id) FILTER (WHERE EXISTS (SELECT 1 FROM leasing.activity_events ae WHERE ae.work_item_id=w.id AND ae.occurred_at >= %s AND ae.occurred_at < %s)) AS items_with_activity,
+                    COUNT(DISTINCT o.id) FILTER (WHERE o.sent_at >= %s AND o.sent_at < %s) AS outreach_sent,
+                    COUNT(DISTINCT w.id) FILTER (WHERE w.work_type='project' AND (
+                        (w.received_at >= %s AND w.received_at < %s)
+                        OR EXISTS (SELECT 1 FROM leasing.activity_events ae WHERE ae.work_item_id=w.id AND ae.occurred_at >= %s AND ae.occurred_at < %s)
+                        OR EXISTS (SELECT 1 FROM leasing.partner_outreaches ox WHERE ox.work_item_id=w.id AND ox.sent_at >= %s AND ox.sent_at < %s)
+                    )) AS project_work_items
+                    FROM leasing.work_items w LEFT JOIN leasing.partner_outreaches o ON o.work_item_id=w.id
+                    WHERE (%s IS NULL OR w.buyer_owner_id=%s)
+                      AND (%s IS NULL OR EXISTS (SELECT 1 FROM leasing.partner_outreaches op WHERE op.work_item_id=w.id AND op.partner_id=%s AND op.sent_at >= %s AND op.sent_at < %s))""",
+                    (start,end,start,end,start,end,start,end,start,end,start,end,buyer,buyer,partner_id,partner_id,start,end))
+                summary = dict(cur.fetchone() or {})
+                # Attribute outreach volume to the account that recorded/sent it, not the Work Item's current owner.
+                cur.execute("""SELECT COUNT(DISTINCT o.id) AS outreach_sent
+                    FROM leasing.partner_outreaches o
+                    JOIN leasing.work_items w ON w.id=o.work_item_id
+                    WHERE o.sent_at >= %s AND o.sent_at < %s
+                      AND (%s IS NULL OR o.created_by=%s)
+                      AND (%s IS NULL OR o.partner_id=%s)""",
+                    (start,end,buyer,buyer,partner_id,partner_id))
+                summary["outreach_sent"] = (cur.fetchone() or {}).get("outreach_sent", 0)
+                cur.execute("""SELECT w.id AS work_item_db_id, w.request_id, w.work_type, w.project_name, c.customer_name,
+                    w.requester_name, w.buyer_owner_id, w.current_stage, w.case_status, w.received_at,
+                    w.request_due_date, w.updated_at, COUNT(DISTINCT r.id) AS site_count,
+                    COUNT(DISTINCT o.id) FILTER (WHERE o.sent_at >= %s AND o.sent_at < %s) AS outreach_sent_in_month,
+                    COUNT(DISTINCT ae.id) FILTER (WHERE ae.occurred_at >= %s AND ae.occurred_at < %s) AS activity_events_in_month
+                    FROM leasing.work_items w LEFT JOIN leasing.customers c ON c.id=w.customer_id
+                    LEFT JOIN leasing.requirements r ON r.work_item_id=w.id
+                    LEFT JOIN leasing.partner_outreaches o ON o.work_item_id=w.id
+                    LEFT JOIN leasing.activity_events ae ON ae.work_item_id=w.id
+                    WHERE ((w.received_at >= %s AND w.received_at < %s)
+                      OR EXISTS (SELECT 1 FROM leasing.activity_events ax WHERE ax.work_item_id=w.id AND ax.occurred_at >= %s AND ax.occurred_at < %s)
+                      OR EXISTS (SELECT 1 FROM leasing.partner_outreaches ox WHERE ox.work_item_id=w.id AND ox.sent_at >= %s AND ox.sent_at < %s))
+                      AND (%s IS NULL OR w.buyer_owner_id=%s
+                        OR EXISTS (SELECT 1 FROM leasing.activity_events act WHERE act.work_item_id=w.id AND act.actor_id=%s AND act.occurred_at >= %s AND act.occurred_at < %s)
+                        OR EXISTS (SELECT 1 FROM leasing.partner_outreaches own_out WHERE own_out.work_item_id=w.id AND own_out.created_by=%s AND own_out.sent_at >= %s AND own_out.sent_at < %s))
+                      AND (%s IS NULL OR EXISTS (SELECT 1 FROM leasing.partner_outreaches op WHERE op.work_item_id=w.id AND op.partner_id=%s AND op.sent_at >= %s AND op.sent_at < %s))
+                    GROUP BY w.id,c.customer_name ORDER BY w.received_at,w.request_id""",
+                    (start,end,start,end,start,end,start,end,start,end,buyer,buyer,buyer,start,end,buyer,start,end,partner_id,partner_id,start,end))
+                work_rows = [dict(r) for r in cur.fetchall()]
+                summary["work_items_in_period"] = len(work_rows)
+                cur.execute("""SELECT w.id AS work_item_db_id, w.request_id, w.work_type, w.project_name,
+                    c.customer_name, w.buyer_owner_id, w.request_due_date, w.current_stage, w.case_status,
+                    r.id AS requirement_id, r.requirement_no, r.status AS requirement_status,
+                    r.zone, r.site_name, r.address, r.postal_code, r.latitude, r.longitude,
+                    r.project_mrc_inet_dedicated_25 AS requested_mrc_inet_dedicated_25,
+                    r.project_mrc_metro_25 AS requested_mrc_metro_25, r.requested_otc,
+                    r.order_type, r.si, r.area, r.gedung_kawasan, r.a_end, r.z_end,
+                    r.bandwidth, r.bandwidth_unit, r.service_type, r.special_features, r.project_notes
+                    FROM leasing.work_items w
+                    JOIN leasing.requirements r ON r.work_item_id=w.id
+                    LEFT JOIN leasing.customers c ON c.id=w.customer_id
+                    WHERE ((w.received_at >= %s AND w.received_at < %s)
+                      OR EXISTS (SELECT 1 FROM leasing.activity_events ax WHERE ax.work_item_id=w.id AND ax.occurred_at >= %s AND ax.occurred_at < %s)
+                      OR EXISTS (SELECT 1 FROM leasing.partner_outreaches ox WHERE ox.work_item_id=w.id AND ox.sent_at >= %s AND ox.sent_at < %s))
+                      AND (%s IS NULL OR w.buyer_owner_id=%s
+                        OR EXISTS (SELECT 1 FROM leasing.activity_events act WHERE act.work_item_id=w.id AND act.actor_id=%s AND act.occurred_at >= %s AND act.occurred_at < %s)
+                        OR EXISTS (SELECT 1 FROM leasing.partner_outreaches own_out WHERE own_out.work_item_id=w.id AND own_out.created_by=%s AND own_out.sent_at >= %s AND own_out.sent_at < %s))
+                      AND (%s IS NULL OR EXISTS (SELECT 1 FROM leasing.partner_outreaches op WHERE op.work_item_id=w.id AND op.partner_id=%s AND op.sent_at >= %s AND op.sent_at < %s))
+                    ORDER BY w.received_at, w.request_id, r.requirement_no""",
+                    (start,end,start,end,start,end,buyer,buyer,buyer,start,end,buyer,start,end,partner_id,partner_id,start,end))
+                site_rows = [dict(r) for r in cur.fetchall()]
+                cur.execute("""SELECT COALESCE(NULLIF(ae.actor_id,''),'__system__') AS buyer,
+                    COUNT(*) AS activity_count, COUNT(DISTINCT ae.work_item_id) AS work_items_touched
+                    FROM leasing.activity_events ae JOIN leasing.work_items w ON w.id=ae.work_item_id
+                    WHERE ae.occurred_at >= %s AND ae.occurred_at < %s
+                      AND (%s IS NULL OR ae.actor_id=%s)
+                      AND (%s IS NULL OR EXISTS (SELECT 1 FROM leasing.partner_outreaches op WHERE op.work_item_id=w.id AND op.partner_id=%s AND op.sent_at >= %s AND op.sent_at < %s))
+                    GROUP BY COALESCE(NULLIF(ae.actor_id,''),'__system__') ORDER BY activity_count DESC,buyer""",
+                    (start,end,buyer,buyer,partner_id,partner_id,start,end))
+                buyer_rows = [dict(r) for r in cur.fetchall()]
+                cur.execute("""SELECT p.partner_name, COUNT(DISTINCT w.id) AS distinct_requests_asked,
+                    COUNT(DISTINCT r.id) AS sites_sent, COUNT(DISTINCT o.id) AS outreach_records,
+                    COUNT(DISTINCT w.id) FILTER (WHERE o.response_status IN ('responded','partial_response','no_bid')) AS requests_with_partner_response
+                    FROM leasing.partner_outreaches o JOIN leasing.partners p ON p.id=o.partner_id
+                    JOIN leasing.work_items w ON w.id=o.work_item_id
+                    LEFT JOIN leasing.outreach_requirements oro ON oro.outreach_id=o.id
+                    LEFT JOIN leasing.requirements r ON r.id=oro.requirement_id
+                    WHERE o.sent_at >= %s AND o.sent_at < %s AND (%s IS NULL OR o.created_by=%s)
+                      AND (%s IS NULL OR o.partner_id=%s)
+                    GROUP BY p.id,p.partner_name ORDER BY distinct_requests_asked DESC,p.partner_name""",
+                    (start,end,buyer,buyer,partner_id,partner_id))
+                vendor_rows = [dict(r) for r in cur.fetchall()]
+                cur.execute("""SELECT COALESCE(NULLIF(o.created_by,''),'__system__') AS buyer,
+                    p.partner_name, COUNT(DISTINCT w.id) AS distinct_requests_asked,
+                    COUNT(DISTINCT r.id) AS sites_sent, COUNT(DISTINCT o.id) AS outreach_records
+                    FROM leasing.partner_outreaches o JOIN leasing.partners p ON p.id=o.partner_id
+                    JOIN leasing.work_items w ON w.id=o.work_item_id
+                    LEFT JOIN leasing.outreach_requirements oro ON oro.outreach_id=o.id
+                    LEFT JOIN leasing.requirements r ON r.id=oro.requirement_id
+                    WHERE o.sent_at >= %s AND o.sent_at < %s
+                      AND (%s IS NULL OR o.created_by=%s) AND (%s IS NULL OR o.partner_id=%s)
+                    GROUP BY COALESCE(NULLIF(o.created_by,''),'__system__'),p.id,p.partner_name
+                    ORDER BY buyer,p.partner_name""",
+                    (start,end,buyer,buyer,partner_id,partner_id))
+                buyer_vendor_rows = [dict(r) for r in cur.fetchall()]
+                cur.execute("""SELECT o.sent_at, w.request_id, w.work_type, c.customer_name, w.buyer_owner_id, o.created_by AS outreach_created_by,
+                    p.partner_name, o.outreach_round, o.response_status, COUNT(DISTINCT oro.requirement_id) AS sites_sent,
+                    o.next_follow_up_at, o.follow_up_owner_id, o.notes
+                    FROM leasing.partner_outreaches o JOIN leasing.work_items w ON w.id=o.work_item_id
+                    JOIN leasing.partners p ON p.id=o.partner_id LEFT JOIN leasing.customers c ON c.id=w.customer_id
+                    LEFT JOIN leasing.outreach_requirements oro ON oro.outreach_id=o.id
+                    WHERE o.sent_at >= %s AND o.sent_at < %s AND (%s IS NULL OR o.created_by=%s)
+                      AND (%s IS NULL OR o.partner_id=%s)
+                    GROUP BY o.id,w.id,c.customer_name,p.partner_name ORDER BY o.sent_at,p.partner_name,w.request_id""",
+                    (start,end,buyer,buyer,partner_id,partner_id))
+                outreach_rows = [dict(r) for r in cur.fetchall()]
+                cur.execute("""SELECT ae.occurred_at, ae.actor_id, w.request_id, w.work_type,
+                    w.buyer_owner_id, c.customer_name, ae.event_type, ae.event_summary, ae.metadata
+                    FROM leasing.activity_events ae JOIN leasing.work_items w ON w.id=ae.work_item_id
+                    LEFT JOIN leasing.customers c ON c.id=w.customer_id
+                    WHERE ae.occurred_at >= %s AND ae.occurred_at < %s
+                      AND (%s IS NULL OR ae.actor_id=%s)
+                      AND (%s IS NULL OR EXISTS (SELECT 1 FROM leasing.partner_outreaches op WHERE op.work_item_id=w.id AND op.partner_id=%s AND op.sent_at >= %s AND op.sent_at < %s))
+                    ORDER BY ae.occurred_at,w.request_id""",
+                    (start,end,buyer,buyer,partner_id,partner_id,start,end))
+                activity_rows = [dict(r) for r in cur.fetchall()]
+        wb = Workbook()
+        ws = wb.active; ws.title = "Monthly Summary"
+        ws.append(["Leasing Monthly Report", month_key]); ws.append(["Buyer filter", buyer or "All buyers"]); ws.append(["Vendor filter", partner_id or "All vendors"])
+        ws.append(["Metric", "Value", "Definition"])
+        definitions = [
+            ("Work Items received", summary.get("items_received",0), "Work Items yang diterima pada bulan terpilih, dikelompokkan menurut owner saat ini (bukan histori assignment)."),
+            ("Work Items in period", summary.get("work_items_in_period",0), "Jumlah Work Item unik pada sheet Work Items: owner saat ini, atau ada aktivitas/outreach yang dibuat buyer terpilih selama bulan tersebut."),
+            ("Work Items touched (current owner)", summary.get("items_with_activity",0), "Work Items milik owner saat ini yang memiliki activity event pada bulan terpilih; actor aktual dirinci di sheet Buyer Activity."),
+            ("Outreach records sent", summary.get("outreach_sent",0), "Baris outreach yang dibuat/dikirim oleh Buyer terpilih pada bulan tersebut; satu baris per komunikasi/round."),
+            ("Project Work Items in period", summary.get("project_work_items",0), "Project milik owner saat ini yang diterima, disentuh, atau dikirimi outreach pada bulan terpilih."),
+            ("Vendor requests asked", sum(int(x.get("distinct_requests_asked") or 0) for x in vendor_rows), "Jumlah request unik per vendor; satu request ke beberapa vendor dihitung sekali per vendor.")]
+        for row in definitions: ws.append(list(row))
+        _leasing_style_report_sheet(ws); ws.column_dimensions["A"].width=30; ws.column_dimensions["B"].width=22; ws.column_dimensions["C"].width=92
+        def add_sheet(title, records):
+            sheet=wb.create_sheet(title)
+            if records:
+                columns=list(records[0].keys()); sheet.append(columns)
+                for record in records: sheet.append([_leasing_excel_safe(record.get(col)) for col in columns])
+            else: sheet.append(["No records"]); sheet.append(["Tidak ada data untuk filter yang dipilih."])
+            _leasing_style_report_sheet(sheet); sheet.sheet_view.showGridLines=False; sheet.freeze_panes="A2"; sheet.auto_filter.ref=sheet.dimensions
+        add_sheet("Work Items",work_rows); add_sheet("Requirements - Sites",site_rows)
+        add_sheet("Buyer Activity",buyer_rows); add_sheet("Vendor Monthly Requests",vendor_rows)
+        add_sheet("Buyer x Vendor",buyer_vendor_rows); add_sheet("Outreach Detail",outreach_rows)
+        add_sheet("Activity Log",activity_rows)
+        output=BytesIO(); wb.save(output); output.seek(0)
+        safe_buyer=secure_filename(buyer or "all_buyers") or "all_buyers"
+        return send_file(output,mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",as_attachment=True,
+                         download_name=f"leasing_monthly_{month_key}_{safe_buyer}.xlsx")
+    except psycopg2.Error:
+        app.logger.exception("Leasing monthly report query failed")
+        return jsonify({"success": False, "message": "Laporan bulanan gagal dibuat. Pastikan migration Project/Non-Project sudah diterapkan di leasing_db."}), 500
+    except Exception:
+        app.logger.exception("Leasing monthly report generation failed")
+        return jsonify({"success": False, "message": "Laporan bulanan gagal dibuat. Periksa log aplikasi."}), 500
 
 
 # ---------------------------------------------------------------------------
@@ -2292,6 +2500,7 @@ def _leasing_record_offer_version(cur, outreach_id, incoming_lines, username, so
         raise ValueError("Outreach ini belum memiliki requirement yang dikirim.")
 
     incoming = {}
+    project_price_fields = ("mrc_inet_dedicated_25_amount", "mrc_metro_25_amount")
     for line in incoming_lines:
         req_id = int(line["requirement_id"])
         if req_id in incoming:
@@ -2300,7 +2509,7 @@ def _leasing_record_offer_version(cur, outreach_id, incoming_lines, username, so
             raise ValueError(f"Requirement ID {req_id} bukan bagian dari outreach ini.")
         normalized = dict(line)
         normalized["requirement_id"] = req_id
-        if normalized.get("feasibility_status") == "pending" and (normalized.get("mrc_amount") is not None or normalized.get("otc_amount") is not None):
+        if normalized.get("feasibility_status") == "pending" and any(normalized.get(k) is not None for k in ("mrc_amount", "otc_amount", *project_price_fields)):
             raise ValueError(f"Requirement ID {req_id}: pilih Can Provide sebelum memasukkan harga.")
         incoming[req_id] = normalized
     if not incoming:
@@ -2311,23 +2520,27 @@ def _leasing_record_offer_version(cur, outreach_id, incoming_lines, username, so
     previous_offer = cur.fetchone()
     merged = {}
     cur.execute("""SELECT pol.requirement_id, pol.feasibility_status, pol.mrc_amount, pol.otc_amount,
-        pol.currency, pol.notes, po.version_no
+        pol.mrc_inet_dedicated_25_amount, pol.mrc_metro_25_amount, pol.currency, pol.notes, po.version_no
         FROM leasing.partner_offer_lines pol JOIN leasing.partner_offers po ON po.id=pol.offer_id
         WHERE po.outreach_id=%s AND po.offer_status='current'
         ORDER BY po.version_no DESC, pol.requirement_id""", (outreach_id,))
     for old_line in cur.fetchall():
         req_id = int(old_line["requirement_id"])
         if req_id not in merged:
-            merged[req_id] = {k: old_line[k] for k in ("requirement_id", "feasibility_status", "mrc_amount", "otc_amount", "currency", "notes")}
+            merged[req_id] = {k: old_line[k] for k in ("requirement_id", "feasibility_status", "mrc_amount", "otc_amount", *project_price_fields, "currency", "notes")}
     # Safer spreadsheet semantics: a status/note-only update must not silently erase a
     # quote already on file. If at least one price is provided, that row is a full price
     # revision (blank counterpart price is intentionally cleared). To withdraw a quote,
     # explicitly choose cannot_provide; that status clears any previous prices.
     for req_id, new_line in incoming.items():
         old_line = merged.get(req_id)
+        all_price_fields = ("mrc_amount", "otc_amount", *project_price_fields)
+        if new_line.get("feasibility_status") == "cannot_provide":
+            for field in all_price_fields: new_line[field] = None
+            new_line["currency"] = None
         if (old_line and new_line.get("feasibility_status") in {"can_provide", "needs_clarification"}
-                and new_line.get("mrc_amount") is None and new_line.get("otc_amount") is None):
-            for field in ("mrc_amount", "otc_amount", "currency"):
+                and not any(new_line.get(k) is not None for k in all_price_fields)):
+            for field in (*all_price_fields, "currency"):
                 if new_line.get(field) in (None, ""):
                     new_line[field] = old_line.get(field)
     retained_line_count = sum(1 for req_id in merged if req_id not in incoming)
@@ -2346,10 +2559,12 @@ def _leasing_record_offer_version(cur, outreach_id, incoming_lines, username, so
     for req_id in sorted(merged):
         line = merged[req_id]
         cur.execute("""INSERT INTO leasing.partner_offer_lines
-            (offer_id, requirement_id, feasibility_status, mrc_amount, otc_amount, currency, notes)
-            VALUES (%s,%s,%s,%s,%s,%s,%s)""",
+            (offer_id, requirement_id, feasibility_status, mrc_amount, otc_amount,
+             mrc_inet_dedicated_25_amount, mrc_metro_25_amount, currency, notes)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
             (offer_id, req_id, line.get("feasibility_status") or "pending", line.get("mrc_amount"),
-             line.get("otc_amount"), line.get("currency"), line.get("notes")))
+             line.get("otc_amount"), line.get("mrc_inet_dedicated_25_amount"), line.get("mrc_metro_25_amount"),
+             line.get("currency"), line.get("notes")))
 
     # Reflect the latest current snapshot on the requirement-level coverage matrix.
     cur.execute("UPDATE leasing.outreach_requirements SET response_status='awaiting_response', response_note=NULL WHERE outreach_id=%s", (outreach_id,))
@@ -2368,7 +2583,7 @@ def _leasing_record_offer_version(cur, outreach_id, incoming_lines, username, so
     complete_count = sum(1 for line in merged.values() if (
         line.get("feasibility_status") == "cannot_provide" or
         (line.get("feasibility_status") == "can_provide" and
-         (line.get("mrc_amount") is not None or line.get("otc_amount") is not None))))
+        any(line.get(k) is not None for k in ("mrc_amount", "otc_amount", *project_price_fields)))))
     total_count = len(allowed_ids)
     if complete_count >= total_count and len(merged) >= total_count:
         response_status = "responded"
@@ -2408,11 +2623,14 @@ def leasing_offer_template_xlsx(outreach_id):
                 outreach = cur.fetchone()
                 if not outreach:
                     return jsonify({"success": False, "message": "Outreach tidak ditemukan."}), 404
-                cur.execute("""SELECT r.id AS requirement_id, r.requirement_no, r.area, r.address,
+                cur.execute("""SELECT r.id AS requirement_id, r.requirement_no, r.work_item_id, r.area, r.address,
                     r.gedung_kawasan, r.latitude, r.longitude, r.si, r.a_end, r.z_end,
-                    r.bandwidth, r.bandwidth_unit, r.service_type
+                    r.bandwidth, r.bandwidth_unit, r.service_type, r.zone, r.site_name, r.postal_code,
+                    r.project_mrc_inet_dedicated_25, r.project_mrc_metro_25, r.requested_otc,
+                    w.work_type
                     FROM leasing.outreach_requirements oro
                     JOIN leasing.requirements r ON r.id=oro.requirement_id
+                    JOIN leasing.work_items w ON w.id=r.work_item_id
                     WHERE oro.outreach_id=%s ORDER BY r.requirement_no""", (outreach_id,))
                 requirements = [dict(x) for x in cur.fetchall()]
         if not requirements:
@@ -2420,13 +2638,25 @@ def leasing_offer_template_xlsx(outreach_id):
         wb = Workbook()
         ws = wb.active
         ws.title = "Offer Input"
-        headers = ["Requirement ID", "Requirement No", "Area", "Address", "Building / Complex", "Latitude", "Longitude", "SI", "A-End", "Z-End", "Bandwidth", "Unit", "Service", "Feasibility Status", "MRC", "OTC", "Currency", "Notes"]
+        is_project = any(row.get("work_type") == "project" for row in requirements)
+        if is_project:
+            headers = ["Requirement ID", "Requirement No", "Zone", "Site", "Address", "Postal Code", "Latitude", "Longitude",
+                       "Requested MRC Inet Dedicated 25 Mbps", "Requested MRC Metro 25 Mbps", "Requested OTC",
+                       "Feasibility Status", "MRC", "MRC Inet Dedicated 25 Mbps", "MRC Metro 25 Mbps", "OTC", "Currency", "Notes"]
+        else:
+            headers = ["Requirement ID", "Requirement No", "Area", "Address", "Building / Complex", "Latitude", "Longitude", "SI", "A-End", "Z-End", "Bandwidth", "Unit", "Service", "Feasibility Status", "MRC", "MRC Inet Dedicated 25 Mbps", "MRC Metro 25 Mbps", "OTC", "Currency", "Notes"]
         ws.append(headers)
         for row in requirements:
-            ws.append([_leasing_excel_safe(row.get(k)) for k in ["requirement_id", "requirement_no", "area", "address", "gedung_kawasan", "latitude", "longitude", "si", "a_end", "z_end", "bandwidth", "bandwidth_unit", "service_type"]] + [None, None, None, "IDR", None])
+            if is_project:
+                details = [row.get("requirement_id"), row.get("requirement_no"), row.get("zone"), row.get("site_name"), row.get("address"), row.get("postal_code"), row.get("latitude"), row.get("longitude"), row.get("project_mrc_inet_dedicated_25"), row.get("project_mrc_metro_25"), row.get("requested_otc")]
+                ws.append([_leasing_excel_safe(v) for v in details] + [None, None, None, None, None, "IDR", None])
+            else:
+                details = [row.get(k) for k in ["requirement_id", "requirement_no", "area", "address", "gedung_kawasan", "latitude", "longitude", "si", "a_end", "z_end", "bandwidth", "bandwidth_unit", "service_type"]]
+                ws.append([_leasing_excel_safe(v) for v in details] + [None, None, None, None, None, "IDR", None])
         _leasing_style_report_sheet(ws)
-        # Response columns N:R are editable; requirement identifiers and site details remain intact.
-        for cell in ws[1][13:18]:
+        # Commercial response columns are editable; source site/request details stay read-only by convention.
+        response_start = 11 if is_project else 13
+        for cell in ws[1][response_start:]:
             cell.fill = PatternFill("solid", fgColor="16765B")
         ws.auto_filter.ref = ws.dimensions
         ws.freeze_panes = "A2"
@@ -2434,29 +2664,34 @@ def leasing_offer_template_xlsx(outreach_id):
         ws.column_dimensions["E"].width = 24
         ws.column_dimensions["F"].width = 13
         ws.column_dimensions["G"].width = 13
-        ws.column_dimensions["N"].width = 22
-        ws.column_dimensions["R"].width = 34
+        ws.column_dimensions["A"].width = 16
+        ws.column_dimensions["D"].width = 34
+        ws.column_dimensions["E"].width = 34
+        ws.column_dimensions["R" if is_project else "T"].width = 34
         if requirements:
             last_row = len(requirements) + 1
             dv = DataValidation(type="list", formula1='"pending,can_provide,cannot_provide,needs_clarification"', allow_blank=True)
-            dv.add(f"N2:N{last_row}")
+            status_col = "L" if is_project else "N"
+            dv.add(f"{status_col}2:{status_col}{last_row}")
             ws.add_data_validation(dv)
             price_validation = DataValidation(type="decimal", operator="greaterThanOrEqual", formula1="0", allow_blank=True)
             price_validation.error = "Harga harus berupa angka nol atau lebih."
             price_validation.errorTitle = "Harga tidak valid"
             price_validation.showErrorMessage = True
-            price_validation.add(f"O2:P{last_row}")
+            price_start_col = "M" if is_project else "O"
+            price_end_col = "P" if is_project else "R"
+            price_validation.add(f"{price_start_col}2:{price_end_col}{last_row}")
             ws.add_data_validation(price_validation)
             for row_idx in range(2, last_row + 1):
-                ws[f"O{row_idx}"].number_format = '#,##0.00'
-                ws[f"P{row_idx}"].number_format = '#,##0.00'
+                for col_letter in (("M", "N", "O", "P") if is_project else ("O", "P", "Q", "R")):
+                    ws[f"{col_letter}{row_idx}"].number_format = '#,##0.00'
         guide = wb.create_sheet("Instructions")
         guide.append(["Partner offer template", "Instructions"])
         guide.append(["Work Item", outreach["request_id"]])
         guide.append(["Customer", outreach["customer_name"]])
         guide.append(["Partner", outreach["partner_name"]])
         guide.append(["Outreach round", outreach["outreach_round"]])
-        guide.append(["How to use", "Edit columns N:R only. Keep Requirement ID, Requirement No, coordinates, and other site detail columns unchanged. Leave sites without a new response blank. Import creates a new version and carries forward existing prices for unchanged sites. For an existing quote, a status/note-only update with both price cells blank preserves the prior prices; entering either price makes the row a full price revision (the other blank price is cleared). Use cannot_provide to withdraw a quote and explicitly mark a site unserviceable; deleting a previously quoted row does not withdraw its quote."])
+        guide.append(["How to use", "Edit only Feasibility Status and commercial response columns; keep Requirement ID and site detail unchanged. Leave sites without a new response blank. Import creates a new version and carries forward existing prices for unchanged sites. A status/note-only update with all price cells blank preserves prior prices; entering any price makes the row a full price revision (blank counterpart fields are cleared). Use cannot_provide to withdraw a quote."])
         guide.append(["Feasibility Status", "Use: pending, can_provide, cannot_provide, needs_clarification"])
         guide.append(["Currency", "Use a three-letter currency code such as IDR, USD, or SGD when MRC/OTC is entered."])
         guide.column_dimensions["A"].width = 22
@@ -2528,34 +2763,38 @@ def leasing_import_offer_xlsx(outreach_id):
             try:
                 mrc = _leasing_parse_number(cell(row, "mrc"), "MRC", excel_row_no)
                 otc = _leasing_parse_number(cell(row, "otc"), "OTC", excel_row_no)
+                inet_mrc = _leasing_parse_number(cell(row, "mrc_inet_dedicated_25_mbps"), "MRC Inet Dedicated 25 Mbps", excel_row_no)
+                metro_mrc = _leasing_parse_number(cell(row, "mrc_metro_25_mbps"), "MRC Metro 25 Mbps", excel_row_no)
             except ValueError as exc:
                 row_issues.append(str(exc))
                 continue
             notes = str(cell(row, "notes") or "").strip() or None
             # A template row has a system ID even when the partner did not respond.
             # Ignore untouched rows instead of recording 100 empty/pending pseudo-responses.
-            has_response_value = bool(raw_feasibility) or mrc is not None or otc is not None or bool(notes)
+            any_price = any(x is not None for x in (mrc, inet_mrc, metro_mrc, otc))
+            has_response_value = bool(raw_feasibility) or any_price or bool(notes)
             if not has_response_value:
                 continue
-            if raw_feasibility == "pending" and mrc is None and otc is None and not notes:
+            if raw_feasibility == "pending" and not any_price and not notes:
                 continue
             if not raw_feasibility:
-                raw_feasibility = "can_provide" if (mrc is not None or otc is not None) else "needs_clarification"
-            if raw_feasibility == "pending" and (mrc is not None or otc is not None):
+                raw_feasibility = "can_provide" if any_price else "needs_clarification"
+            if raw_feasibility == "pending" and any_price:
                 row_issues.append(f"Baris {excel_row_no}: pilih can_provide sebelum memasukkan MRC/OTC.")
                 continue
-            if raw_feasibility == "cannot_provide" and (mrc is not None or otc is not None):
+            if raw_feasibility == "cannot_provide" and any_price:
                 row_issues.append(f"Baris {excel_row_no}: harga tidak boleh diisi jika status cannot_provide.")
                 continue
             currency = str(cell(row, "currency") or "").strip().upper()
-            if mrc is not None or otc is not None:
+            if any_price:
                 if not re.fullmatch(r"[A-Z]{3}", currency):
                     row_issues.append(f"Baris {excel_row_no}: Currency wajib kode 3 huruf jika MRC/OTC diisi.")
                     continue
             else:
                 currency = None
             parsed_lines.append({"requirement_id": req_id, "feasibility_status": raw_feasibility,
-                                 "mrc_amount": mrc, "otc_amount": otc, "currency": currency, "notes": notes})
+                                 "mrc_amount": mrc, "mrc_inet_dedicated_25_amount": inet_mrc,
+                                 "mrc_metro_25_amount": metro_mrc, "otc_amount": otc, "currency": currency, "notes": notes})
         wb.close()
         if row_issues:
             return jsonify({"success": False, "message": "Template penawaran belum valid; data belum disimpan.", "issues": row_issues[:100]}), 400
@@ -2585,7 +2824,7 @@ def leasing_work_item_report_xlsx(work_item_id):
     try:
         with get_leasing_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                cur.execute("""SELECT w.id, w.request_id, w.requester_name, w.requester_division, w.request_due_date,
+                cur.execute("""SELECT w.id, w.request_id, w.work_type, w.project_name, w.requester_name, w.requester_division, w.request_due_date,
                     w.current_stage, w.case_status, w.buyer_owner_id, w.created_at, w.updated_at, w.notes,
                     c.customer_name,
                     (SELECT COUNT(*) FROM leasing.requirements r WHERE r.work_item_id=w.id) AS requirement_count,
@@ -2598,7 +2837,9 @@ def leasing_work_item_report_xlsx(work_item_id):
                 item = cur.fetchone()
                 if not item: return jsonify({"success": False, "message": "Work Item tidak ditemukan."}), 404
                 queries = {
-                    "Requirements": ("""SELECT id AS requirement_id, requirement_no, status, order_type, si, area, address, gedung_kawasan,
+                    "Requirements": ("""SELECT id AS requirement_id, requirement_no, status, zone, site_name, postal_code,
+                        project_mrc_inet_dedicated_25, project_mrc_metro_25, requested_otc, project_notes,
+                        order_type, si, area, address, gedung_kawasan,
                         latitude, longitude, a_end, z_end, bandwidth, bandwidth_unit, service_type, special_features,
                         existing_mrc_amount, existing_mrc_currency, resolution_note, created_at
                         FROM leasing.requirements WHERE work_item_id=%s ORDER BY requirement_no""", (work_item_id,)),
@@ -2610,7 +2851,7 @@ def leasing_work_item_report_xlsx(work_item_id):
                            AND pol.feasibility_status <> 'pending') AS locations_responded,
                         (SELECT COUNT(DISTINCT pol.requirement_id) FROM leasing.partner_offer_lines pol
                          JOIN leasing.partner_offers po ON po.id=pol.offer_id WHERE po.outreach_id=o.id AND po.offer_status='current'
-                           AND (pol.mrc_amount IS NOT NULL OR pol.otc_amount IS NOT NULL)) AS locations_quoted,
+                           AND (pol.mrc_amount IS NOT NULL OR pol.mrc_inet_dedicated_25_amount IS NOT NULL OR pol.mrc_metro_25_amount IS NOT NULL OR pol.otc_amount IS NOT NULL)) AS locations_quoted,
                         (SELECT MAX(po.version_no) FROM leasing.partner_offers po WHERE po.outreach_id=o.id) AS latest_offer_version,
                         (SELECT MAX(po.received_at) FROM leasing.partner_offers po WHERE po.outreach_id=o.id) AS latest_offer_received,
                         o.created_at
@@ -2622,7 +2863,7 @@ def leasing_work_item_report_xlsx(work_item_id):
                              ELSE oro.response_status END AS requirement_response_status,
                         COALESCE(current_line.notes, oro.response_note) AS response_note,
                         r.id AS requirement_id, r.requirement_no, r.order_type, r.si, r.area,
-                        r.address, r.gedung_kawasan, r.a_end, r.z_end, r.bandwidth, r.bandwidth_unit
+                        r.address, r.gedung_kawasan, r.zone, r.site_name, r.postal_code, r.a_end, r.z_end, r.bandwidth, r.bandwidth_unit
                         FROM leasing.outreach_requirements oro JOIN leasing.partner_outreaches o ON o.id=oro.outreach_id
                         JOIN leasing.partners p ON p.id=o.partner_id JOIN leasing.requirements r ON r.id=oro.requirement_id
                         LEFT JOIN LATERAL (SELECT pol.feasibility_status, pol.notes
@@ -2631,10 +2872,13 @@ def leasing_work_item_report_xlsx(work_item_id):
                             ORDER BY po.version_no DESC LIMIT 1) current_line ON TRUE
                         WHERE o.work_item_id=%s ORDER BY p.partner_name, o.outreach_round, r.requirement_no""", (work_item_id,)),
                     "Commercial Comparison": ("""SELECT pol.id AS offer_line_id, pol.requirement_id, p.partner_name, o.outreach_round, po.version_no, po.offer_status, po.received_at,
-                        po.valid_until, r.requirement_no, r.order_type, r.si, r.area, r.address, r.gedung_kawasan,
+                        po.valid_until, r.requirement_no, r.zone, r.site_name, r.postal_code, r.project_mrc_inet_dedicated_25,
+                        r.project_mrc_metro_25, r.requested_otc, r.project_notes, r.order_type, r.si, r.area, r.address, r.gedung_kawasan,
                         r.a_end, r.z_end, r.bandwidth, r.bandwidth_unit, r.service_type, pol.feasibility_status,
-                        pol.mrc_amount, pol.otc_amount, pol.currency, pol.notes AS line_notes, po.notes AS offer_notes,
+                        pol.mrc_amount, pol.mrc_inet_dedicated_25_amount, pol.mrc_metro_25_amount, pol.otc_amount, pol.currency, pol.notes AS line_notes, po.notes AS offer_notes,
                         ne.event_type AS latest_negotiation_event, ne.mrc_amount AS latest_negotiated_mrc,
+                        ne.mrc_inet_dedicated_25_amount AS latest_negotiated_mrc_inet_dedicated_25,
+                        ne.mrc_metro_25_amount AS latest_negotiated_mrc_metro_25,
                         ne.otc_amount AS latest_negotiated_otc, ne.currency AS latest_negotiated_currency,
                         ne.occurred_at AS latest_negotiation_at, ne.notes AS latest_negotiation_notes
                         FROM leasing.partner_offer_lines pol JOIN leasing.partner_offers po ON po.id=pol.offer_id
@@ -2647,7 +2891,8 @@ def leasing_work_item_report_xlsx(work_item_id):
                         FROM leasing.activity_events WHERE work_item_id=%s ORDER BY occurred_at""", (work_item_id,)),
                     "Results Sent": ("""SELECT rs.submission_no, rs.submission_status, rs.channel, rs.recipient_name, rs.recipient_email,
                         rs.sent_at, rs.created_at, rs.created_by, rs.notes, rsl.requirement_id, r.requirement_no,
-                        r.area, r.address, r.gedung_kawasan, p.partner_name, pol.mrc_amount, pol.otc_amount, pol.currency,
+                        r.zone, r.site_name, r.postal_code, r.area, r.address, r.gedung_kawasan, p.partner_name,
+                        pol.mrc_amount, pol.mrc_inet_dedicated_25_amount, pol.mrc_metro_25_amount, pol.otc_amount, pol.currency,
                         rsl.result_note
                         FROM leasing.result_submissions rs LEFT JOIN leasing.result_submission_lines rsl ON rsl.submission_id=rs.id
                         LEFT JOIN leasing.requirements r ON r.id=rsl.requirement_id
@@ -2722,7 +2967,9 @@ def leasing_work_item_report_xlsx(work_item_id):
 # separate Work Item. Customer name is never used as a grouping key.
 # ---------------------------------------------------------------------------
 LEASING_IMPORT_ALIASES = {
+    "work_type": {"work_type", "work type", "tipe pekerjaan", "jenis pekerjaan", "tipe work item", "jenis work item"},
     "request_id": {"request_id", "request id", "work_item_id", "work item id", "work_item", "work item", "ticket_id", "ticket id", "id request", "id_request"},
+    "project_name": {"project name", "nama project", "nama proyek", "project", "proyek"},
     "customer_name": {"customer", "customer_name", "customer name", "pelanggan", "customer/pelanggan", "customer_pelanggan"},
     "requester_name": {"requester", "requester_name", "requester name", "nama requester", "pemohon"},
     "request_due_date": {"request_due_date", "request due date", "due date", "due_date", "due date submit", "due date requester", "target submit"},
@@ -2731,6 +2978,13 @@ LEASING_IMPORT_ALIASES = {
     "si": {"si", "nomor si", "no si", "si number", "service id"},
     "area": {"area", "wilayah", "regional area"},
     "address": {"address", "alamat", "alamat site", "site address"},
+    "zone": {"zona", "zone"},
+    "site_name": {"site", "site name", "nama site", "site_id", "site id"},
+    "postal_code": {"kode pos", "postal code", "postal_code", "postcode", "zip code"},
+    "project_mrc_inet_dedicated_25": {"mrc inet dedicated 25 mbps", "mrc internet dedicated 25 mbps", "mrc inet dedicated", "mrc dedicated 25"},
+    "project_mrc_metro_25": {"mrc metro 25 mbps", "mrc metro", "mrc metro-e 25"},
+    "requested_otc": {"otc", "requested otc", "otc request"},
+    "project_notes": {"keterangan", "site notes", "project notes", "catatan site"},
     "latitude": {"latitude", "lat", "lintang"},
     "longitude": {"longitude", "long", "lng", "bujur"},
     "gedung_kawasan": {"gedung_kawasan", "gedung kawasan", "gedung/kawasan", "gedung", "kawasan", "building"},
@@ -2874,11 +3128,37 @@ def _leasing_is_psb(value):
     return normalized in {"psb", "pasang baru", "pasang baru psb"}
 
 
-def _leasing_validate_requirement_payload(payload, label="Requirement"):
+def _leasing_validate_requirement_payload(payload, label="Requirement", work_type="non_project"):
     data = {key: _leasing_cell_value(payload.get(key)) for key in (
         "order_type", "si", "area", "address", "gedung_kawasan", "latitude", "longitude", "a_end", "z_end",
-        "bandwidth", "bandwidth_unit", "service_type", "special_features", "existing_mrc_amount", "existing_mrc_currency"
+        "bandwidth", "bandwidth_unit", "service_type", "special_features", "existing_mrc_amount", "existing_mrc_currency",
+        "zone", "site_name", "postal_code", "project_name", "project_mrc_inet_dedicated_25", "project_mrc_metro_25", "requested_otc", "project_notes"
     )}
+    work_type = str(work_type or payload.get("work_type") or "non_project").strip().lower().replace(" ", "_")
+    if work_type not in {"project", "non_project"}:
+        raise ValueError(f"{label}: Work Type harus Project atau Non-Project.")
+    if work_type == "project":
+        data["site_name"] = data.get("site_name")
+        data["area"] = data.get("zone") or data.get("area")
+        if not data.get("project_name"): raise ValueError(f"{label}: Project Name wajib diisi untuk Project.")
+        if not data.get("site_name"): raise ValueError(f"{label}: Site wajib diisi untuk Project.")
+        if not data.get("address"): raise ValueError(f"{label}: Alamat wajib diisi untuk Project.")
+        for key, title in (("project_mrc_inet_dedicated_25", "MRC Inet Dedicated 25 Mbps"), ("project_mrc_metro_25", "MRC Metro 25 Mbps"), ("requested_otc", "OTC")):
+            if data.get(key) not in (None, ""):
+                try: amount = float(str(data[key]).replace(".", "").replace(",", ".") if "," in str(data[key]) else data[key])
+                except (TypeError, ValueError): raise ValueError(f"{label}: {title} harus berupa angka nol atau lebih.")
+                if not math.isfinite(amount) or amount < 0: raise ValueError(f"{label}: {title} harus berupa angka nol atau lebih.")
+                data[key] = amount
+            else: data[key] = None
+        data["latitude"] = _leasing_validate_coordinate(data.get("latitude"), "Latitude", label, -90, 90)
+        data["longitude"] = _leasing_validate_coordinate(data.get("longitude"), "Longitude", label, -180, 180)
+        data["bandwidth"] = None
+        data["bandwidth_unit"] = "Mbps"
+        data["existing_mrc_amount"] = None
+        data["existing_mrc_currency"] = None
+        data["work_type"] = work_type
+        return data
+
     required = (("order_type", "Jenis Order"), ("area", "Area"), ("address", "Alamat"), ("a_end", "A End"), ("service_type", "Jasa"), ("special_features", "Fitur Khusus"))
     for key, title in required:
         if not data.get(key): raise ValueError(f"{label}: {title} wajib diisi.")
@@ -2925,7 +3205,17 @@ def _leasing_validate_requirement_payload(payload, label="Requirement"):
     else:
         data["existing_mrc_amount"] = None
         data["existing_mrc_currency"] = None
+    data["work_type"] = work_type
     return data
+
+
+def _leasing_validate_coordinate(raw, title, label, low, high):
+    if raw in (None, ""): return None
+    try: coord = float(str(raw).replace(",", "."))
+    except (TypeError, ValueError): raise ValueError(f"{label}: {title} harus berupa angka desimal.")
+    if not math.isfinite(coord) or not low <= coord <= high:
+        raise ValueError(f"{label}: {title} di luar rentang yang valid ({low} sampai {high}).")
+    return coord
 
 
 def _leasing_normalize_import_rows(raw_rows, source_headers):
@@ -2939,11 +3229,17 @@ def _leasing_normalize_import_rows(raw_rows, source_headers):
         obj = {canonical: _leasing_cell_value(source.get(header)) for canonical, header in mapped_headers.items()}
         obj["_row_no"] = row_idx
         try:
+            raw_type = str(obj.get("work_type") or "non_project").strip().lower().replace("_", " ").replace("-", " ")
+            if raw_type in {"project", "proyek"}: obj["work_type"] = "project"
+            elif raw_type in {"non project", "nonproject", "non proyek", "nonproyek", ""}: obj["work_type"] = "non_project"
+            else: raise ValueError(f"Baris {row_idx}: Work Type harus Project atau Non-Project.")
             obj["request_due_date"] = _leasing_parse_date(obj.get("request_due_date"), "Due date", row_idx)
             obj["bandwidth"] = _leasing_parse_number(obj.get("bandwidth"), "Bandwidth", row_idx)
             obj["existing_mrc_amount"] = _leasing_parse_number(obj.get("existing_mrc_amount"), "MRC eksisting", row_idx)
+            for key, label in (("project_mrc_inet_dedicated_25", "MRC Inet Dedicated 25 Mbps"), ("project_mrc_metro_25", "MRC Metro 25 Mbps"), ("requested_otc", "OTC")):
+                obj[key] = _leasing_parse_number(obj.get(key), label, row_idx)
             if obj.get("request_id"): obj["request_id"] = str(obj["request_id"]).strip()
-            obj.update(_leasing_validate_requirement_payload(obj, f"Baris {row_idx}"))
+            obj.update(_leasing_validate_requirement_payload(obj, f"Baris {row_idx}", obj["work_type"]))
             normalized.append(obj)
         except ValueError as exc:
             issues.append(str(exc))
@@ -2958,15 +3254,15 @@ def _leasing_import_groups(rows):
         rid = str(row.get("request_id") or "").strip()
         if rid:
             if rid not in by_request_id:
-                group = {"request_id": rid, "rows": [], "customer_name": None, "requester_name": None}
+                group = {"request_id": rid, "rows": [], "customer_name": None, "requester_name": None, "work_type": row.get("work_type", "non_project"), "project_name": row.get("project_name")}
                 by_request_id[rid] = group
                 groups.append(group)
             group = by_request_id[rid]
         else:
-            group = {"request_id": None, "rows": [], "customer_name": None, "requester_name": None}
+            group = {"request_id": None, "rows": [], "customer_name": None, "requester_name": None, "work_type": row.get("work_type", "non_project"), "project_name": row.get("project_name")}
             groups.append(group)
         group["rows"].append(row)
-    request_fields = (("customer_name", "Customer"), ("requester_name", "Requester"), ("request_due_date", "Due Date"), ("notes", "Notes"))
+    request_fields = (("customer_name", "Customer"), ("requester_name", "Requester"), ("request_due_date", "Due Date"), ("notes", "Notes"), ("work_type", "Work Type"), ("project_name", "Project Name"))
     for group in groups:
         rows_in_group = group["rows"]
         for field, label in request_fields:
@@ -2978,6 +3274,8 @@ def _leasing_import_groups(rows):
                 for r in rows_in_group: r[field] = value
         group["customer_name"] = next((r.get("customer_name") for r in rows_in_group if r.get("customer_name")), None)
         group["requester_name"] = next((r.get("requester_name") for r in rows_in_group if r.get("requester_name")), None)
+        group["work_type"] = next((r.get("work_type", "non_project") for r in rows_in_group), "non_project")
+        group["project_name"] = next((r.get("project_name") for r in rows_in_group if r.get("project_name")), None)
         if not group["customer_name"]: issues.append(f"Customer wajib diisi untuk Work Item dari baris {rows_in_group[0]['_row_no']}.")
         if not group["requester_name"]: issues.append(f"Requester wajib diisi untuk Work Item dari baris {rows_in_group[0]['_row_no']}.")
     return groups, issues
@@ -3078,19 +3376,21 @@ def leasing_import():
                         cur.execute("INSERT INTO leasing.customers (customer_name) VALUES (%s) RETURNING id", (customer_name,))
                         customer = cur.fetchone()
                     cur.execute("""INSERT INTO leasing.work_items
-                        (request_id, customer_id, requester_name, request_due_date, buyer_owner_id, notes, created_by)
-                        VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
-                        (request_id, customer["id"], requester_name, first.get("request_due_date"), default_owner, first.get("notes"), username))
+                        (request_id, customer_id, requester_name, request_due_date, buyer_owner_id, notes, created_by, work_type, project_name)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
+                        (request_id, customer["id"], requester_name, first.get("request_due_date"), default_owner,
+                         first.get("notes"), username, group.get("work_type", "non_project"), group.get("project_name")))
                     work_id = cur.fetchone()["id"]
                     created_ids.append({"id": work_id, "request_id": request_id, "requirement_count": len(group_rows)})
                     for idx, row in enumerate(group_rows, start=1):
-                        fields = _leasing_validate_requirement_payload(row, f"Baris {row['_row_no']}")
+                        fields = _leasing_validate_requirement_payload(row, f"Baris {row['_row_no']}", group.get("work_type", "non_project"))
                         cur.execute("""INSERT INTO leasing.requirements
                             (work_item_id, requirement_no, order_type, si, area, address, gedung_kawasan, latitude, longitude,
                              a_end, z_end, bandwidth, bandwidth_unit, service_type, special_features,
-                             existing_mrc_amount, existing_mrc_currency)
-                            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
-                            (work_id, idx, fields["order_type"], fields["si"], fields["area"], fields["address"], fields["gedung_kawasan"], fields["latitude"], fields["longitude"], fields["a_end"], fields["z_end"], fields["bandwidth"], fields["bandwidth_unit"], fields["service_type"], fields["special_features"], fields["existing_mrc_amount"], fields["existing_mrc_currency"]))
+                             existing_mrc_amount, existing_mrc_currency, zone, site_name, postal_code,
+                             project_mrc_inet_dedicated_25, project_mrc_metro_25, requested_otc, project_notes)
+                            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                            (work_id, idx, fields["order_type"], fields["si"], fields["area"], fields["address"], fields["gedung_kawasan"], fields["latitude"], fields["longitude"], fields["a_end"], fields["z_end"], fields["bandwidth"], fields["bandwidth_unit"], fields["service_type"], fields["special_features"], fields["existing_mrc_amount"], fields["existing_mrc_currency"], fields.get("zone"), fields.get("site_name"), fields.get("postal_code"), fields.get("project_mrc_inet_dedicated_25"), fields.get("project_mrc_metro_25"), fields.get("requested_otc"), fields.get("project_notes")))
                     leasing_activity(cur, work_id, "work_item_imported", f"Work Item diimpor dari {data['source_name']}", username,
                         {"request_id": request_id, "source_row_numbers": [r["_row_no"] for r in group_rows], "requirement_count": len(group_rows), "import_mode": "request_id_grouping"})
             conn.commit()
