@@ -1439,6 +1439,21 @@ def leasing_login_required(fn):
     return wrapper
 
 
+LEASING_ADMIN_ROLES = frozenset({"leasing_admin", "platform_admin"})
+
+
+def leasing_admin_required(fn):
+    """Restrict destructive/master-data administration to Leasing/platform admins."""
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        if not session.get("username"):
+            return jsonify({"success": False, "message": "Login diperlukan."}), 401
+        if session.get("role") not in LEASING_ADMIN_ROLES:
+            return jsonify({"success": False, "message": "Fitur ini hanya untuk Leasing Admin atau Platform Admin."}), 403
+        return fn(*args, **kwargs)
+    return wrapper
+
+
 
 def leasing_owner_is_valid(username):
     if not username:
@@ -1795,6 +1810,129 @@ def leasing_partners():
         return jsonify({"success": False, "message": "Gagal memproses data partner."}), 500
 
 
+@app.route("/api/leasing/partners/<int:partner_id>", methods=["PATCH"])
+@leasing_login_required
+def leasing_update_partner(partner_id):
+    """Edit a partner master record without changing historical outreach/offer references."""
+    payload = request.get_json(silent=True) or {}
+    allowed = {"partner_name", "partner_code", "contact_name", "contact_email", "contact_phone", "notes"}
+    if not any(key in payload for key in allowed):
+        return jsonify({"success": False, "message": "Tidak ada field partner yang diperbarui."}), 400
+
+    changes = {}
+    for key in allowed:
+        if key not in payload:
+            continue
+        value = payload.get(key)
+        value = str(value).strip() if value is not None else ""
+        changes[key] = value or None
+    if "partner_name" in changes and not changes["partner_name"]:
+        return jsonify({"success": False, "message": "Nama partner wajib diisi."}), 400
+    email = changes.get("contact_email")
+    if email and not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email):
+        return jsonify({"success": False, "message": "Format email kontak tidak valid."}), 400
+
+    try:
+        with get_leasing_db_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("SELECT id FROM leasing.partners WHERE id=%s AND is_active=TRUE FOR UPDATE", (partner_id,))
+                if not cur.fetchone():
+                    return jsonify({"success": False, "message": "Partner aktif tidak ditemukan."}), 404
+                assignments = [f"{key}=%s" for key in changes]
+                values = list(changes.values()) + [partner_id]
+                cur.execute(
+                    f"UPDATE leasing.partners SET {', '.join(assignments)} WHERE id=%s RETURNING *",
+                    values,
+                )
+                partner = dict(cur.fetchone())
+            conn.commit()
+        return jsonify({"success": True, "partner": partner, "message": "Data partner berhasil diperbarui."})
+    except psycopg2.IntegrityError:
+        return jsonify({"success": False, "message": "Kode partner sudah digunakan partner lain."}), 409
+    except psycopg2.Error:
+        app.logger.exception("Leasing partner update failed")
+        return jsonify({"success": False, "message": "Gagal memperbarui data partner."}), 500
+
+
+@app.route("/api/leasing/work-items/<int:work_item_id>", methods=["DELETE"])
+@leasing_admin_required
+def leasing_delete_work_item(work_item_id):
+    """Permanently delete a mistakenly-created Work Item; retain a minimal audit record."""
+    payload = request.get_json(silent=True) or {}
+    reason = str(payload.get("reason") or "").strip()
+    typed_request_id = str(payload.get("confirm_request_id") or "").strip()
+    if len(reason) < 10:
+        return jsonify({"success": False, "message": "Alasan penghapusan wajib minimal 10 karakter."}), 400
+    if not typed_request_id:
+        return jsonify({"success": False, "message": "Ketik Request ID untuk mengonfirmasi penghapusan."}), 400
+
+    try:
+        with get_leasing_db_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("""SELECT w.*, c.customer_name
+                    FROM leasing.work_items w LEFT JOIN leasing.customers c ON c.id=w.customer_id
+                    WHERE w.id=%s FOR UPDATE OF w""", (work_item_id,))
+                item_row = cur.fetchone()
+                if not item_row:
+                    return jsonify({"success": False, "message": "Work Item tidak ditemukan atau sudah dihapus."}), 404
+                item = dict(item_row)
+                request_id = str(item.get("request_id") or "")
+                if typed_request_id != request_id:
+                    return jsonify({"success": False, "message": "Request ID tidak cocok. Data tidak dihapus."}), 400
+
+                cur.execute("SELECT COUNT(*) AS n FROM leasing.requirements WHERE work_item_id=%s", (work_item_id,))
+                requirement_count = int(cur.fetchone()["n"])
+                cur.execute("SELECT COUNT(*) AS n FROM leasing.partner_outreaches WHERE work_item_id=%s", (work_item_id,))
+                outreach_count = int(cur.fetchone()["n"])
+                cur.execute("""INSERT INTO leasing.work_item_deletion_audit
+                    (original_work_item_id, request_id, work_type, project_name, customer_name,
+                     requester_name, buyer_owner_id, deleted_by, deletion_reason,
+                     requirements_count, outreaches_count, metadata)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)""",
+                    (work_item_id, request_id, item.get("work_type"), item.get("project_name"),
+                     item.get("customer_name"), item.get("requester_name"), item.get("buyer_owner_id"),
+                     session["username"], reason, requirement_count, outreach_count,
+                     json.dumps({
+                         "case_status": item.get("case_status"),
+                         "current_stage": item.get("current_stage"),
+                         "created_by": item.get("created_by"),
+                         "created_at": item.get("created_at"),
+                         "deleted_at": datetime.now(ZoneInfo("Asia/Jakarta")).isoformat(),
+                     }, default=str)))
+
+                # Remove dependent rows in FK-safe order. The audit record above is in the same transaction.
+                cur.execute("""DELETE FROM leasing.result_submission_lines
+                    WHERE submission_id IN (SELECT id FROM leasing.result_submissions WHERE work_item_id=%s)
+                       OR requirement_id IN (SELECT id FROM leasing.requirements WHERE work_item_id=%s)""",
+                    (work_item_id, work_item_id))
+                cur.execute("""DELETE FROM leasing.negotiation_events WHERE offer_line_id IN (
+                    SELECT pol.id FROM leasing.partner_offer_lines pol
+                    JOIN leasing.partner_offers po ON po.id=pol.offer_id
+                    JOIN leasing.partner_outreaches o ON o.id=po.outreach_id
+                    WHERE o.work_item_id=%s)""", (work_item_id,))
+                cur.execute("""DELETE FROM leasing.outreach_requirements
+                    WHERE outreach_id IN (SELECT id FROM leasing.partner_outreaches WHERE work_item_id=%s)
+                       OR requirement_id IN (SELECT id FROM leasing.requirements WHERE work_item_id=%s)""",
+                    (work_item_id, work_item_id))
+                cur.execute("DELETE FROM leasing.documents WHERE work_item_id=%s", (work_item_id,))
+                cur.execute("DELETE FROM leasing.commercial_targets WHERE work_item_id=%s", (work_item_id,))
+                cur.execute("DELETE FROM leasing.result_submissions WHERE work_item_id=%s", (work_item_id,))
+                cur.execute("""DELETE FROM leasing.partner_offer_lines WHERE offer_id IN (
+                    SELECT po.id FROM leasing.partner_offers po JOIN leasing.partner_outreaches o
+                    ON o.id=po.outreach_id WHERE o.work_item_id=%s)""", (work_item_id,))
+                cur.execute("""DELETE FROM leasing.partner_offers WHERE outreach_id IN
+                    (SELECT id FROM leasing.partner_outreaches WHERE work_item_id=%s)""", (work_item_id,))
+                cur.execute("DELETE FROM leasing.partner_outreaches WHERE work_item_id=%s", (work_item_id,))
+                cur.execute("DELETE FROM leasing.requirements WHERE work_item_id=%s", (work_item_id,))
+                cur.execute("DELETE FROM leasing.activity_events WHERE work_item_id=%s", (work_item_id,))
+                cur.execute("DELETE FROM leasing.work_items WHERE id=%s", (work_item_id,))
+            conn.commit()
+        return jsonify({"success": True, "message": f"Work Item {request_id} berhasil dihapus. Metadata penghapusan tersimpan di audit."})
+    except psycopg2.Error:
+        app.logger.exception("Leasing work item delete failed")
+        return jsonify({"success": False, "message": "Penghapusan gagal dan transaksi dibatalkan. Periksa log server atau relasi data."}), 500
+
+
 @app.route("/api/leasing/work-items/<int:work_item_id>/outreaches", methods=["POST"])
 @leasing_login_required
 def leasing_create_outreach(work_item_id):
@@ -1912,6 +2050,7 @@ def leasing_create_offer(outreach_id):
                     amounts[field] = number
             currency = str(line.get("currency") or "").strip().upper()
             notes = str(line.get("notes") or "").strip() or None
+            clear_existing_prices = line.get("clear_existing_prices") is True or str(line.get("clear_existing_prices") or "").strip().lower() in {"1", "true", "yes", "on"}
             has_price = any(amounts[field] is not None for field, _ in price_fields)
             if has_price and feasibility == "pending":
                 raise ValueError(f"Baris {index}: pilih Can Provide sebelum memasukkan harga.")
@@ -1922,10 +2061,10 @@ def leasing_create_offer(outreach_id):
                     raise ValueError(f"Baris {index}: currency wajib berupa kode 3 huruf saat harga diisi.")
             else:
                 currency = None
-            if feasibility == "pending" and not notes:
+            if feasibility == "pending" and not notes and not clear_existing_prices:
                 continue
             normalized_lines.append({"requirement_id": requirement_id, **amounts, "feasibility_status": feasibility,
-                                     "currency": currency, "notes": notes})
+                                     "currency": currency, "notes": notes, "clear_existing_prices": clear_existing_prices})
         if not normalized_lines:
             raise ValueError("Isi setidaknya satu hasil penawaran.")
         with get_leasing_db_connection() as conn:
@@ -2528,21 +2667,57 @@ def _leasing_record_offer_version(cur, outreach_id, incoming_lines, username, so
         req_id = int(old_line["requirement_id"])
         if req_id not in merged:
             merged[req_id] = {k: old_line[k] for k in ("requirement_id", "feasibility_status", "mrc_amount", "otc_amount", *project_price_fields, "currency", "notes")}
-    # Safer spreadsheet semantics: a status/note-only update must not silently erase a
-    # quote already on file. If at least one price is provided, that row is a full price
-    # revision (blank counterpart price is intentionally cleared). To withdraw a quote,
-    # explicitly choose cannot_provide; that status clears any previous prices.
+    # Safe partial-update semantics:
+    # - blank price fields preserve the value already on file;
+    # - Clear Existing Prices? = YES explicitly resets old prices before applying this row;
+    # - cannot_provide always withdraws the prior quote;
+    # - a currency change cannot be mixed with retained prices, because a line has one currency.
+    all_price_fields = ("mrc_amount", "otc_amount", *project_price_fields)
     for req_id, new_line in incoming.items():
         old_line = merged.get(req_id)
-        all_price_fields = ("mrc_amount", "otc_amount", *project_price_fields)
+        clear_existing_prices = new_line.get("clear_existing_prices") in (True, 1, "1", "yes", "YES", "true", "TRUE")
+        new_has_price = any(new_line.get(k) is not None for k in all_price_fields)
+        if old_line and not new_line.get("feasibility_status"):
+            if clear_existing_prices and not new_has_price:
+                new_line["feasibility_status"] = "needs_clarification"
+            else:
+                new_line["feasibility_status"] = old_line.get("feasibility_status") or "pending"
+        elif not old_line and not new_line.get("feasibility_status"):
+            new_line["feasibility_status"] = "needs_clarification"
+        old_has_price = bool(old_line and any(old_line.get(k) is not None for k in all_price_fields))
+        new_currency = new_line.get("currency")
+        old_currency = old_line.get("currency") if old_line else None
+        if old_line and new_line.get("notes") in (None, ""):
+            new_line["notes"] = old_line.get("notes")
         if new_line.get("feasibility_status") == "cannot_provide":
             for field in all_price_fields: new_line[field] = None
             new_line["currency"] = None
-        if (old_line and new_line.get("feasibility_status") in {"can_provide", "needs_clarification"}
-                and not any(new_line.get(k) is not None for k in all_price_fields)):
-            for field in (*all_price_fields, "currency"):
-                if new_line.get(field) in (None, ""):
+            new_line["clear_existing_prices"] = True
+            continue
+        if old_line and clear_existing_prices and not new_has_price:
+            # Don't leave a currency attached to a line with no prices after an explicit reset.
+            new_line["currency"] = None
+        if old_line and not clear_existing_prices:
+            if new_has_price and old_has_price and new_currency and old_currency and new_currency != old_currency:
+                raise ValueError(
+                    f"Requirement ID {req_id}: currency baru ({new_currency}) berbeda dari currency lama ({old_currency}). "
+                    "Untuk mengganti currency, pilih Clear Existing Prices? = YES dan isi semua harga yang ingin dipertahankan."
+                )
+            for field in all_price_fields:
+                if new_line.get(field) is None:
                     new_line[field] = old_line.get(field)
+            if not new_currency:
+                new_line["currency"] = old_currency
+            if new_line.get("notes") in (None, ""):
+                new_line["notes"] = old_line.get("notes")
+            # A default manual form status of `pending` must not downgrade an existing quote
+            # during a note-only edit. Explicitly resetting prices remains available via the flag.
+            if (new_line.get("feasibility_status") == "pending"
+                    and not new_has_price and not clear_existing_prices):
+                # The manual UI's default/blank status is non-destructive: don't change an
+                # existing line's state unless the user explicitly chooses another status.
+                new_line["feasibility_status"] = old_line.get("feasibility_status") or "pending"
+        new_line["clear_existing_prices"] = clear_existing_prices
     retained_line_count = sum(1 for req_id in merged if req_id not in incoming)
     merged.update(incoming)
 
@@ -2633,6 +2808,14 @@ def leasing_offer_template_xlsx(outreach_id):
                     JOIN leasing.work_items w ON w.id=r.work_item_id
                     WHERE oro.outreach_id=%s ORDER BY r.requirement_no""", (outreach_id,))
                 requirements = [dict(x) for x in cur.fetchall()]
+                cur.execute("""SELECT pol.requirement_id, pol.currency
+                    FROM leasing.partner_offers po
+                    JOIN leasing.partner_offer_lines pol ON pol.offer_id=po.id
+                    WHERE po.outreach_id=%s AND po.offer_status='current'
+                    ORDER BY po.version_no DESC, pol.requirement_id""", (outreach_id,))
+                current_currency_by_requirement = {}
+                for currency_row in cur.fetchall():
+                    current_currency_by_requirement.setdefault(int(currency_row["requirement_id"]), currency_row.get("currency"))
         if not requirements:
             return jsonify({"success": False, "message": "Outreach ini belum memiliki requirement terkait. Catat ulang outreach dengan memilih lokasi yang dikirim."}), 409
         wb = Workbook()
@@ -2642,17 +2825,19 @@ def leasing_offer_template_xlsx(outreach_id):
         if is_project:
             headers = ["Requirement ID", "Requirement No", "Zone", "Site", "Address", "Postal Code", "Latitude", "Longitude",
                        "Requested MRC Inet Dedicated 25 Mbps", "Requested MRC Metro 25 Mbps", "Requested OTC",
-                       "Feasibility Status", "MRC", "MRC Inet Dedicated 25 Mbps", "MRC Metro 25 Mbps", "OTC", "Currency", "Notes"]
+                       "Feasibility Status", "MRC", "MRC Inet Dedicated 25 Mbps", "MRC Metro 25 Mbps", "OTC", "Currency", "Clear Existing Prices?", "Notes"]
         else:
-            headers = ["Requirement ID", "Requirement No", "Area", "Address", "Building / Complex", "Latitude", "Longitude", "SI", "A-End", "Z-End", "Bandwidth", "Unit", "Service", "Feasibility Status", "MRC", "MRC Inet Dedicated 25 Mbps", "MRC Metro 25 Mbps", "OTC", "Currency", "Notes"]
+            headers = ["Requirement ID", "Requirement No", "Area", "Address", "Building / Complex", "Latitude", "Longitude", "SI", "A-End", "Z-End", "Bandwidth", "Unit", "Service", "Feasibility Status", "MRC", "MRC Inet Dedicated 25 Mbps", "MRC Metro 25 Mbps", "OTC", "Currency", "Clear Existing Prices?", "Notes"]
         ws.append(headers)
         for row in requirements:
             if is_project:
                 details = [row.get("requirement_id"), row.get("requirement_no"), row.get("zone"), row.get("site_name"), row.get("address"), row.get("postal_code"), row.get("latitude"), row.get("longitude"), row.get("project_mrc_inet_dedicated_25"), row.get("project_mrc_metro_25"), row.get("requested_otc")]
-                ws.append([_leasing_excel_safe(v) for v in details] + [None, None, None, None, None, "IDR", None])
+                ws.append([_leasing_excel_safe(v) for v in details] + [None, None, None, None, None,
+                    current_currency_by_requirement.get(int(row["requirement_id"])), None, None])
             else:
                 details = [row.get(k) for k in ["requirement_id", "requirement_no", "area", "address", "gedung_kawasan", "latitude", "longitude", "si", "a_end", "z_end", "bandwidth", "bandwidth_unit", "service_type"]]
-                ws.append([_leasing_excel_safe(v) for v in details] + [None, None, None, None, None, "IDR", None])
+                ws.append([_leasing_excel_safe(v) for v in details] + [None, None, None, None, None,
+                    current_currency_by_requirement.get(int(row["requirement_id"])), None, None])
         _leasing_style_report_sheet(ws)
         # Commercial response columns are editable; source site/request details stay read-only by convention.
         response_start = 11 if is_project else 13
@@ -2667,13 +2852,20 @@ def leasing_offer_template_xlsx(outreach_id):
         ws.column_dimensions["A"].width = 16
         ws.column_dimensions["D"].width = 34
         ws.column_dimensions["E"].width = 34
-        ws.column_dimensions["R" if is_project else "T"].width = 34
+        ws.column_dimensions["S" if is_project else "U"].width = 34
+        ws.column_dimensions["R" if is_project else "T"].width = 20
         if requirements:
             last_row = len(requirements) + 1
             dv = DataValidation(type="list", formula1='"pending,can_provide,cannot_provide,needs_clarification"', allow_blank=True)
             status_col = "L" if is_project else "N"
             dv.add(f"{status_col}2:{status_col}{last_row}")
             ws.add_data_validation(dv)
+            clear_prices_validation = DataValidation(type="list", formula1='"NO,YES"', allow_blank=True)
+            clear_prices_validation.error = "Pilih NO atau YES. YES akan menghapus harga lama yang tidak diisi ulang pada baris tersebut."
+            clear_prices_validation.errorTitle = "Pilihan reset harga tidak valid"
+            clear_prices_validation.showErrorMessage = True
+            clear_prices_validation.add(f"R2:R{last_row}" if is_project else f"T2:T{last_row}")
+            ws.add_data_validation(clear_prices_validation)
             price_validation = DataValidation(type="decimal", operator="greaterThanOrEqual", formula1="0", allow_blank=True)
             price_validation.error = "Harga harus berupa angka nol atau lebih."
             price_validation.errorTitle = "Harga tidak valid"
@@ -2691,16 +2883,17 @@ def leasing_offer_template_xlsx(outreach_id):
         guide.append(["Customer", outreach["customer_name"]])
         guide.append(["Partner", outreach["partner_name"]])
         guide.append(["Outreach round", outreach["outreach_round"]])
-        guide.append(["How to use", "Edit only Feasibility Status and commercial response columns; keep Requirement ID and site detail unchanged. Leave sites without a new response blank. Import creates a new version and carries forward existing prices for unchanged sites. A status/note-only update with all price cells blank preserves prior prices; entering any price makes the row a full price revision (blank counterpart fields are cleared). Use cannot_provide to withdraw a quote."])
+        guide.append(["How to use", "Edit only Feasibility Status and commercial response columns; keep Requirement ID and site detail unchanged. Leave sites without a new response blank. Import creates a new version and carries forward unchanged sites. Blank price cells mean NO CHANGE to that price, so you can update one price without erasing other existing prices. Use Clear Existing Prices? = YES to clear the old prices for that site; any prices entered on that same row become the new complete price set. Choosing cannot_provide clears all previous prices automatically. Currency is prefilled from the active offer when available; do not change currency for only a partial price update. To change currency, choose YES and enter all prices that should remain."])
         guide.append(["Feasibility Status", "Use: pending, can_provide, cannot_provide, needs_clarification"])
-        guide.append(["Currency", "Use a three-letter currency code such as IDR, USD, or SGD when MRC/OTC is entered."])
+        guide.append(["Currency", "Use a three-letter currency code such as IDR, USD, or SGD when adding or changing a price. Existing offer currency is prefilled where available."])
+        guide.append(["Clear Existing Prices?", "Optional: NO/blank preserves prices in blank cells; YES clears prior prices on that site before applying any newly entered prices."])
         guide.column_dimensions["A"].width = 22
         guide.column_dimensions["B"].width = 105
         for cell in guide[1]:
             cell.font = Font(bold=True, color="FFFFFF")
             cell.fill = PatternFill("solid", fgColor="24345B")
         guide.freeze_panes = "A2"
-        guide.row_dimensions[6].height = 88
+        guide.row_dimensions[6].height = 108
         guide["B6"].alignment = Alignment(wrap_text=True, vertical="top")
         output = BytesIO(); wb.save(output); output.seek(0)
         return send_file(output, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", as_attachment=True,
@@ -2769,16 +2962,27 @@ def leasing_import_offer_xlsx(outreach_id):
                 row_issues.append(str(exc))
                 continue
             notes = str(cell(row, "notes") or "").strip() or None
-            # A template row has a system ID even when the partner did not respond.
-            # Ignore untouched rows instead of recording 100 empty/pending pseudo-responses.
+            raw_clear_prices = str(cell(row, "clear_existing_prices") or "").strip().lower()
+            yes_values = {"yes", "y", "true", "1", "clear"}
+            no_values = {"no", "n", "false", "0"}
+            if raw_clear_prices and raw_clear_prices not in yes_values | no_values:
+                row_issues.append(f"Baris {excel_row_no}: Clear Existing Prices? harus YES atau NO.")
+                continue
+            clear_existing_prices = raw_clear_prices in yes_values
+            # Blank price fields mean no change to those fields on an existing quote.
+            # An explicit YES is the only spreadsheet command that clears previous values.
             any_price = any(x is not None for x in (mrc, inet_mrc, metro_mrc, otc))
-            has_response_value = bool(raw_feasibility) or any_price or bool(notes)
+            has_response_value = bool(raw_feasibility) or any_price or bool(notes) or clear_existing_prices
             if not has_response_value:
                 continue
-            if raw_feasibility == "pending" and not any_price and not notes:
+            if raw_feasibility == "pending" and not any_price and not notes and not clear_existing_prices:
                 continue
-            if not raw_feasibility:
-                raw_feasibility = "can_provide" if any_price else "needs_clarification"
+            if not raw_feasibility and any_price:
+                raw_feasibility = "can_provide"
+            elif not raw_feasibility:
+                # Blank status on an existing line means no status change, not reset.
+                # The version merge preserves its prior status; new note-only rows become clarification.
+                raw_feasibility = None
             if raw_feasibility == "pending" and any_price:
                 row_issues.append(f"Baris {excel_row_no}: pilih can_provide sebelum memasukkan MRC/OTC.")
                 continue
@@ -2794,7 +2998,8 @@ def leasing_import_offer_xlsx(outreach_id):
                 currency = None
             parsed_lines.append({"requirement_id": req_id, "feasibility_status": raw_feasibility,
                                  "mrc_amount": mrc, "mrc_inet_dedicated_25_amount": inet_mrc,
-                                 "mrc_metro_25_amount": metro_mrc, "otc_amount": otc, "currency": currency, "notes": notes})
+                                 "mrc_metro_25_amount": metro_mrc, "otc_amount": otc, "currency": currency,
+                                 "notes": notes, "clear_existing_prices": clear_existing_prices})
         wb.close()
         if row_issues:
             return jsonify({"success": False, "message": "Template penawaran belum valid; data belum disimpan.", "issues": row_issues[:100]}), 400
