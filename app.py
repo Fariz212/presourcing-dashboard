@@ -2404,6 +2404,13 @@ def leasing_update_requirement(requirement_id):
         return jsonify({"success": False, "message": "Gagal memperbarui requirement."}), 400
 
 
+def _leasing_header_key(value):
+    """Normalize human-readable Excel headers for stable lookup."""
+    value = unicodedata.normalize("NFKD", str(value or "").replace("\ufeff", ""))
+    value = "".join(ch for ch in value if not unicodedata.combining(ch)).strip().lower()
+    return re.sub(r"[^a-z0-9]+", "_", value).strip("_")
+
+
 # Bulk requirement/site maintenance ------------------------------------------------
 LEASING_REGISTER_FIELDS = {
     "external_reference": "External Reference", "status": "Status", "resolution_note": "Resolution Note",
@@ -3615,12 +3622,6 @@ LEASING_IMPORT_ALIASES = {
     "existing_mrc_metro_25_amount": {"mrc existing metro e", "mrc existing metro-e", "existing mrc metro e", "existing mrc metro-e", "mrc metro e existing", "mrc metro existing"},
 }
 LEASING_IMPORT_SUPPORTED_HEADERS = set().union(*LEASING_IMPORT_ALIASES.values())
-
-
-def _leasing_header_key(value):
-    value = unicodedata.normalize("NFKD", str(value or "").replace("\ufeff", ""))
-    value = "".join(ch for ch in value if not unicodedata.combining(ch)).strip().lower()
-    return re.sub(r"[^a-z0-9]+", "_", value).strip("_")
 
 
 def _leasing_alias_key(alias):
