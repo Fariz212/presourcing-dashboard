@@ -1,5 +1,5 @@
 -- Leasing scale, general-service coverage, idempotent import, and query indexes.
--- Apply to leasing_db. This is additive and preserves existing offer/requirement records.
+-- Apply to database leasing_db; all objects are in schema leasing. This is additive and preserves existing offer/requirement records.
 BEGIN;
 
 ALTER TABLE leasing.requirements

@@ -1,5 +1,5 @@
 -- Leasing admin operations migration
--- Apply only to leasing_db after confirming the existing schema is present.
+-- Apply to database leasing_db, schema leasing, only after confirming the existing schema is present.
 -- Stores a minimal audit record when an admin permanently deletes a mistaken Work Item.
 
 BEGIN;

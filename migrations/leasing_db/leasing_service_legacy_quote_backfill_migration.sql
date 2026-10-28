@@ -1,6 +1,6 @@
 -- Idempotent compatibility backfill for historic site-level offers into the
 -- service-agnostic coverage model. Apply ONLY after leasing_scale_hardening_migration.sql
--- has been successfully applied to leasing_db.
+-- has been successfully applied to schema leasing in leasing_db.
 --
 -- This migration intentionally does not assign an unscoped OTC/MRC amount to multiple
 -- services. Ambiguous legacy quotes remain available in the legacy commercial table/report.
