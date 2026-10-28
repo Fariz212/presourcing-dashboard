@@ -36,84 +36,18 @@ _LOGIN_DUMMY_PASSWORD_HASH = generate_password_hash(secrets.token_urlsafe(32))
 # ============================================================================
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
-app.config["SESSION_COOKIE_HTTPONLY"] = True
-app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
-app.config["SESSION_COOKIE_SECURE"] = os.getenv("SESSION_COOKIE_SECURE", "true").strip().lower() in {"1", "true", "yes", "on"}
-app.config["PERMANENT_SESSION_LIFETIME"] = 60 * 60 * 8
+CORS(app)
+app.secret_key = "presourcing_secret_key_123"
 
-# Production secrets/credentials must be provided by the service environment, never source control.
-SECRET_KEY = os.getenv("FLASK_SECRET_KEY", "presourcing_secret_key_123").strip()
-DB_HOST = os.getenv("PRESOURCING_DB_HOST", "localhost").strip()
-DB_NAME = os.getenv("PRESOURCING_DB_NAME", "presourcing_db").strip()
-DB_USER = os.getenv("PRESOURCING_DB_USER", "presourcing_master").strip()
-DB_PASS = os.getenv("PRESOURCING_DB_PASSWORD", "R1L1DemDldxks@")
-if len(SECRET_KEY) < 16:
-    raise RuntimeError("FLASK_SECRET_KEY wajib disetel dari environment dan minimal 32 karakter.")
-if not DB_USER or not DB_PASS:
-    raise RuntimeError("PRESOURCING_DB_USER dan PRESOURCING_DB_PASSWORD wajib disetel dari environment.")
-app.secret_key = SECRET_KEY
+# Konfigurasi Koneksi PostgreSQL
+DB_HOST = "localhost"
+DB_NAME = "presourcing_db"
+DB_USER = "presourcing_master"  
+DB_PASS = "R1L1DemDldxks@"     
 
-# Same-origin deployment does not need open CORS. If a separate trusted UI origin is used,
-# list it explicitly in CORS_ORIGINS (comma-separated).
-_ALLOWED_CORS_ORIGINS = [x.strip() for x in os.getenv("CORS_ORIGINS", "").split(",") if x.strip()]
-if _ALLOWED_CORS_ORIGINS:
-    CORS(app, resources={r"/api/*": {"origins": _ALLOWED_CORS_ORIGINS}})
-
-
-def _normalized_origin(value):
-    """Return an HTTP(S) origin without path/query; reject opaque or malformed origins."""
-    try:
-        parsed = urlparse(str(value or ""))
-        if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:
-            return None
-        if parsed.username or parsed.password:
-            return None
-        return f"{parsed.scheme.lower()}://{parsed.netloc.lower()}"
-    except Exception:
-        return None
-
-
-@app.before_request
-def leasing_and_auth_csrf_origin_guard():
-    """Block cross-origin browser mutations on Leasing and account-security APIs.
-
-    Same-origin browser requests send Origin; Referer is a safe fallback for compatible
-    clients. Non-browser clients must deliberately supply a trusted Origin/Referer rather
-    than implicitly bypassing session-cookie CSRF checks.
-    """
-    guarded_paths = request.path.startswith("/api/leasing/") or request.path in {
-        "/api/login", "/api/register", "/api/change-password", "/api/logout"
-    }
-    if not guarded_paths or request.method.upper() in {"GET", "HEAD", "OPTIONS"}:
-        return None
-    expected_origins = {_normalized_origin(request.host_url)}
-    expected_origins.update(origin for origin in (_normalized_origin(x) for x in _ALLOWED_CORS_ORIGINS) if origin)
-    supplied = request.headers.get("Origin")
-    if not supplied:
-        supplied = request.headers.get("Referer")
-    request_origin = _normalized_origin(supplied)
-    if not request_origin or request_origin not in expected_origins:
-        return jsonify({"success": False, "code": "CSRF_ORIGIN_REJECTED",
-                        "message": "Permintaan perubahan ditolak karena origin tidak dikenal. Muat ulang aplikasi dan coba dari alamat resmi."}), 403
-    return None
-
-# Gunicorn creates one pool per worker. Keep per-process defaults conservative so a
-# 4-worker deployment does not silently allocate 80+ connections to the identity DB.
-def _leasing_pool_bounds(prefix, default_min=1, default_max=5):
-    try:
-        minimum = int(os.getenv(f"{prefix}_POOL_MIN", str(default_min)))
-        maximum = int(os.getenv(f"{prefix}_POOL_MAX", str(default_max)))
-    except ValueError as exc:
-        raise RuntimeError(f"{prefix}_POOL_MIN/MAX harus berupa bilangan bulat.") from exc
-    if minimum < 1 or maximum < minimum:
-        raise RuntimeError(f"Konfigurasi {prefix} pool tidak valid: pastikan 1 <= MIN <= MAX.")
-    return minimum, maximum
-
-PRESOURCING_POOL_MIN, PRESOURCING_POOL_MAX = _leasing_pool_bounds("PRESOURCING_DB")
-LEASING_POOL_MIN, LEASING_POOL_MAX = _leasing_pool_bounds("LEASING_DB")
-
+# Inisialisasi Connection Pool (Min 1, Max 20 koneksi secara bersamaan)
 db_pool = ThreadedConnectionPool(
-    PRESOURCING_POOL_MIN, PRESOURCING_POOL_MAX,
+    1, 20,
     host=DB_HOST,
     database=DB_NAME,
     user=DB_USER,
@@ -139,9 +73,9 @@ def get_db_connection():
             db_pool.putconn(conn)
 
 # Leasing uses its own PostgreSQL database; user identity remains in presourcing_db.public.users.
-LEASING_DB_NAME = os.getenv("LEASING_DB_NAME", "leasing_db").strip()
+LEASING_DB_NAME = os.getenv("LEASING_DB_NAME", "leasing_db")
 leasing_db_pool = ThreadedConnectionPool(
-    LEASING_POOL_MIN, LEASING_POOL_MAX,
+    1, 10,
     host=DB_HOST,
     database=LEASING_DB_NAME,
     user=DB_USER,
@@ -165,6 +99,7 @@ def get_leasing_db_connection():
             try: conn.rollback()
             except Exception: app.logger.exception("Leasing connection reset failed")
             leasing_db_pool.putconn(conn)
+
 
 # ============================================================================
 # EXCEL TEMPLATE CONFIGURATION (14 KOLOM RIGID)
