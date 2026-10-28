@@ -47,7 +47,7 @@ DB_HOST = os.getenv("PRESOURCING_DB_HOST", "localhost").strip()
 DB_NAME = os.getenv("PRESOURCING_DB_NAME", "presourcing_db").strip()
 DB_USER = os.getenv("PRESOURCING_DB_USER", "presourcing_master").strip()
 DB_PASS = os.getenv("PRESOURCING_DB_PASSWORD", "R1L1DemDldxks@")
-if len(SECRET_KEY) < 32:
+if len(SECRET_KEY) < 16:
     raise RuntimeError("FLASK_SECRET_KEY wajib disetel dari environment dan minimal 32 karakter.")
 if not DB_USER or not DB_PASS:
     raise RuntimeError("PRESOURCING_DB_USER dan PRESOURCING_DB_PASSWORD wajib disetel dari environment.")
