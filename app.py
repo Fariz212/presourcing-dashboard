@@ -5441,6 +5441,7 @@ LEASING_IMPORT_ALIASES = {
     "project_notes": {"keterangan", "site notes", "project notes", "catatan site"},
     "latitude": {"latitude", "lat", "lintang"},
     "longitude": {"longitude", "long", "lng", "bujur"},
+    "coordinates": {"coordinates", "coordinate", "coordinates latitude longitude", "coordinate latitude longitude", "latitude longitude", "lat long", "lat lng", "koordinat", "koordinat latitude longitude", "koordinat lat long"},
     "gedung_kawasan": {"gedung_kawasan", "gedung kawasan", "gedung/kawasan", "gedung", "kawasan", "building"},
     "a_end": {"a_end", "a end", "a-end", "aend"},
     "z_end": {"z_end", "z end", "z-end", "zend"},
@@ -5621,6 +5622,26 @@ def _leasing_normalize_service_names(value, fallback=None):
 
 
 def _leasing_validate_requirement_payload(payload, label="Requirement", work_type="non_project", require_project_services=True):
+    # Accept one buyer-friendly coordinate cell such as "-6.169524526528727, 106.80415736497478".
+    # Legacy workbooks with separate Latitude and Longitude columns remain supported.
+    payload = dict(payload or {})
+    combined_coordinates = _leasing_cell_value(payload.get("coordinates"))
+    if combined_coordinates is not None:
+        parts = [part.strip() for part in str(combined_coordinates).split(",")]
+        if len(parts) != 2 or not all(parts):
+            raise ValueError(f"{label}: Coordinates harus berformat Latitude, Longitude; contoh -6.1695245, 106.8041574.")
+        combined_latitude = _leasing_validate_coordinate(parts[0], "Latitude", label, -90, 90)
+        combined_longitude = _leasing_validate_coordinate(parts[1], "Longitude", label, -180, 180)
+        for key, combined_value, title, low, high in (
+            ("latitude", combined_latitude, "Latitude", -90, 90),
+            ("longitude", combined_longitude, "Longitude", -180, 180),
+        ):
+            existing_value = _leasing_cell_value(payload.get(key))
+            if existing_value not in (None, ""):
+                existing_number = _leasing_validate_coordinate(existing_value, title, label, low, high)
+                if not math.isclose(existing_number, combined_value, rel_tol=0.0, abs_tol=1e-9):
+                    raise ValueError(f"{label}: {title} berbeda antara kolom terpisah dan Coordinates. Isi salah satu format saja.")
+            payload[key] = combined_value
     data = {key: _leasing_cell_value(payload.get(key)) for key in (
         "order_type", "si", "area", "address", "gedung_kawasan", "latitude", "longitude", "a_end", "z_end",
         "bandwidth", "bandwidth_unit", "service_type", "special_features", "existing_mrc_amount", "existing_mrc_currency",
@@ -5669,8 +5690,23 @@ def _leasing_validate_requirement_payload(payload, label="Requirement", work_typ
             else: data[key] = None
         data["latitude"] = _leasing_validate_coordinate(data.get("latitude"), "Latitude", label, -90, 90)
         data["longitude"] = _leasing_validate_coordinate(data.get("longitude"), "Longitude", label, -180, 180)
-        data["bandwidth"] = None
-        data["bandwidth_unit"] = "Mbps"
+        # Project bandwidth is optional at intake, but when provided it must be a positive number.
+        raw_bandwidth = data.get("bandwidth")
+        if raw_bandwidth in (None, ""):
+            data["bandwidth"] = None
+        else:
+            try:
+                project_bandwidth = float(str(raw_bandwidth).strip().replace(",", "."))
+            except (TypeError, ValueError):
+                raise ValueError(f"{label}: Bandwidth Project harus berupa angka lebih besar dari nol jika diisi.")
+            if not math.isfinite(project_bandwidth) or project_bandwidth <= 0:
+                raise ValueError(f"{label}: Bandwidth Project harus berupa angka lebih besar dari nol jika diisi.")
+            data["bandwidth"] = project_bandwidth
+        unit_map = {"mbps": "Mbps", "gbps": "Gbps", "kbps": "Kbps", "other": "Other"}
+        raw_unit = str(data.get("bandwidth_unit") or "Mbps").strip().lower()
+        if raw_unit not in unit_map:
+            raise ValueError(f"{label}: Satuan bandwidth harus Mbps, Gbps, Kbps, atau Other.")
+        data["bandwidth_unit"] = unit_map[raw_unit]
         if any(data.get(k) not in (None, "") for k in (
             "existing_mrc_amount", "existing_mrc_inet_dedicated_25_amount", "existing_mrc_metro_25_amount"
         )):
@@ -6068,6 +6104,8 @@ def leasing_import():
                 return jsonify({"success": False, "message": "Buyer/PIC owner tidak valid. Pilih akun dengan role Buyer/Admin Leasing."}), 400
         else:
             default_owner = username if leasing_owner_is_valid(username) else None
+        if not default_owner:
+            return jsonify({"success": False, "message": "Buyer/PIC owner tidak dapat ditentukan. Pilih Buyer/PIC yang valid sebelum import agar Work Item tidak tersimpan tanpa owner dan hilang dari antrean buyer."}), 400
         created_ids = []
         with get_leasing_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -6089,7 +6127,7 @@ def leasing_import():
                         (request_id, customer["id"], requester_name, first.get("request_due_date"), default_owner,
                          first.get("notes"), username, group.get("work_type", "non_project"), group.get("project_name")))
                     work_id = cur.fetchone()["id"]
-                    created_ids.append({"id": work_id, "request_id": request_id, "requirement_count": len(group_rows)})
+                    created_ids.append({"id": work_id, "request_id": request_id, "requirement_count": len(group_rows), "buyer_owner_id": default_owner})
                     for idx, row in enumerate(group_rows, start=1):
                         fields = _leasing_validate_requirement_payload(row, f"Baris {row['_row_no']}", group.get("work_type", "non_project"))
                         cur.execute("""INSERT INTO leasing.requirements
