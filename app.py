@@ -42,11 +42,11 @@ app.config["SESSION_COOKIE_SECURE"] = os.getenv("SESSION_COOKIE_SECURE", "true")
 app.config["PERMANENT_SESSION_LIFETIME"] = 60 * 60 * 8
 
 # Production secrets/credentials must be provided by the service environment, never source control.
-SECRET_KEY = os.getenv("FLASK_SECRET_KEY", "").strip()
+SECRET_KEY = os.getenv("FLASK_SECRET_KEY", "presourcing_secret_key_123").strip()
 DB_HOST = os.getenv("PRESOURCING_DB_HOST", "localhost").strip()
 DB_NAME = os.getenv("PRESOURCING_DB_NAME", "presourcing_db").strip()
-DB_USER = os.getenv("PRESOURCING_DB_USER", "").strip()
-DB_PASS = os.getenv("PRESOURCING_DB_PASSWORD", "")
+DB_USER = os.getenv("PRESOURCING_DB_USER", "presourcing_master").strip()
+DB_PASS = os.getenv("PRESOURCING_DB_PASSWORD", "R1L1DemDldxks@")
 if len(SECRET_KEY) < 32:
     raise RuntimeError("FLASK_SECRET_KEY wajib disetel dari environment dan minimal 32 karakter.")
 if not DB_USER or not DB_PASS:
