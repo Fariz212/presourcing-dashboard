@@ -1779,20 +1779,40 @@ def leasing_dashboard():
                     COUNT(*) FILTER (WHERE w.case_status='cancelled') AS cancelled_cases
                     FROM leasing.work_items w WHERE {scope_sql}""", tuple(scope_params))
                 summary = dict(cur.fetchone() or {})
-                cur.execute(f"""SELECT w.id, w.request_id, w.work_type, w.project_name, c.customer_name,
+                # Select the 20 dashboard candidates before aggregating child tables. The previous
+                # multi-join multiplied requirements x outreaches for each Work Item, then DISTINCT
+                # had to repair the counts. LATERAL aggregates avoid that fan-out and limit work early.
+                cur.execute(f"""WITH recent_page AS (
+                    SELECT w.id
+                    FROM leasing.work_items w
+                    WHERE {scope_sql}
+                    ORDER BY CASE WHEN w.case_status='open' AND w.request_due_date < CURRENT_DATE THEN 0 ELSE 1 END,
+                        w.request_due_date NULLS LAST,w.updated_at DESC,w.id DESC
+                    LIMIT 20
+                )
+                SELECT w.id, w.request_id, w.work_type, w.project_name, c.customer_name,
                     w.requester_name, w.requester_division, w.request_due_date, w.current_stage, w.case_status,
                     w.buyer_owner_id, w.created_at, w.updated_at,
-                    COUNT(DISTINCT r.id) AS requirement_count,
-                    COUNT(DISTINCT r.id) FILTER (WHERE r.status IN ('resolved','stopped')) AS resolved_count,
-                    COUNT(DISTINCT o.id) FILTER (WHERE o.response_status IN ('sent','awaiting_response','partial_response')) AS pending_partner_responses,
-                    MIN(o.next_follow_up_at) FILTER (WHERE o.next_follow_up_at IS NOT NULL AND o.response_status IN ('sent','awaiting_response','partial_response')) AS next_follow_up_at
-                    FROM leasing.work_items w LEFT JOIN leasing.customers c ON c.id=w.customer_id
-                    LEFT JOIN leasing.requirements r ON r.work_item_id=w.id
-                    LEFT JOIN leasing.partner_outreaches o ON o.work_item_id=w.id
-                    WHERE {scope_sql}
-                    GROUP BY w.id,c.customer_name
-                    ORDER BY CASE WHEN w.case_status='open' AND w.request_due_date < CURRENT_DATE THEN 0 ELSE 1 END,
-                    w.request_due_date NULLS LAST,w.updated_at DESC LIMIT 20""", tuple(scope_params))
+                    COALESCE(req.requirement_count, 0) AS requirement_count,
+                    COALESCE(req.resolved_count, 0) AS resolved_count,
+                    COALESCE(outreach.pending_partner_responses, 0) AS pending_partner_responses,
+                    outreach.next_follow_up_at
+                FROM recent_page rp
+                JOIN leasing.work_items w ON w.id=rp.id
+                LEFT JOIN leasing.customers c ON c.id=w.customer_id
+                LEFT JOIN LATERAL (
+                    SELECT COUNT(*) AS requirement_count,
+                        COUNT(*) FILTER (WHERE r.status IN ('resolved','stopped')) AS resolved_count
+                    FROM leasing.requirements r WHERE r.work_item_id=w.id
+                ) req ON TRUE
+                LEFT JOIN LATERAL (
+                    SELECT COUNT(*) FILTER (WHERE o.response_status IN ('sent','awaiting_response','partial_response')) AS pending_partner_responses,
+                        MIN(o.next_follow_up_at) FILTER (WHERE o.next_follow_up_at IS NOT NULL
+                            AND o.response_status IN ('sent','awaiting_response','partial_response')) AS next_follow_up_at
+                    FROM leasing.partner_outreaches o WHERE o.work_item_id=w.id
+                ) outreach ON TRUE
+                ORDER BY CASE WHEN w.case_status='open' AND w.request_due_date < CURRENT_DATE THEN 0 ELSE 1 END,
+                    w.request_due_date NULLS LAST,w.updated_at DESC,w.id DESC""", tuple(scope_params))
                 recent_items = [dict(row) for row in cur.fetchall()]
                 # Workload across all buyers is admin-only. A buyer must not infer another buyer's portfolio.
                 if _is_leasing_admin():
@@ -2018,19 +2038,40 @@ def leasing_work_items():
                     total = int(cur.fetchone()["total"] or 0)
                     pages = max(1, math.ceil(total / page_size))
                     page = min(page, pages)
-                    cur.execute(f"""SELECT w.*, c.customer_name,
-                        COUNT(DISTINCT r.id) AS requirement_count,
-                        COUNT(DISTINCT r.id) FILTER (WHERE r.status IN ('resolved','stopped')) AS resolved_count,
-                        COUNT(DISTINCT o.id) FILTER (WHERE o.response_status IN ('sent','awaiting_response','partial_response')) AS pending_partner_responses,
-                        MIN(o.next_follow_up_at) FILTER (WHERE o.next_follow_up_at IS NOT NULL AND o.response_status IN ('sent','awaiting_response','partial_response')) AS next_follow_up_at
-                        FROM leasing.work_items w LEFT JOIN leasing.customers c ON c.id=w.customer_id
-                        LEFT JOIN leasing.requirements r ON r.work_item_id=w.id
-                        LEFT JOIN leasing.partner_outreaches o ON o.work_item_id=w.id
+                    # Paginate base Work Items first; aggregate requirements and outreaches only for
+                    # the requested page. This avoids a potentially large requirements x outreaches
+                    # join for every matching Work Item before LIMIT is applied.
+                    cur.execute(f"""WITH page_items AS (
+                        SELECT w.id,
+                            CASE WHEN w.case_status='open' AND w.request_due_date<CURRENT_DATE THEN 0 ELSE 1 END AS sort_bucket,
+                            w.request_due_date, w.updated_at
+                        FROM leasing.work_items w
+                        LEFT JOIN leasing.customers c ON c.id=w.customer_id
                         WHERE {where_sql}
-                        GROUP BY w.id,c.customer_name
-                        ORDER BY CASE WHEN w.case_status='open' AND w.request_due_date<CURRENT_DATE THEN 0 ELSE 1 END,
-                            w.request_due_date NULLS LAST,w.updated_at DESC,w.id DESC
-                        LIMIT %s OFFSET %s""", tuple(params + [page_size, (page - 1) * page_size]))
+                        ORDER BY sort_bucket, w.request_due_date NULLS LAST,w.updated_at DESC,w.id DESC
+                        LIMIT %s OFFSET %s
+                    )
+                    SELECT w.*, c.customer_name,
+                        COALESCE(req.requirement_count, 0) AS requirement_count,
+                        COALESCE(req.resolved_count, 0) AS resolved_count,
+                        COALESCE(outreach.pending_partner_responses, 0) AS pending_partner_responses,
+                        outreach.next_follow_up_at
+                    FROM page_items pg
+                    JOIN leasing.work_items w ON w.id=pg.id
+                    LEFT JOIN leasing.customers c ON c.id=w.customer_id
+                    LEFT JOIN LATERAL (
+                        SELECT COUNT(*) AS requirement_count,
+                            COUNT(*) FILTER (WHERE r.status IN ('resolved','stopped')) AS resolved_count
+                        FROM leasing.requirements r WHERE r.work_item_id=w.id
+                    ) req ON TRUE
+                    LEFT JOIN LATERAL (
+                        SELECT COUNT(*) FILTER (WHERE o.response_status IN ('sent','awaiting_response','partial_response')) AS pending_partner_responses,
+                            MIN(o.next_follow_up_at) FILTER (WHERE o.next_follow_up_at IS NOT NULL
+                                AND o.response_status IN ('sent','awaiting_response','partial_response')) AS next_follow_up_at
+                        FROM leasing.partner_outreaches o WHERE o.work_item_id=w.id
+                    ) outreach ON TRUE
+                    ORDER BY pg.sort_bucket, pg.request_due_date NULLS LAST, pg.updated_at DESC, w.id DESC""",
+                        tuple(params + [page_size, (page - 1) * page_size]))
                     items = [dict(x) for x in cur.fetchall()]
                     return jsonify({"success": True,"work_items": items,"pagination": {"page": page,"page_size": page_size,
                         "total": total,"total_pages": pages,"has_previous": page > 1,"has_next": page < pages},
