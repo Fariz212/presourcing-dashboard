@@ -18,6 +18,8 @@ let confirmedProjectDeletions = new Set();
 let knownServerProjectIds = new Set();
 let inFlightProjectIds = new Set();
 let selectedTeamMember = null;
+let teamSearchQuery = '';
+let teamMemberFilter = 'all';
 let saveInFlight = null;
 let saveRequested = false;
 let queuedAllowEmptyProjects = false;
@@ -702,6 +704,9 @@ function renderOverview() {
       .exec-panel.rfs { grid-area: rfs; height: 215px; }
       .exec-panel.top5 { grid-area: top5; height: 230px; }
       .exec-panel.warning { grid-area: warning; height: 230px; }
+      .exec-panel.teamload { grid-area: teamload; min-height: 258px; }
+      .exec-panel.teamload .exec-chart { height: 190px; }
+      .exec-teamload-note { margin: 0 4px 2px; color: #8A98A8; font-size: 9px; line-height: 1.4; }
 
       /* =====================================================
          TABEL MENGISI SISA RUANG & BISA DI-SCROLL
@@ -756,16 +761,16 @@ function renderOverview() {
         .page-shell { padding-top: 16px; }
         .page-hero-side { display: none; }
         .exec-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-        .exec-grid { grid-template-columns: 1fr 1fr; grid-template-areas: "overview overview" "status pic" "pipeline pipeline" "rfs rfs" "top5 warning"; }
+        .exec-grid { grid-template-columns: 1fr 1fr; grid-template-areas: "overview overview" "status pic" "pipeline pipeline" "rfs rfs" "top5 warning" "teamload teamload"; }
       }
       @media(max-width:700px) {
         .page-hero { min-height: auto; }
         .page-hero-title { font-size: 18px; }
         .exec-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .pipeline-flow { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-        .exec-grid { grid-template-columns: 1fr 1fr; grid-template-areas: "overview overview" "status pic" "pipeline pipeline" "rfs rfs" "top5 warning"; }
+        .exec-grid { grid-template-columns: 1fr 1fr; grid-template-areas: "overview overview" "status pic" "pipeline pipeline" "rfs rfs" "top5 warning" "teamload teamload"; }
       }
-      .exec-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); grid-template-areas: "overview overview overview overview overview overview status status status pic pic pic" "pipeline pipeline pipeline pipeline pipeline pipeline rfs rfs rfs rfs rfs rfs" "top5 top5 top5 top5 top5 top5 top5 top5 top5 warning warning warning"; gap: 12px; align-items: start; }
+      .exec-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); grid-template-areas: "overview overview overview overview overview overview status status status pic pic pic" "pipeline pipeline pipeline pipeline pipeline pipeline rfs rfs rfs rfs rfs rfs" "top5 top5 top5 top5 top5 top5 top5 top5 top5 warning warning warning" "teamload teamload teamload teamload teamload teamload teamload teamload teamload teamload teamload teamload"; gap: 12px; align-items: start; }
     </style>
   `;
 
@@ -821,6 +826,7 @@ function renderOverview() {
       <div class="exec-panel rfs"><div class="exec-panel-head">▥<span>Target RFS by Month</span></div><div class="exec-panel-body"><div class="exec-chart"><canvas id="chartRfsMonth"></canvas></div></div></div>
       <div class="exec-panel top5"><div class="exec-panel-head">≡<span>Top 5 Project Value</span></div><div class="exec-panel-body"><div class="exec-chart"><canvas id="chartTop5"></canvas></div></div></div>
       <div class="exec-panel warning"><div class="exec-panel-head"><span>!</span><span>Early Warning</span><span class="exec-panel-sub">Need Attention</span></div><div class="warning-summary"><div class="warning-box"><div class="warning-label">Overdue</div><div class="warning-value">${overdue}</div></div><div class="warning-box"><div class="warning-label">At Risk</div><div class="warning-value">${atRisk}</div></div></div><div class="exec-table-wrap"><table class="exec-table"><thead><tr><th>Project</th><th>RFS</th><th>Progress</th><th>Status</th></tr></thead><tbody>${warningRows}</tbody></table></div></div>
+      <div class="exec-panel teamload"><div class="exec-panel-head">◫<span>Team Workload by Responsibility</span><span class="exec-panel-sub">Active projects · Lead vs Item PIC</span></div><div class="exec-panel-body"><div class="exec-chart"><canvas id="chartTeamLoad"></canvas></div><div class="exec-teamload-note">Lead dan PIC ditampilkan terpisah. Satu anggota dapat memiliki kedua peran pada project yang sama; lihat Active Total unik di menu Team.</div></div></div>
     </div>
   `;
 }
@@ -992,8 +998,38 @@ function renderDashboardCharts() {
             }
         });
     }
-}
 
+    const teamLoadRows = computeTeamWorkload().members
+        .filter(row => row.leadActive > 0 || row.involvedActive > 0)
+        .sort((a, b) => b.uniqueActive - a.uniqueActive || a.name.localeCompare(b.name))
+        .slice(0, 10);
+    const ctxTeamLoad = document.getElementById('chartTeamLoad');
+    if (ctxTeamLoad) {
+        destroyChart('teamLoad');
+        dCharts.teamLoad = new Chart(ctxTeamLoad, {
+            type: 'bar',
+            data: {
+                labels: teamLoadRows.map(row => row.name),
+                datasets: [
+                    { label: 'Project Lead', data: teamLoadRows.map(row => row.leadActive), backgroundColor: '#397FB7', borderRadius: 4, borderWidth: 0, barPercentage: 0.62, categoryPercentage: 0.72 },
+                    { label: 'Project Involvement', data: teamLoadRows.map(row => row.involvedActive), backgroundColor: '#1A978A', borderRadius: 4, borderWidth: 0, barPercentage: 0.62, categoryPercentage: 0.72 }
+                ]
+            },
+            options: {
+                indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                scales: {
+                    x: { beginAtZero: true, ticks: { color: axisColor, font: chartFont, precision: 0, stepSize: 1 }, grid: { color: gridColor }, border: { display: false } },
+                    y: { grid: { display: false }, border: { display: false }, ticks: { color: '#334155', font: { ...chartFont, weight: '500' } } }
+                },
+                plugins: {
+                    legend: { position: 'bottom', labels: { usePointStyle: true, pointStyle: 'circle', boxWidth: 7, boxHeight: 7, padding: 13, color: axisColor, font: chartFont } },
+                    tooltip: { padding: 10, callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.raw} project` } }
+                }
+            }
+        });
+    }
+}
 function renderTeam() {
   const workload = computeTeamWorkload();
   const rows = workload.members;
@@ -1002,95 +1038,227 @@ function renderTeam() {
   }
   const selected = rows.find(row => row.key === selectedTeamMember) || null;
   const maxLoad = Math.max(1, ...rows.map(row => row.uniqueActive));
+  const maxLead = Math.max(1, ...rows.map(row => row.leadActive));
+  const maxInvolved = Math.max(1, ...rows.map(row => row.involvedActive));
 
-  const portfolioProjectRow = (project, role, itemLines = []) => {
+  const initials = (name) => String(name || '?').trim().split(/\s+/).slice(0, 2).map(part => part.charAt(0)).join('').toUpperCase();
+  const shortDate = (value) => {
+    if (!value) return 'RFS belum ditentukan';
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? `RFS: ${String(value)}` : `RFS ${date.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}`;
+  };
+  const roleBarList = (key, max, accent, emptyText) => {
+    const ranked = [...rows].filter(row => row[key] > 0).sort((a, b) => b[key] - a[key] || a.name.localeCompare(b.name)).slice(0, 7);
+    if (!ranked.length) return `<div class="tm-empty-inline">${emptyText}</div>`;
+    return ranked.map(row => `
+      <button type="button" class="tm-rank-row" data-team-member="${escAttr(row.key)}" aria-label="Lihat portofolio ${escAttr(row.name)}">
+        <span class="tm-rank-avatar">${escAttr(initials(row.name))}</span>
+        <span class="tm-rank-main"><span class="tm-rank-name">${escAttr(row.name)}</span><span class="tm-rank-track"><i style="width:${Math.max(4, (row[key] / max) * 100)}%;background:${accent};"></i></span></span>
+        <strong class="tm-rank-value">${row[key]}</strong>
+      </button>`).join('');
+  };
+
+  const projectCard = (project, role, roleClass, itemLines = []) => {
+    const progress = Math.max(0, Math.min(100, Number(project.progressPct) || 0));
     const status = badgeStatus(getDynamicStatus(project));
-    const items = itemLines.length
-      ? `<div style="margin-top:5px;color:#64748B;font-size:11px;">${itemLines.map(item => `<div>• ${escAttr(item.itemNo ? `${item.itemNo} — ` : '')}${escAttr(item.product)}${item.qty != null ? ` (${escAttr(item.qty)} ${escAttr(item.uom)})` : ''}</div>`).join('')}</div>`
-      : '';
-    return `<tr><td><button class="mini-btn" data-team-open-project="${escAttr(project.id)}" type="button" style="text-align:left;white-space:normal;">${escAttr(project.name || 'Unnamed Project')}</button>${items}</td><td>${role}</td><td>${escAttr(project.pipelineStage || '—')}</td><td>${Number(project.progressPct || 0)}%</td><td>${status}</td></tr>`;
+    const items = itemLines.length ? `
+      <div class="tm-assigned-items">
+        <div class="tm-assigned-title">Assigned BoQ items <span>${itemLines.length}</span></div>
+        ${itemLines.slice(0, 5).map(item => `<div class="tm-assigned-item"><span>${escAttr(item.itemNo ? `${item.itemNo} — ` : '')}${escAttr(item.product || 'Item tanpa deskripsi')}</span><small>${item.qty != null ? `${escAttr(item.qty)} ${escAttr(item.uom || '')}` : ''}</small></div>`).join('')}
+        ${itemLines.length > 5 ? `<div class="tm-more-items">+${itemLines.length - 5} item lainnya</div>` : ''}
+      </div>` : '';
+    return `
+      <article class="tm-project-card">
+        <div class="tm-project-card-top"><span class="tm-role-tag ${roleClass}">${role}</span>${status}</div>
+        <button type="button" class="tm-project-link" data-team-open-project="${escAttr(project.id)}">${escAttr(project.name || 'Unnamed Project')}</button>
+        <div class="tm-project-meta"><span>${escAttr(project.pipelineStage || 'Pipeline belum ditentukan')}</span><span>${escAttr(shortDate(project.targetRfs))}</span></div>
+        <div class="tm-progress-line"><div class="tm-progress-track"><i style="width:${progress}%;"></i></div><strong>${progress}%</strong></div>
+        ${items}
+      </article>`;
   };
 
   const memberRows = rows.length ? rows.map(row => {
     const leadWidth = (row.leadOnlyActive / maxLoad) * 100;
     const bothWidth = (row.bothActive / maxLoad) * 100;
     const involvedWidth = (row.involvedOnlyActive / maxLoad) * 100;
-    const activeBar = `<div title="Lead only: ${row.leadOnlyActive}; Lead & PIC: ${row.bothActive}; PIC only: ${row.involvedOnlyActive}" style="display:flex;height:9px;min-width:80px;background:#E2E8F0;border-radius:6px;overflow:hidden;"><span style="width:${leadWidth}%;background:#2563EB;"></span><span style="width:${bothWidth}%;background:#7C3AED;"></span><span style="width:${involvedWidth}%;background:#0D9488;"></span></div>`;
-    return `<tr data-team-member="${escAttr(row.key)}" tabindex="0" style="cursor:pointer;${selected && selected.key === row.key ? 'background:#EFF6FF;' : ''}">
-      <td><strong>${escAttr(row.name)}</strong>${row.inTeam ? '' : '<div style="font-size:10px;color:#B45309;">Assignment not in Team list</div>'}</td>
-      <td class="num mono">${row.leadActive}</td>
-      <td class="num mono">${row.involvedActive}</td>
-      <td class="num mono"><strong>${row.uniqueActive}</strong></td>
-      <td class="num mono">${row.itemAssignments}</td>
-      <td class="num mono">${fmtPct(row.winRate)}</td>
-      <td style="min-width:110px;">${activeBar}</td>
-    </tr>`;
-  }).join('') : '<tr><td colspan="7"><div class="empty">Belum ada anggota atau assignment tim.</div></td></tr>';
+    const hasLoad = row.uniqueActive > 0;
+    const workloadBar = hasLoad ? `
+      <div class="tm-stack-track" title="Lead saja: ${row.leadOnlyActive}; Lead dan PIC: ${row.bothActive}; PIC saja: ${row.involvedOnlyActive}">
+        <i class="tm-stack-lead" style="width:${leadWidth}%;"></i><i class="tm-stack-both" style="width:${bothWidth}%;"></i><i class="tm-stack-pic" style="width:${involvedWidth}%;"></i>
+      </div>` : '<span class="tm-no-load">No active assignment</span>';
+    return `
+      <tr class="tm-member-row ${selected && selected.key === row.key ? 'is-selected' : ''}" data-team-member="${escAttr(row.key)}" data-team-name="${escAttr(row.name.toLowerCase())}" data-team-load="${hasLoad ? 'active' : 'none'}" tabindex="0" aria-label="Buka portofolio ${escAttr(row.name)}">
+        <td><div class="tm-member-cell"><span class="tm-member-avatar">${escAttr(initials(row.name))}</span><span class="tm-member-ident"><strong>${escAttr(row.name)}</strong><small>${row.inTeam ? 'Team member' : 'Assignment belum terdaftar'}</small></span></div></td>
+        <td class="tm-number tm-lead-number">${row.leadActive}</td>
+        <td class="tm-number tm-pic-number">${row.involvedActive}</td>
+        <td><span class="tm-total-pill">${row.uniqueActive}</span></td>
+        <td class="tm-number">${row.itemAssignments}</td>
+        <td class="tm-number">${fmtPct(row.winRate)}</td>
+        <td class="tm-load-cell">${workloadBar}</td>
+      </tr>`;
+  }).join('') : '<tr><td colspan="7"><div class="tm-empty-state">Belum ada anggota atau assignment tim.</div></td></tr>';
 
-  let portfolioHtml = '<div class="empty">Pilih anggota tim untuk melihat portofolionya.</div>';
+  let portfolioHtml = '<div class="tm-no-selection"><div class="tm-no-selection-icon">↗</div><strong>Belum ada anggota untuk ditampilkan</strong><span>Tambahkan anggota tim atau lengkapi assignment Lead dan PIC pada project.</span></div>';
   if (selected) {
-    const leadRows = selected.leadProjectList.length
-      ? selected.leadProjectList.map(project => portfolioProjectRow(project, '<span style="color:#1D4ED8;font-weight:700;">Project Lead</span>')).join('')
-      : '<tr><td colspan="5" class="empty">Belum memimpin project.</td></tr>';
-    const involvedRows = selected.involvedProjectList.length
-      ? selected.involvedProjectList.map(entry => portfolioProjectRow(entry.project, '<span style="color:#0F766E;font-weight:700;">Project Involvement</span>', entry.items)).join('')
-      : '<tr><td colspan="5" class="empty">Belum terlibat sebagai PIC item.</td></tr>';
+    const leadCards = selected.leadProjectList.length
+      ? selected.leadProjectList.map(project => projectCard(project, 'PROJECT LEAD', 'tm-role-lead')).join('')
+      : '<div class="tm-empty-state">Belum memimpin project.</div>';
+    const involvedCards = selected.involvedProjectList.length
+      ? selected.involvedProjectList.map(entry => projectCard(entry.project, 'ITEM PIC', 'tm-role-pic', entry.items)).join('')
+      : '<div class="tm-empty-state">Belum memiliki assignment PIC pada item BoQ.</div>';
     portfolioHtml = `
-      <div class="team-portfolio-kpis">
-        <div><span>Project dipimpin</span><strong>${selected.leadCount}</strong><small>${selected.leadActive} aktif</small></div>
-        <div><span>Project involvement</span><strong>${selected.involvedCount}</strong><small>${selected.involvedActive} aktif</small></div>
-        <div><span>Active workload unik</span><strong>${selected.uniqueActive}</strong><small>${selected.bothActive} project dengan dua peran</small></div>
-        <div><span>Item assignment</span><strong>${selected.itemAssignments}</strong><small>${selected.completedCount} project selesai diikuti</small></div>
+      <div class="tm-profile-head">
+        <div class="tm-profile-avatar">${escAttr(initials(selected.name))}</div>
+        <div class="tm-profile-copy"><span class="tm-eyebrow">MEMBER PORTFOLIO</span><h3>${escAttr(selected.name)}</h3><p>${selected.inTeam ? 'Registered team member' : 'Assignment ditemukan di project, tetapi nama belum terdaftar dalam Team'}</p></div>
+        <span class="tm-profile-status ${selected.inTeam ? 'is-registered' : 'is-unregistered'}">${selected.inTeam ? 'Team member' : 'Unregistered assignment'}</span>
       </div>
-      <div class="team-portfolio-section"><h3>Project yang dipimpin (${selected.leadProjectList.length})</h3><div class="team-table-scroll"><table><thead><tr><th>Project</th><th>Peran</th><th>Pipeline</th><th>Progress</th><th>Status</th></tr></thead><tbody>${leadRows}</tbody></table></div></div>
-      <div class="team-portfolio-section"><h3>Project yang melibatkan anggota ini (${selected.involvedProjectList.length})</h3><div class="team-table-scroll"><table><thead><tr><th>Project &amp; Item PIC</th><th>Peran</th><th>Pipeline</th><th>Progress</th><th>Status</th></tr></thead><tbody>${involvedRows}</tbody></table></div></div>
-    `;
+      <div class="tm-profile-metrics">
+        <div><span>Projects led</span><strong>${selected.leadCount}</strong><small>${selected.leadActive} active</small></div>
+        <div><span>Projects involved</span><strong>${selected.involvedCount}</strong><small>${selected.involvedActive} active</small></div>
+        <div><span>Unique active workload</span><strong>${selected.uniqueActive}</strong><small>${selected.bothActive} shared-role project${selected.bothActive === 1 ? '' : 's'}</small></div>
+        <div><span>Item PIC assignments</span><strong>${selected.itemAssignments}</strong><small>${selected.completedCount} completed project${selected.completedCount === 1 ? '' : 's'} involved</small></div>
+      </div>
+      <div class="tm-portfolio-grid">
+        <section class="tm-portfolio-section"><div class="tm-section-heading"><div><span class="tm-eyebrow">LEADERSHIP</span><h4>Projects led</h4></div><span class="tm-section-count">${selected.leadProjectList.length}</span></div><div class="tm-project-list">${leadCards}</div></section>
+        <section class="tm-portfolio-section"><div class="tm-section-heading"><div><span class="tm-eyebrow">CONTRIBUTION</span><h4>Projects involved</h4></div><span class="tm-section-count">${selected.involvedProjectList.length}</span></div><div class="tm-project-list">${involvedCards}</div></section>
+      </div>`;
   }
 
   return `
     <style>
-      .team-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:12px}
-      .team-kpi{background:#fff;border:1px solid #DCE4EE;border-radius:8px;padding:13px 15px;min-width:0}
-      .team-kpi span{display:block;color:#64748B;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.03em}
-      .team-kpi strong{display:block;margin-top:5px;font-size:24px;color:#0F172A;line-height:1.1}
-      .team-kpi small{display:block;margin-top:4px;color:#94A3B8;font-size:10px}
-      .team-legend{display:flex;gap:14px;flex-wrap:wrap;padding:10px 14px;color:#64748B;font-size:11px}
-      .team-legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px}
-      .team-portfolio{margin-top:12px;border:1px solid #DCE4EE;border-radius:8px;background:#fff;overflow:hidden}
-      .team-portfolio-head{padding:13px 16px;background:#F8FAFC;border-bottom:1px solid #E2E8F0;display:flex;justify-content:space-between;align-items:center;gap:10px}
-      .team-portfolio-head h2{font-size:14px;margin:0;color:#0F172A}
-      .team-portfolio-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;padding:12px 14px}
-      .team-portfolio-kpis>div{background:#F8FAFC;border:1px solid #E2E8F0;border-radius:6px;padding:10px}
-      .team-portfolio-kpis span,.team-portfolio-kpis small{display:block;font-size:10px;color:#64748B}
-      .team-portfolio-kpis strong{display:block;font-size:20px;color:#0F172A;margin:4px 0}
-      .team-portfolio-section{padding:5px 14px 14px}
-      .team-portfolio-section h3{font-size:12px;color:#334155;margin:9px 0}
-      .team-table-scroll{overflow-x:auto}
-      .team-table-scroll table{width:100%;border-collapse:collapse}
-      .team-table-scroll th,.team-table-scroll td{padding:9px 10px;border-bottom:1px solid #EEF2F6;text-align:left;font-size:11px;vertical-align:top}
-      .team-table-scroll th{background:#F8FAFC;color:#64748B;font-size:10px;text-transform:uppercase}
-      @media(max-width:850px){.team-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.team-portfolio-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
-      @media(max-width:560px){.team-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.team-portfolio-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+      .tm-page{display:flex;flex-direction:column;gap:16px;color:#172B4D}
+      .tm-page *{box-sizing:border-box}
+      .tm-intro{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;padding:2px 1px 0}
+      .tm-eyebrow{display:block;color:#73839A;font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}
+      .tm-intro h2{font-size:21px;line-height:1.2;margin:5px 0 4px;color:#142B4A;font-weight:750;letter-spacing:-.02em}
+      .tm-intro p{margin:0;color:#718198;font-size:12px;line-height:1.5;max-width:650px}
+      .tm-manage-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap;border:1px solid #C9D8E8;background:#fff;color:#205B91;padding:10px 14px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 1px 2px rgba(15,35,60,.04)}
+      .tm-manage-btn:hover{background:#F3F8FD;border-color:#A8C4DF}
+      .tm-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+      .tm-summary-card{position:relative;overflow:hidden;background:#fff;border:1px solid #E0E8F0;border-radius:11px;padding:15px 16px;min-height:112px;box-shadow:0 2px 8px rgba(27,54,83,.035)}
+      .tm-summary-card:before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--tm-accent,#2D75B7)}
+      .tm-summary-top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+      .tm-summary-label{font-size:10px;color:#75859A;font-weight:800;text-transform:uppercase;letter-spacing:.055em}
+      .tm-summary-icon{display:flex;align-items:center;justify-content:center;width:27px;height:27px;border-radius:8px;background:var(--tm-soft,#EFF6FC);color:var(--tm-accent,#2D75B7);font-size:13px;font-weight:800}
+      .tm-summary-value{font-size:27px;line-height:1.1;margin-top:9px;font-weight:750;color:#173451;letter-spacing:-.035em}
+      .tm-summary-note{font-size:10px;color:#93A0B1;margin-top:4px}
+      .tm-distribution{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+      .tm-card{background:#fff;border:1px solid #E0E8F0;border-radius:11px;overflow:hidden;box-shadow:0 2px 8px rgba(27,54,83,.035);min-width:0}
+      .tm-card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:15px 17px 12px;border-bottom:1px solid #EDF1F5}
+      .tm-card-head h3{margin:4px 0 0;font-size:14px;color:#183653;font-weight:750;letter-spacing:-.01em}
+      .tm-card-head p{margin:4px 0 0;color:#8592A3;font-size:10.5px;line-height:1.45}
+      .tm-head-total{flex:0 0 auto;min-width:46px;text-align:right;color:#193B5A;font-size:22px;line-height:1;font-weight:750}
+      .tm-head-total small{display:block;margin-top:5px;color:#91A0B1;font-size:9px;font-weight:600}
+      .tm-rank-list{padding:8px 16px 12px}
+      .tm-rank-row{width:100%;display:flex;align-items:center;gap:10px;padding:8px 1px;background:transparent;border:0;text-align:left;cursor:pointer;border-radius:7px}
+      .tm-rank-row:hover{background:#F7FAFD}
+      .tm-rank-avatar{flex:0 0 29px;width:29px;height:29px;display:flex;align-items:center;justify-content:center;border-radius:9px;background:#EDF4FB;color:#326A9D;font-size:9px;font-weight:800}
+      .tm-rank-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+      .tm-rank-name{color:#43566F;font-size:11px;font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .tm-rank-track{display:block;width:100%;height:5px;background:#EDF1F5;border-radius:9px;overflow:hidden}
+      .tm-rank-track i{display:block;height:100%;border-radius:9px}
+      .tm-rank-value{min-width:22px;text-align:right;color:#284766;font-size:12px;font-weight:750}
+      .tm-empty-inline{padding:22px 8px;color:#9AA7B6;font-size:11px;text-align:center}
+      .tm-table-card{padding-bottom:2px}
+      .tm-toolbar{display:flex;align-items:center;gap:9px;padding:12px 16px;border-bottom:1px solid #EDF1F5;flex-wrap:wrap}
+      .tm-search-wrap{position:relative;flex:1;min-width:190px;max-width:340px}
+      .tm-search-wrap:before{content:'⌕';position:absolute;left:11px;top:6px;color:#8291A4;font-size:17px;pointer-events:none}
+      .tm-search{width:100%;height:34px;padding:0 11px 0 32px;border:1px solid #DCE5EE;border-radius:7px;color:#334B66;background:#FBFCFE;font:inherit;font-size:11px;outline:none}
+      .tm-search:focus{border-color:#8CB6DB;box-shadow:0 0 0 3px rgba(54,128,190,.1);background:#fff}
+      .tm-filter{height:34px;min-width:145px;padding:0 10px;border:1px solid #DCE5EE;border-radius:7px;background:#fff;color:#52657B;font:inherit;font-size:11px}
+      .tm-table-scroll{width:100%;overflow:auto}
+      .tm-member-table{width:100%;border-collapse:separate;border-spacing:0;min-width:830px}
+      .tm-member-table th{position:sticky;top:0;z-index:1;padding:11px 12px;background:#F7F9FC;border-bottom:1px solid #E7EDF3;color:#7A899B;text-align:left;font-size:9px;font-weight:800;letter-spacing:.055em;text-transform:uppercase;white-space:nowrap}
+      .tm-member-table td{padding:12px;border-bottom:1px solid #F0F3F6;color:#52657B;font-size:11px;vertical-align:middle}
+      .tm-member-row{cursor:pointer;transition:background .12s ease}
+      .tm-member-row:hover{background:#F8FBFE}
+      .tm-member-row.is-selected{background:#F1F7FD;box-shadow:inset 3px 0 #337EB9}
+      .tm-member-row:last-child td{border-bottom:0}
+      .tm-member-cell{display:flex;align-items:center;gap:9px;min-width:180px}
+      .tm-member-avatar{width:33px;height:33px;flex:0 0 33px;border-radius:10px;background:#EAF2FA;color:#2D679A;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800}
+      .tm-member-ident{display:flex;flex-direction:column;gap:3px;min-width:0}
+      .tm-member-ident strong{font-size:11px;color:#2C435D;font-weight:750}
+      .tm-member-ident small{font-size:9px;color:#92A0AF}
+      .tm-number{font-variant-numeric:tabular-nums;color:#52657B;font-weight:650;text-align:center;white-space:nowrap}
+      .tm-lead-number{color:#276EA9}.tm-pic-number{color:#14867C}
+      .tm-total-pill{display:inline-flex;justify-content:center;min-width:27px;padding:5px 8px;border-radius:7px;background:#EDF3F9;color:#294E70;font-size:11px;font-weight:800;font-variant-numeric:tabular-nums}
+      .tm-load-cell{min-width:135px}
+      .tm-stack-track{height:7px;display:flex;overflow:hidden;background:#EEF2F6;border-radius:99px;min-width:104px}
+      .tm-stack-track i{height:100%;display:block}
+      .tm-stack-lead{background:#347DB7}.tm-stack-both{background:#8B68BA}.tm-stack-pic{background:#1A9A8D}
+      .tm-no-load{color:#A0AAB7;font-size:9px;white-space:nowrap}
+      .tm-legend{display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:10px 16px 12px;color:#8492A3;font-size:9.5px;border-top:1px solid #F0F3F6}
+      .tm-legend span{display:inline-flex;align-items:center;gap:5px}
+      .tm-legend i{display:inline-block;width:8px;height:8px;border-radius:3px}
+      .tm-portfolio{display:flex;flex-direction:column;gap:0}
+      .tm-profile-head{display:flex;align-items:center;gap:12px;padding:17px 18px;background:linear-gradient(120deg,#F7FAFD,#FFFFFF);border-bottom:1px solid #E9EFF5}
+      .tm-profile-avatar{width:44px;height:44px;flex:0 0 44px;border-radius:13px;display:flex;align-items:center;justify-content:center;background:#E3EEF8;color:#2A6598;font-size:14px;font-weight:800}
+      .tm-profile-copy{flex:1;min-width:0}
+      .tm-profile-copy h3{margin:4px 0 2px;color:#1A3856;font-size:16px;font-weight:750;letter-spacing:-.02em}
+      .tm-profile-copy p{margin:0;color:#8492A3;font-size:10px;line-height:1.4}
+      .tm-profile-status{padding:6px 9px;border-radius:20px;font-size:9px;font-weight:750;white-space:nowrap}
+      .tm-profile-status.is-registered{background:#EAF6F1;color:#278261}.tm-profile-status.is-unregistered{background:#FFF5E8;color:#A66A1E}
+      .tm-profile-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;padding:13px 16px;border-bottom:1px solid #EDF1F5}
+      .tm-profile-metrics>div{padding:11px 12px;background:#FAFBFD;border:1px solid #E9EEF3;border-radius:8px;min-width:0}
+      .tm-profile-metrics span{display:block;color:#7D8C9D;font-size:9px;font-weight:750;text-transform:uppercase;letter-spacing:.04em}
+      .tm-profile-metrics strong{display:block;margin-top:5px;color:#244460;font-size:21px;font-weight:800;line-height:1}
+      .tm-profile-metrics small{display:block;margin-top:5px;color:#9AA6B3;font-size:9px}
+      .tm-portfolio-grid{display:grid;grid-template-columns:1fr 1fr;gap:0}
+      .tm-portfolio-section{padding:15px 16px 17px;min-width:0}
+      .tm-portfolio-section+ .tm-portfolio-section{border-left:1px solid #EDF1F5}
+      .tm-section-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:11px}
+      .tm-section-heading h4{margin:4px 0 0;color:#2D4762;font-size:13px;font-weight:750}
+      .tm-section-count{display:flex;align-items:center;justify-content:center;min-width:27px;height:27px;padding:0 7px;border-radius:8px;background:#F0F4F8;color:#48647F;font-size:11px;font-weight:800}
+      .tm-project-list{display:flex;flex-direction:column;gap:9px}
+      .tm-project-card{padding:12px 13px;border:1px solid #E6ECF2;border-radius:9px;background:#fff;transition:border-color .12s ease,box-shadow .12s ease}
+      .tm-project-card:hover{border-color:#C8D9E8;box-shadow:0 3px 9px rgba(34,69,102,.05)}
+      .tm-project-card-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+      .tm-role-tag{display:inline-flex;align-items:center;padding:4px 7px;border-radius:5px;font-size:8px;font-weight:850;letter-spacing:.05em}
+      .tm-role-lead{background:#EAF3FB;color:#2E70A8}.tm-role-pic{background:#E7F6F3;color:#168579}
+      .tm-project-link{display:block;width:100%;margin:8px 0 5px;padding:0;border:0;background:transparent;text-align:left;color:#254561;font:inherit;font-size:12px;font-weight:750;line-height:1.4;cursor:pointer}
+      .tm-project-link:hover{color:#1769A9;text-decoration:underline}
+      .tm-project-meta{display:flex;align-items:center;justify-content:space-between;gap:8px;color:#91A0B0;font-size:9px}
+      .tm-progress-line{display:flex;align-items:center;gap:8px;margin-top:10px}
+      .tm-progress-track{height:5px;flex:1;background:#EDF1F5;border-radius:9px;overflow:hidden}
+      .tm-progress-track i{display:block;height:100%;background:#4C8DBD;border-radius:9px}
+      .tm-progress-line strong{font-size:9px;color:#637990;min-width:29px;text-align:right}
+      .tm-assigned-items{margin-top:10px;padding:9px 10px;background:#F7FAFC;border-radius:7px}
+      .tm-assigned-title{display:flex;justify-content:space-between;gap:8px;margin-bottom:6px;color:#7D8C9D;font-size:8px;font-weight:850;letter-spacing:.06em;text-transform:uppercase}
+      .tm-assigned-title span{color:#3B799F}
+      .tm-assigned-item{display:flex;justify-content:space-between;gap:8px;padding:4px 0;color:#546B80;font-size:9px;border-top:1px solid #EBF0F4}
+      .tm-assigned-item span{min-width:0;overflow-wrap:anywhere}.tm-assigned-item small{color:#91A0AE;white-space:nowrap}
+      .tm-more-items{padding-top:5px;color:#7890A5;font-size:9px}
+      .tm-empty-state{padding:23px 12px;text-align:center;color:#99A5B2;font-size:10px;background:#FAFBFC;border:1px dashed #E1E8EF;border-radius:8px}
+      .tm-no-selection{display:flex;align-items:center;justify-content:center;flex-direction:column;gap:7px;min-height:170px;text-align:center;padding:25px;color:#8D9BAB}
+      .tm-no-selection-icon{display:flex;align-items:center;justify-content:center;width:35px;height:35px;border-radius:10px;background:#F0F5FA;color:#6285A6;font-size:18px}
+      .tm-no-selection strong{font-size:12px;color:#526A81}.tm-no-selection span{font-size:10px;max-width:340px;line-height:1.5}
+      @media(max-width:1050px){.tm-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.tm-profile-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+      @media(max-width:760px){.tm-distribution,.tm-portfolio-grid{grid-template-columns:1fr}.tm-portfolio-section+.tm-portfolio-section{border-left:0;border-top:1px solid #EDF1F5}.tm-intro{align-items:flex-start;flex-direction:column}.tm-manage-btn{width:100%}.tm-profile-head{align-items:flex-start;flex-wrap:wrap}.tm-profile-status{margin-left:56px}}
+      @media(max-width:480px){.tm-summary{grid-template-columns:1fr 1fr;gap:8px}.tm-summary-card{padding:12px;min-height:102px}.tm-summary-value{font-size:23px}.tm-profile-metrics{grid-template-columns:1fr 1fr}.tm-toolbar{align-items:stretch}.tm-search-wrap{max-width:none;flex-basis:100%}.tm-filter{flex:1}}
     </style>
-    <div class="team-kpis">
-      <div class="team-kpi"><span>Anggota tim terdeteksi</span><strong>${workload.totalMembers}</strong><small>Termasuk assignment yang belum terdaftar</small></div>
-      <div class="team-kpi"><span>Active projects</span><strong>${workload.activeProjects}</strong><small>Status project ongoing</small></div>
-      <div class="team-kpi"><span>Lead assignments</span><strong>${workload.leadAssignments}</strong><small>Project aktif yang dipimpin</small></div>
-      <div class="team-kpi"><span>Involvement assignments</span><strong>${workload.involvementAssignments}</strong><small>Project aktif dengan PIC item</small></div>
+    <div class="tm-page">
+      <div class="tm-intro"><div><span class="tm-eyebrow">PEOPLE &amp; DELIVERY</span><h2>Team workload overview</h2><p>Pantau tanggung jawab project berdasarkan Project Lead dan keterlibatan PIC pada item BoQ. Satu project hanya dihitung sekali pada total workload setiap anggota.</p></div><button class="tm-manage-btn" id="btn-manage-team" type="button"><span>＋</span> Kelola anggota tim</button></div>
+      <div class="tm-summary">
+        <div class="tm-summary-card" style="--tm-accent:#397BB1;--tm-soft:#EDF5FB"><div class="tm-summary-top"><span class="tm-summary-label">Active projects</span><span class="tm-summary-icon">P</span></div><div class="tm-summary-value">${workload.activeProjects}</div><div class="tm-summary-note">Project dengan status ongoing</div></div>
+        <div class="tm-summary-card" style="--tm-accent:#5376B8;--tm-soft:#EFF2FA"><div class="tm-summary-top"><span class="tm-summary-label">Team members</span><span class="tm-summary-icon">T</span></div><div class="tm-summary-value">${workload.totalMembers}</div><div class="tm-summary-note">Termasuk assignment belum terdaftar</div></div>
+        <div class="tm-summary-card" style="--tm-accent:#347DB7;--tm-soft:#EDF5FB"><div class="tm-summary-top"><span class="tm-summary-label">Lead assignments</span><span class="tm-summary-icon">L</span></div><div class="tm-summary-value">${workload.leadAssignments}</div><div class="tm-summary-note">Active project yang dipimpin</div></div>
+        <div class="tm-summary-card" style="--tm-accent:#168C82;--tm-soft:#EAF7F5"><div class="tm-summary-top"><span class="tm-summary-label">Project involvement</span><span class="tm-summary-icon">PIC</span></div><div class="tm-summary-value">${workload.involvementAssignments}</div><div class="tm-summary-note">Active project dengan item PIC</div></div>
+      </div>
+      <div class="tm-distribution">
+        <section class="tm-card"><div class="tm-card-head"><div><span class="tm-eyebrow">OWNERSHIP</span><h3>Project leadership</h3><p>Jumlah project aktif yang dipimpin tiap anggota.</p></div><div class="tm-head-total">${workload.leadAssignments}<small>assignments</small></div></div><div class="tm-rank-list">${roleBarList('leadActive', maxLead, '#397FB7', 'Belum ada project dengan Lead.')}</div></section>
+        <section class="tm-card"><div class="tm-card-head"><div><span class="tm-eyebrow">CONTRIBUTION</span><h3>Project involvement</h3><p>Jumlah project aktif dengan assignment PIC item BoQ.</p></div><div class="tm-head-total">${workload.involvementAssignments}<small>assignments</small></div></div><div class="tm-rank-list">${roleBarList('involvedActive', maxInvolved, '#1A978A', 'Belum ada project dengan PIC item.')}</div></section>
+      </div>
+      <section class="tm-card tm-table-card">
+        <div class="tm-card-head"><div><span class="tm-eyebrow">TEAM DIRECTORY</span><h3>Workload by member</h3><p>Pilih anggota untuk membuka daftar project dan item yang menjadi tanggung jawabnya.</p></div><div class="tm-head-total">${rows.length}<small>members</small></div></div>
+        <div class="tm-toolbar"><label class="tm-search-wrap"><input id="tm-member-search" class="tm-search" type="search" placeholder="Cari nama anggota..." value="${escAttr(teamSearchQuery)}" autocomplete="off"></label><select id="tm-member-filter" class="tm-filter"><option value="all" ${teamMemberFilter === 'all' ? 'selected' : ''}>Semua anggota</option><option value="active" ${teamMemberFilter === 'active' ? 'selected' : ''}>Memiliki workload aktif</option><option value="none" ${teamMemberFilter === 'none' ? 'selected' : ''}>Tanpa workload aktif</option></select></div>
+        <div class="tm-table-scroll"><table class="tm-member-table"><thead><tr><th>Anggota</th><th>Lead active</th><th>PIC involved</th><th>Active total</th><th>Item PIC</th><th>Win rate</th><th>Workload mix</th></tr></thead><tbody>${memberRows}<tr id="tm-no-filter-results" hidden><td colspan="7"><div class="tm-empty-state">Tidak ada anggota yang sesuai dengan pencarian.</div></td></tr></tbody></table></div>
+        <div class="tm-legend"><span><i style="background:#347DB7"></i>Lead only</span><span><i style="background:#8B68BA"></i>Lead + PIC pada project yang sama</span><span><i style="background:#1A9A8D"></i>PIC only</span><span>Total aktif menghitung project unik.</span></div>
+      </section>
+      <section class="tm-card tm-portfolio"><div class="tm-card-head"><div><span class="tm-eyebrow">PROJECT DETAIL</span><h3>Member portfolio</h3><p>Project yang dipimpin dan project tempat anggota berkontribusi melalui item PIC.</p></div></div>${portfolioHtml}</section>
+      ${workload.unassignedActive ? `<div class="tm-unassigned-alert" style="padding:12px 15px;border:1px solid #F0D9A8;background:#FFFAF0;color:#94631C;border-radius:9px;font-size:11px;line-height:1.5;"><strong>${workload.unassignedActive} active project belum memiliki Lead maupun PIC item.</strong> Lengkapi assignment agar tanggung jawab project dapat dipantau.</div>` : ''}
     </div>
-    <div class="panel">
-      <div class="panel-hd"><h2>Team Workload &amp; Project Responsibility</h2><button class="btn-ghost" id="btn-manage-team">Kelola anggota tim</button></div>
-      <div class="team-legend"><span><i style="background:#2563EB"></i>Lead only</span><span><i style="background:#7C3AED"></i>Lead + PIC</span><span><i style="background:#0D9488"></i>PIC only</span><span>Angka total menghitung project unik, bukan penjumlahan role.</span></div>
-      <div class="panel-body"><div class="team-table-scroll"><table><thead><tr><th>Anggota</th><th class="num">Lead aktif</th><th class="num">Involved aktif</th><th class="num">Active total unik</th><th class="num">Item PIC</th><th class="num">Win rate selesai</th><th>Distribusi workload</th></tr></thead><tbody>${memberRows}</tbody></table></div></div>
-    </div>
-    <div class="team-portfolio">
-      <div class="team-portfolio-head"><h2>${selected ? `Portofolio: ${escAttr(selected.name)}` : 'Portofolio Anggota'}</h2><span style="font-size:10px;color:#64748B;">Klik baris anggota untuk melihat detail</span></div>
-      ${portfolioHtml}
-    </div>
-    ${workload.unassignedActive ? `<div style="margin-top:10px;padding:10px 13px;border:1px solid #FDE68A;background:#FFFBEB;color:#92400E;border-radius:7px;font-size:11px;">${workload.unassignedActive} active project belum memiliki Lead maupun PIC item. Assignment perlu dilengkapi.</div>` : ''}
   `;
 }
-
 // ============================================================================
 // MODAL & FORM RENDERER (PROJECT FORM)
 // ============================================================================
@@ -1424,6 +1592,24 @@ function wireEvents() {
     el.onclick = selectMember;
     el.onkeydown = (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectMember(); } };
   });
+  const applyTeamDirectoryFilters = () => {
+    const query = String(teamSearchQuery || '').trim().toLowerCase();
+    let visibleCount = 0;
+    document.querySelectorAll('.tm-member-row[data-team-member]').forEach(row => {
+      const nameMatches = !query || String(row.dataset.teamName || '').includes(query);
+      const filterMatches = teamMemberFilter === 'all' || row.dataset.teamLoad === teamMemberFilter;
+      const visible = nameMatches && filterMatches;
+      row.hidden = !visible;
+      if (visible) visibleCount += 1;
+    });
+    const emptyRow = document.getElementById('tm-no-filter-results');
+    const hasMemberRows = document.querySelectorAll('.tm-member-row[data-team-member]').length > 0;
+    if (emptyRow) emptyRow.hidden = visibleCount > 0 || !hasMemberRows;
+  };
+  const teamSearch = document.getElementById('tm-member-search');
+  if (teamSearch) teamSearch.oninput = () => { teamSearchQuery = teamSearch.value; applyTeamDirectoryFilters(); };
+  const teamFilter = document.getElementById('tm-member-filter');
+  if (teamFilter) teamFilter.onchange = () => { teamMemberFilter = teamFilter.value; applyTeamDirectoryFilters(); };
   document.querySelectorAll('[data-team-open-project]').forEach(el => {
     el.onclick = () => {
       const projectId = el.dataset.teamOpenProject;
