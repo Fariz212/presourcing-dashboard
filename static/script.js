@@ -17,6 +17,7 @@ let presourcingConflict = false;
 let confirmedProjectDeletions = new Set();
 let knownServerProjectIds = new Set();
 let inFlightProjectIds = new Set();
+let selectedTeamMember = null;
 let saveInFlight = null;
 let saveRequested = false;
 let queuedAllowEmptyProjects = false;
@@ -292,37 +293,188 @@ function badgeStatus(stat) {
   return `<span class="badge badge-${stat.toLowerCase().replace(' ', '-')}">${stat}</span>`;
 }
 
-function computePicStats() {
-  const stats = {};
-  team.forEach(m => stats[m] = { leadCount: 0, supportLoad: 0, participationShare: 0, winShare: 0, effSum: 0, effWeight: 0 });
-  
-  projects.forEach(proj => {
-    if (proj.leadId && stats[proj.leadId]) stats[proj.leadId].leadCount++;
-    const uniq = uniquePicsInProject(proj);
-    
-    if (proj.status !== 'ongoing' && uniq.length) {
-      const share = 1 / uniq.length;
-      uniq.forEach(p => {
-        if (!stats[p]) return;
-        stats[p].participationShare += share;
-        if (proj.status === 'win') stats[p].winShare += share;
-      });
-    }
-    
-    const eff = efficiencyPct(projectSph(proj).awal, projectSph(proj).final);
-    allItems(proj).forEach(it => {
-      const pics = it.picIds?.length ? it.picIds : [];
-      if (!pics.length) return;
-      const share = 1 / pics.length;
-      pics.forEach(p => {
-        if (!stats[p]) return;
-        stats[p].supportLoad += share;
-        if (eff != null) { stats[p].effSum += eff * share; stats[p].effWeight += share; }
-      });
+function normalizeTeamKey(name) {
+  return String(name || '').trim().toLocaleLowerCase('id-ID');
+}
+
+function collectKnownTeamNames() {
+  const names = new Map();
+  (team || []).forEach(name => {
+    const clean = String(name || '').trim();
+    if (clean && !names.has(normalizeTeamKey(clean))) names.set(normalizeTeamKey(clean), clean);
+  });
+  // Keep workload visible even when a stale assignment references a name
+  // that is missing from the Team master list.
+  projects.forEach(project => {
+    const lead = String(project.leadId || '').trim();
+    if (lead && !names.has(normalizeTeamKey(lead))) names.set(normalizeTeamKey(lead), lead);
+    allItems(project).forEach(item => (Array.isArray(item.picIds) ? item.picIds : []).forEach(pic => {
+      const clean = String(pic || '').trim();
+      if (clean && !names.has(normalizeTeamKey(clean))) names.set(normalizeTeamKey(clean), clean);
+    }));
+  });
+  return [...names.values()];
+}
+
+function buildTeamMemberUpdate(rows) {
+  if (!Array.isArray(rows)) throw new Error('Daftar anggota tim tidak valid.');
+  const cleanRows = rows.map(row => ({ oldName: String(row.oldName || '').trim(), name: String(row.name || '').trim() }));
+  if (cleanRows.some(row => !row.name)) throw new Error('Nama anggota tidak boleh kosong.');
+  const normalizedNames = cleanRows.map(row => normalizeTeamKey(row.name));
+  if (new Set(normalizedNames).size !== normalizedNames.length) throw new Error('Nama anggota duplikat. Periksa kembali daftar tim.');
+
+  const retainedOld = new Set(cleanRows.map(row => normalizeTeamKey(row.oldName)).filter(Boolean));
+  const removed = collectKnownTeamNames().filter(name => !retainedOld.has(normalizeTeamKey(name)));
+  const referenced = [];
+  removed.forEach(name => {
+    const key = normalizeTeamKey(name);
+    projects.forEach(project => {
+      const isLead = normalizeTeamKey(project.leadId) === key;
+      const assignedItems = allItems(project).filter(item => (Array.isArray(item.picIds) ? item.picIds : []).some(pic => normalizeTeamKey(pic) === key));
+      if (isLead || assignedItems.length) referenced.push(`${project.name || project.id} (${isLead ? 'Lead' : ''}${isLead && assignedItems.length ? ', ' : ''}${assignedItems.length ? `${assignedItems.length} item PIC` : ''})`);
     });
   });
-  return stats;
+  if (referenced.length) throw new Error('Anggota yang masih memiliki assignment tidak dapat dihapus: ' + [...new Set(removed)].join(', ') + '. Project terkait: ' + [...new Set(referenced)].join('; '));
+
+  const nextProjects = JSON.parse(JSON.stringify(projects));
+  const renameMap = new Map(cleanRows.filter(row => row.oldName && row.oldName !== row.name)
+    .map(row => [normalizeTeamKey(row.oldName), row.name]));
+  nextProjects.forEach(project => {
+    const leadKey = normalizeTeamKey(project.leadId);
+    if (renameMap.has(leadKey)) project.leadId = renameMap.get(leadKey);
+    allItems(project).forEach(item => {
+      item.picIds = [...new Set((Array.isArray(item.picIds) ? item.picIds : []).map(pic => renameMap.get(normalizeTeamKey(pic)) || String(pic || '').trim()).filter(Boolean))];
+    });
+  });
+  return { team: cleanRows.map(row => row.name), projects: nextProjects };
 }
+
+function projectIsActiveForTeam(project) {
+  // Match the dashboard's existing active-project definition.
+  return project && project.status === 'ongoing';
+}
+
+function computeTeamWorkload() {
+  const members = new Map();
+  const ensureMember = (name) => {
+    const clean = String(name || '').trim();
+    if (!clean) return null;
+    const key = normalizeTeamKey(clean);
+    if (!members.has(key)) {
+      members.set(key, {
+        key,
+        name: clean,
+        inTeam: (team || []).some(member => normalizeTeamKey(member) === key),
+        leadProjects: new Map(),
+        involvedProjects: new Map(),
+        itemAssignments: 0,
+        completedProjects: new Map(),
+        wonProjects: 0,
+        lostProjects: 0
+      });
+    }
+    return members.get(key);
+  };
+
+  (team || []).forEach(ensureMember);
+
+  projects.forEach(project => {
+    const projectId = String(project.id || '');
+    const isCompleted = project.status === 'win' || project.status === 'lose';
+    const lead = ensureMember(project.leadId);
+    if (lead) lead.leadProjects.set(projectId, project);
+
+    const itemAssignmentsByMember = new Map();
+    allItems(project).forEach((item, itemIndex) => {
+      const itemId = String(item.id || `${projectId}:item:${itemIndex}`);
+      const picNames = [...new Map((Array.isArray(item.picIds) ? item.picIds : [])
+        .map(value => String(value || '').trim())
+        .filter(Boolean)
+        .map(value => [normalizeTeamKey(value), value])).values()];
+      picNames.forEach(picName => {
+        const member = ensureMember(picName);
+        if (!member) return;
+        const key = member.key;
+        member.itemAssignments += 1;
+        if (!itemAssignmentsByMember.has(key)) itemAssignmentsByMember.set(key, []);
+        itemAssignmentsByMember.get(key).push({
+          id: itemId,
+          itemNo: item.itemNo || '',
+          product: item.product || 'Item tanpa deskripsi',
+          qty: item.qty,
+          uom: item.uom || '',
+          sowName: '',
+          boqName: ''
+        });
+      });
+    });
+
+    itemAssignmentsByMember.forEach((assignedItems, key) => {
+      const member = members.get(key);
+      if (!member) return;
+      member.involvedProjects.set(projectId, { project, items: assignedItems });
+    });
+
+    if (isCompleted) {
+      const participants = new Set();
+      if (lead) participants.add(lead.key);
+      itemAssignmentsByMember.forEach((_, key) => participants.add(key));
+      participants.forEach(key => {
+        const member = members.get(key);
+        if (!member) return;
+        member.completedProjects.set(projectId, project);
+        if (project.status === 'win') member.wonProjects += 1;
+        if (project.status === 'lose') member.lostProjects += 1;
+      });
+    }
+  });
+
+  const rows = [...members.values()].map(member => {
+    const leadProjects = [...member.leadProjects.values()];
+    const involvedEntries = [...member.involvedProjects.values()];
+    const leadActive = leadProjects.filter(projectIsActiveForTeam).length;
+    const involvedActive = involvedEntries.filter(entry => projectIsActiveForTeam(entry.project)).length;
+    const leadIds = new Set(leadProjects.filter(projectIsActiveForTeam).map(project => String(project.id)));
+    const involvedIds = new Set(involvedEntries.filter(entry => projectIsActiveForTeam(entry.project)).map(entry => String(entry.project.id)));
+    const both = [...leadIds].filter(id => involvedIds.has(id)).length;
+    const uniqueActive = new Set([...leadIds, ...involvedIds]).size;
+    const completedCount = member.completedProjects.size;
+    const winRate = completedCount ? (member.wonProjects / completedCount) * 100 : null;
+    return {
+      ...member,
+      leadCount: leadProjects.length,
+      involvedCount: involvedEntries.length,
+      leadActive,
+      involvedActive,
+      bothActive: both,
+      leadOnlyActive: leadActive - both,
+      involvedOnlyActive: involvedActive - both,
+      uniqueActive,
+      completedCount,
+      winRate,
+      leadProjectList: leadProjects.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''))),
+      involvedProjectList: involvedEntries.sort((a, b) => String(a.project.name || '').localeCompare(String(b.project.name || '')))
+    };
+  }).sort((a, b) => b.uniqueActive - a.uniqueActive || b.itemAssignments - a.itemAssignments || a.name.localeCompare(b.name));
+
+  const activeProjects = projects.filter(projectIsActiveForTeam);
+  const unassignedActive = activeProjects.filter(project => {
+    const hasLead = Boolean(String(project.leadId || '').trim());
+    const hasPic = allItems(project).some(item => Array.isArray(item.picIds) && item.picIds.some(pic => String(pic || '').trim()));
+    return !hasLead && !hasPic;
+  }).length;
+
+  return {
+    members: rows,
+    totalMembers: rows.length,
+    activeProjects: activeProjects.length,
+    leadAssignments: rows.reduce((sum, row) => sum + row.leadActive, 0),
+    involvementAssignments: rows.reduce((sum, row) => sum + row.involvedActive, 0),
+    uniqueMemberProjectAssignments: rows.reduce((sum, row) => sum + row.uniqueActive, 0),
+    unassignedActive
+  };
+}
+
 
 // ============================================================================
 // NAVIGATION & CORE RENDER
@@ -664,7 +816,7 @@ function renderOverview() {
     <div class="exec-grid">
       <div class="exec-panel overview"><div class="exec-panel-head">▣<span>Project Presourcing Overview</span><span class="exec-panel-sub">${totalProj} Projects</span></div><div class="exec-table-wrap"><table class="exec-table"><thead><tr><th>No</th><th>Project Name</th><th>Value</th><th>PIC</th><th>Target RFS</th><th>Status</th><th>Progress</th></tr></thead><tbody>${overviewRows}</tbody></table></div></div>
       <div class="exec-panel status"><div class="exec-panel-head">◉<span>Project Status</span></div><div class="exec-panel-body"><div class="exec-donut"><canvas id="chartStatus"></canvas><div class="exec-donut-center"><div class="exec-donut-number">${totalProj}</div><div class="exec-donut-label">Projects</div></div></div></div></div>
-      <div class="exec-panel pic"><div class="exec-panel-head">▥<span>Project Value by PIC</span></div><div class="exec-panel-body"><div class="exec-chart"><canvas id="chartPicValue"></canvas></div></div></div>
+      <div class="exec-panel pic"><div class="exec-panel-head">▥<span>Project Value by Project Lead</span></div><div class="exec-panel-body"><div class="exec-chart"><canvas id="chartPicValue"></canvas></div></div></div>
       <div class="exec-panel pipeline"><div class="exec-panel-head">⇢<span>Presourcing Progress Pipeline</span><span class="exec-panel-sub">${activeProjects} active</span></div><div class="exec-panel-body"><div class="pipeline-flow">${pipelineHtml}</div></div></div>
       <div class="exec-panel rfs"><div class="exec-panel-head">▥<span>Target RFS by Month</span></div><div class="exec-panel-body"><div class="exec-chart"><canvas id="chartRfsMonth"></canvas></div></div></div>
       <div class="exec-panel top5"><div class="exec-panel-head">≡<span>Top 5 Project Value</span></div><div class="exec-panel-body"><div class="exec-chart"><canvas id="chartTop5"></canvas></div></div></div>
@@ -842,30 +994,100 @@ function renderDashboardCharts() {
     }
 }
 
-function renderTeam(){
-  const stats = computePicStats();
-  const rows = team.map(m=>{
-    const s = stats[m];
-    const winRate = s.participationShare > 0 ? (s.winShare / s.participationShare * 100) : null;
-    const avgEff = s.effWeight > 0 ? (s.effSum / s.effWeight) : null;
-    return { name: m, ...s, winRate, avgEff };
-  }).sort((a,b) => b.supportLoad - a.supportLoad);
-  
+function renderTeam() {
+  const workload = computeTeamWorkload();
+  const rows = workload.members;
+  if (!selectedTeamMember || !rows.some(row => row.key === selectedTeamMember)) {
+    selectedTeamMember = rows[0]?.key || null;
+  }
+  const selected = rows.find(row => row.key === selectedTeamMember) || null;
+  const maxLoad = Math.max(1, ...rows.map(row => row.uniqueActive));
+
+  const portfolioProjectRow = (project, role, itemLines = []) => {
+    const status = badgeStatus(getDynamicStatus(project));
+    const items = itemLines.length
+      ? `<div style="margin-top:5px;color:#64748B;font-size:11px;">${itemLines.map(item => `<div>• ${escAttr(item.itemNo ? `${item.itemNo} — ` : '')}${escAttr(item.product)}${item.qty != null ? ` (${escAttr(item.qty)} ${escAttr(item.uom)})` : ''}</div>`).join('')}</div>`
+      : '';
+    return `<tr><td><button class="mini-btn" data-team-open-project="${escAttr(project.id)}" type="button" style="text-align:left;white-space:normal;">${escAttr(project.name || 'Unnamed Project')}</button>${items}</td><td>${role}</td><td>${escAttr(project.pipelineStage || '—')}</td><td>${Number(project.progressPct || 0)}%</td><td>${status}</td></tr>`;
+  };
+
+  const memberRows = rows.length ? rows.map(row => {
+    const leadWidth = (row.leadOnlyActive / maxLoad) * 100;
+    const bothWidth = (row.bothActive / maxLoad) * 100;
+    const involvedWidth = (row.involvedOnlyActive / maxLoad) * 100;
+    const activeBar = `<div title="Lead only: ${row.leadOnlyActive}; Lead & PIC: ${row.bothActive}; PIC only: ${row.involvedOnlyActive}" style="display:flex;height:9px;min-width:80px;background:#E2E8F0;border-radius:6px;overflow:hidden;"><span style="width:${leadWidth}%;background:#2563EB;"></span><span style="width:${bothWidth}%;background:#7C3AED;"></span><span style="width:${involvedWidth}%;background:#0D9488;"></span></div>`;
+    return `<tr data-team-member="${escAttr(row.key)}" tabindex="0" style="cursor:pointer;${selected && selected.key === row.key ? 'background:#EFF6FF;' : ''}">
+      <td><strong>${escAttr(row.name)}</strong>${row.inTeam ? '' : '<div style="font-size:10px;color:#B45309;">Assignment not in Team list</div>'}</td>
+      <td class="num mono">${row.leadActive}</td>
+      <td class="num mono">${row.involvedActive}</td>
+      <td class="num mono"><strong>${row.uniqueActive}</strong></td>
+      <td class="num mono">${row.itemAssignments}</td>
+      <td class="num mono">${fmtPct(row.winRate)}</td>
+      <td style="min-width:110px;">${activeBar}</td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="7"><div class="empty">Belum ada anggota atau assignment tim.</div></td></tr>';
+
+  let portfolioHtml = '<div class="empty">Pilih anggota tim untuk melihat portofolionya.</div>';
+  if (selected) {
+    const leadRows = selected.leadProjectList.length
+      ? selected.leadProjectList.map(project => portfolioProjectRow(project, '<span style="color:#1D4ED8;font-weight:700;">Project Lead</span>')).join('')
+      : '<tr><td colspan="5" class="empty">Belum memimpin project.</td></tr>';
+    const involvedRows = selected.involvedProjectList.length
+      ? selected.involvedProjectList.map(entry => portfolioProjectRow(entry.project, '<span style="color:#0F766E;font-weight:700;">Project Involvement</span>', entry.items)).join('')
+      : '<tr><td colspan="5" class="empty">Belum terlibat sebagai PIC item.</td></tr>';
+    portfolioHtml = `
+      <div class="team-portfolio-kpis">
+        <div><span>Project dipimpin</span><strong>${selected.leadCount}</strong><small>${selected.leadActive} aktif</small></div>
+        <div><span>Project involvement</span><strong>${selected.involvedCount}</strong><small>${selected.involvedActive} aktif</small></div>
+        <div><span>Active workload unik</span><strong>${selected.uniqueActive}</strong><small>${selected.bothActive} project dengan dua peran</small></div>
+        <div><span>Item assignment</span><strong>${selected.itemAssignments}</strong><small>${selected.completedCount} project selesai diikuti</small></div>
+      </div>
+      <div class="team-portfolio-section"><h3>Project yang dipimpin (${selected.leadProjectList.length})</h3><div class="team-table-scroll"><table><thead><tr><th>Project</th><th>Peran</th><th>Pipeline</th><th>Progress</th><th>Status</th></tr></thead><tbody>${leadRows}</tbody></table></div></div>
+      <div class="team-portfolio-section"><h3>Project yang melibatkan anggota ini (${selected.involvedProjectList.length})</h3><div class="team-table-scroll"><table><thead><tr><th>Project &amp; Item PIC</th><th>Peran</th><th>Pipeline</th><th>Progress</th><th>Status</th></tr></thead><tbody>${involvedRows}</tbody></table></div></div>
+    `;
+  }
+
   return `
-    <div class="panel">
-      <div class="panel-hd">
-        <h2>Beban &amp; performa tim (fractional split)</h2>
-        <button class="btn-ghost" id="btn-manage-team">Kelola anggota tim</button>
-      </div>
-      <div class="panel-body">
-        <table>
-          <thead><tr><th>Anggota</th><th class="num">Lead Count</th><th class="num">Support Load</th><th class="num">Win Rate</th><th class="num">Avg Efficiency</th></tr></thead>
-          <tbody>
-          ${rows.map(r => `<tr><td>${escAttr(r.name)}</td><td class="num mono">${r.leadCount}</td><td class="num mono">${r.supportLoad.toFixed(2)}</td><td class="num mono">${fmtPct(r.winRate)}</td><td class="num mono">${fmtPct(r.avgEff)}</td></tr>`).join('')}
-          </tbody>
-        </table>
-      </div>
+    <style>
+      .team-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:12px}
+      .team-kpi{background:#fff;border:1px solid #DCE4EE;border-radius:8px;padding:13px 15px;min-width:0}
+      .team-kpi span{display:block;color:#64748B;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.03em}
+      .team-kpi strong{display:block;margin-top:5px;font-size:24px;color:#0F172A;line-height:1.1}
+      .team-kpi small{display:block;margin-top:4px;color:#94A3B8;font-size:10px}
+      .team-legend{display:flex;gap:14px;flex-wrap:wrap;padding:10px 14px;color:#64748B;font-size:11px}
+      .team-legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px}
+      .team-portfolio{margin-top:12px;border:1px solid #DCE4EE;border-radius:8px;background:#fff;overflow:hidden}
+      .team-portfolio-head{padding:13px 16px;background:#F8FAFC;border-bottom:1px solid #E2E8F0;display:flex;justify-content:space-between;align-items:center;gap:10px}
+      .team-portfolio-head h2{font-size:14px;margin:0;color:#0F172A}
+      .team-portfolio-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;padding:12px 14px}
+      .team-portfolio-kpis>div{background:#F8FAFC;border:1px solid #E2E8F0;border-radius:6px;padding:10px}
+      .team-portfolio-kpis span,.team-portfolio-kpis small{display:block;font-size:10px;color:#64748B}
+      .team-portfolio-kpis strong{display:block;font-size:20px;color:#0F172A;margin:4px 0}
+      .team-portfolio-section{padding:5px 14px 14px}
+      .team-portfolio-section h3{font-size:12px;color:#334155;margin:9px 0}
+      .team-table-scroll{overflow-x:auto}
+      .team-table-scroll table{width:100%;border-collapse:collapse}
+      .team-table-scroll th,.team-table-scroll td{padding:9px 10px;border-bottom:1px solid #EEF2F6;text-align:left;font-size:11px;vertical-align:top}
+      .team-table-scroll th{background:#F8FAFC;color:#64748B;font-size:10px;text-transform:uppercase}
+      @media(max-width:850px){.team-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.team-portfolio-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+      @media(max-width:560px){.team-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.team-portfolio-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+    </style>
+    <div class="team-kpis">
+      <div class="team-kpi"><span>Anggota tim terdeteksi</span><strong>${workload.totalMembers}</strong><small>Termasuk assignment yang belum terdaftar</small></div>
+      <div class="team-kpi"><span>Active projects</span><strong>${workload.activeProjects}</strong><small>Status project ongoing</small></div>
+      <div class="team-kpi"><span>Lead assignments</span><strong>${workload.leadAssignments}</strong><small>Project aktif yang dipimpin</small></div>
+      <div class="team-kpi"><span>Involvement assignments</span><strong>${workload.involvementAssignments}</strong><small>Project aktif dengan PIC item</small></div>
     </div>
+    <div class="panel">
+      <div class="panel-hd"><h2>Team Workload &amp; Project Responsibility</h2><button class="btn-ghost" id="btn-manage-team">Kelola anggota tim</button></div>
+      <div class="team-legend"><span><i style="background:#2563EB"></i>Lead only</span><span><i style="background:#7C3AED"></i>Lead + PIC</span><span><i style="background:#0D9488"></i>PIC only</span><span>Angka total menghitung project unik, bukan penjumlahan role.</span></div>
+      <div class="panel-body"><div class="team-table-scroll"><table><thead><tr><th>Anggota</th><th class="num">Lead aktif</th><th class="num">Involved aktif</th><th class="num">Active total unik</th><th class="num">Item PIC</th><th class="num">Win rate selesai</th><th>Distribusi workload</th></tr></thead><tbody>${memberRows}</tbody></table></div></div>
+    </div>
+    <div class="team-portfolio">
+      <div class="team-portfolio-head"><h2>${selected ? `Portofolio: ${escAttr(selected.name)}` : 'Portofolio Anggota'}</h2><span style="font-size:10px;color:#64748B;">Klik baris anggota untuk melihat detail</span></div>
+      ${portfolioHtml}
+    </div>
+    ${workload.unassignedActive ? `<div style="margin-top:10px;padding:10px 13px;border:1px solid #FDE68A;background:#FFFBEB;color:#92400E;border-radius:7px;font-size:11px;">${workload.unassignedActive} active project belum memiliki Lead maupun PIC item. Assignment perlu dilengkapi.</div>` : ''}
   `;
 }
 
@@ -1003,23 +1225,25 @@ function projectModalHtml(p, isNew) {
 }
 
 function teamModalHtml(d) {
+  const rows = (d.members || []).map(member => `
+    <div class="team-member-edit-row" style="display:flex;gap:7px;align-items:center;margin-bottom:8px;">
+      <input class="team-member-name" data-team-old="${escAttr(member.oldName)}" value="${escAttr(member.name)}" style="flex:1;min-width:0;">
+      <button class="mini-btn danger" type="button" data-team-remove>Hapus</button>
+    </div>
+  `).join('');
   return `
     <div class="overlay" id="ov">
-      <div class="modal" style="max-width:440px;">
-        <div class="modal-hd">
-          <h3>Kelola Anggota Tim</h3>
-          <button class="mini-btn" id="m-close" type="button">Tutup</button>
-        </div>
+      <div class="modal" style="max-width:520px;">
+        <div class="modal-hd"><h3>Kelola Anggota Tim</h3><button class="mini-btn" id="m-close" type="button">Tutup</button></div>
         <div class="modal-body">
-          <div class="field">
-            <label>Daftar Nama Anggota (Pisahkan dengan koma)</label>
-            <textarea id="m-team-names" rows="3">${escAttr(d.names)}</textarea>
+          <div class="note" style="margin-bottom:12px;">Mengganti nama anggota akan memperbarui Lead dan seluruh PIC item yang terkait. Anggota yang masih memiliki assignment tidak dapat dihapus.</div>
+          <div id="team-member-edit-list">${rows}</div>
+          <div style="display:flex;gap:7px;margin-top:12px;">
+            <input id="m-team-new-member" placeholder="Nama anggota baru" style="flex:1;min-width:0;">
+            <button class="btn-ghost" id="m-team-add" type="button">+ Tambah</button>
           </div>
         </div>
-        <div class="modal-ft">
-          <button class="btn-ghost" id="m-cancel" type="button">Batal</button>
-          <button class="btn-primary" id="m-save-team" type="button">Simpan Tim</button>
-        </div>
+        <div class="modal-ft"><button class="btn-ghost" id="m-cancel" type="button">Batal</button><button class="btn-primary" id="m-save-team" type="button">Simpan Tim</button></div>
       </div>
     </div>
   `;
@@ -1195,6 +1419,20 @@ function wireEvents() {
     };
   });
   
+  document.querySelectorAll('[data-team-member]').forEach(el => {
+    const selectMember = () => { selectedTeamMember = el.dataset.teamMember; render(); };
+    el.onclick = selectMember;
+    el.onkeydown = (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectMember(); } };
+  });
+  document.querySelectorAll('[data-team-open-project]').forEach(el => {
+    el.onclick = () => {
+      const projectId = el.dataset.teamOpenProject;
+      if (!projects.some(project => String(project.id) === String(projectId))) return;
+      activeTab = 'projects';
+      openProjectId = projectId;
+      render();
+    };
+  });
   const btnTeam = document.getElementById('btn-manage-team');
   if (btnTeam) btnTeam.onclick = () => openTeamModal();
 }
@@ -1434,9 +1672,9 @@ function openProjectModal(id) {
   render();
 }
 
-function openTeamModal() { 
-  modal = { type: 'team', data: { names: team.join(', ') } }; 
-  render(); 
+function openTeamModal() {
+  modal = { type: 'team', data: { members: collectKnownTeamNames().map(name => ({ oldName: name, name })) } };
+  render();
 }
 
 function renderModal() {
@@ -1581,8 +1819,36 @@ function wireModalEvents() {
   const ov = document.getElementById('ov'); if (ov) ov.onclick = (e) => { if (e.target === ov) close(); };
 
   if (modal.type === 'team') {
-    const sBtn = document.getElementById('m-save-team');
-    if (sBtn) sBtn.onclick = () => { team = val('m-team-names').split(',').map(s => s.trim()).filter(Boolean); modal = null; render(); saveAll(); };
+    const list = document.getElementById('team-member-edit-list');
+    document.querySelectorAll('[data-team-remove]').forEach(button => {
+      button.onclick = () => button.closest('.team-member-edit-row')?.remove();
+    });
+    const addButton = document.getElementById('m-team-add');
+    if (addButton) addButton.onclick = () => {
+      const name = val('m-team-new-member').trim();
+      if (!name) return alert('Nama anggota wajib diisi.');
+      const existing = [...document.querySelectorAll('.team-member-name')].map(input => normalizeTeamKey(input.value));
+      if (existing.includes(normalizeTeamKey(name))) return alert('Nama anggota sudah ada.');
+      list.insertAdjacentHTML('beforeend', `<div class="team-member-edit-row" style="display:flex;gap:7px;align-items:center;margin-bottom:8px;"><input class="team-member-name" data-team-old="" value="${escAttr(name)}" style="flex:1;min-width:0;"><button class="mini-btn danger" type="button" data-team-remove>Hapus</button></div>`);
+      list.querySelector('.team-member-edit-row:last-child [data-team-remove]').onclick = (event) => event.currentTarget.closest('.team-member-edit-row')?.remove();
+      document.getElementById('m-team-new-member').value = '';
+    };
+    const saveButton = document.getElementById('m-save-team');
+    if (saveButton) saveButton.onclick = async () => {
+      const inputs = [...document.querySelectorAll('.team-member-name')];
+      const rows = inputs.map(input => ({ oldName: String(input.dataset.teamOld || '').trim(), name: String(input.value || '').trim() }));
+      let nextState;
+      try {
+        nextState = buildTeamMemberUpdate(rows);
+      } catch (error) {
+        return alert(error.message || 'Perubahan anggota tim tidak valid.');
+      }
+      team = nextState.team;
+      projects = nextState.projects;
+      modal = null;
+      render();
+      await saveAll();
+    };
     return;
   }
   
