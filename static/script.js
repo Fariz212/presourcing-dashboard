@@ -9,8 +9,17 @@ let activeTab = 'overview';
 let openProjectId = null;
 let modal = null; 
 let filters = { priority: 'all', status: 'all' };
-let storageOk = true;
-let isSaving = false; 
+let storageOk = false;
+let isSaving = false;
+let presourcingVersion = null;
+let presourcingLegacyMode = false;
+let presourcingConflict = false;
+let confirmedProjectDeletions = new Set();
+let knownServerProjectIds = new Set();
+let inFlightProjectIds = new Set();
+let saveInFlight = null;
+let saveRequested = false;
+let queuedAllowEmptyProjects = false;
 let dCharts = {}; 
 
 // ============================================================================
@@ -54,69 +63,156 @@ function calculateUiSphTotal(qty, unitPrice) {
 // ============================================================================
 // DATA PERSISTENCE
 // ============================================================================
-function seedData() {
-  team = ['Budi', 'Sari', 'Andi', 'Rahma', 'Fajar'];
-  projects = [
-    {
-      id: uid('proj'), name: 'Project Backbone Expansion', requestorName: 'Marcel', requestorDept: 'SA G&P',
-      priority: 'High', status: 'ongoing', leadId: 'Andi', sphMode: 'item', projectSphAwal: null, projectSphFinal: null,
-      createdAt: '2026-07-02', closedAt: null, targetRfs: '2026-10-15', pipelineStage: '4 - Negotiation', progressPct: 85, comparison_docs: [],
-      sows: [{ id: uid('sow'), name: 'SoW Core', boqs: [{ id: uid('boq'), name: 'BoQ Utama', items: [{ id: uid('item'), product: 'Router', qty: 1, vendor: '', notes: '', picIds: ['Andi'], sphAwalUnit: 25000000000, sphAwal: 25000000000, sphFinalUnit: null, sphFinal: null }] }] }]
-    }
-  ];
-}
-
 async function loadAll() {
+  // Wait for a pending save to settle before replacing local state with a fresh GET.
+  if (saveInFlight) {
+    const saveSucceeded = await saveInFlight;
+    if (!saveSucceeded) return false;
+  }
+  // A conflict requires a deliberate full page reload; do not silently discard
+  // unsaved local edits through an incidental loadAll() call.
+  if (presourcingConflict) return false;
   try {
-    const timestamp = new Date().getTime();
-    const response = await fetch(`${API_URL}?t=${timestamp}`, { cache: 'no-store' });
-    if (!response.ok) throw new Error("Gagal terhubung ke Backend");
-    
-    const data = await response.json();
-    projects = data.projects || [];
-    
-    if (data.team && data.team.length > 0) {
-      team = data.team;
-    } else {
-      team = ['Decki Okmal Pratama', 'Ahmad Fauzi', 'Siti Rahma', 'Budi Santoso'];
-      saveAll(); 
+    const response = await fetch(`${API_URL}?t=${Date.now()}`, { cache: 'no-store' });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.message || data.error || `Backend returned HTTP ${response.status}`);
+    }
+    // The dashboard data contract is independent of the concurrency token. During
+    // a rolling deployment, Phase 2 frontend may temporarily meet a Phase 1 backend.
+    // It must still render valid project/team data rather than showing an empty page.
+    if (!Array.isArray(data.projects) || !Array.isArray(data.team)) {
+      throw new Error('Respons backend tidak memiliki projects dan team yang valid.');
     }
 
-    if (projects.length === 0 && (!data.team || data.team.length === 0)) {
-      seedData();
-      await saveAll();
-    }
-    
+    projects = data.projects;
+    team = data.team.length ? data.team : [
+      'Decki Okmal Pratama', 'Ahmad Fauzi', 'Siti Rahma', 'Budi Santoso'
+    ];
+    presourcingVersion = (typeof data.version === 'string' && data.version.trim())
+      ? data.version.trim()
+      : null;
+    presourcingLegacyMode = !presourcingVersion;
+    presourcingConflict = false;
+    confirmedProjectDeletions.clear();
+    knownServerProjectIds = new Set(projects.map(project => String(project.id)));
+    inFlightProjectIds.clear();
     storageOk = true;
-  } catch(e) {
-    console.error("Backend error/offline:", e);
+  } catch (error) {
+    console.error('Backend error/offline:', error);
     storageOk = false;
-    if (projects.length === 0) seedData();
+    // Never replace unavailable server data with demo data. Keep current in-memory
+    // state visible, but saveAll() will refuse writes until a successful reload.
   }
   render();
+  return storageOk;
 }
 
-async function saveAll() {
-  if (isSaving) return;
-  isSaving = true;
-  document.body.style.cursor = 'wait';
-
-  try {
-    const response = await fetch(API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projects, team })
-    });
-    if (!response.ok) throw new Error("Gagal menyimpan ke Backend");
-    storageOk = true;
-  } catch(e) {
-    console.error("Gagal menyimpan data:", e);
-    storageOk = false; 
-  } finally {
-    isSaving = false; 
-    document.body.style.cursor = 'default';
+function confirmExistingProjectDeletion(projectId) {
+  const id = String(projectId);
+  // A just-created project that has never been sent to the server is not a DB deletion.
+  // Include in-flight IDs because that request may commit before the queued delete save.
+  if (knownServerProjectIds.has(id) || inFlightProjectIds.has(id)) {
+    confirmedProjectDeletions.add(id);
   }
-  render(); 
+}
+
+async function saveAll(options = {}) {
+  if (!storageOk || presourcingConflict || (!presourcingLegacyMode && !presourcingVersion)) {
+    const message = 'Data belum tersinkron atau terjadi konflik versi. Muat ulang dashboard dan periksa data server sebelum menyimpan kembali.';
+    console.error(message);
+    alert(message);
+    return false;
+  }
+
+  saveRequested = true;
+  if (options.allowEmptyProjects === true) queuedAllowEmptyProjects = true;
+  if (saveInFlight) return saveInFlight;
+
+  saveInFlight = (async () => {
+    let allSaved = true;
+    isSaving = true;
+    document.body.style.cursor = 'wait';
+
+    try {
+      while (saveRequested) {
+        saveRequested = false;
+        const allowEmptyProjects = queuedAllowEmptyProjects;
+        queuedAllowEmptyProjects = false;
+        const confirmedDeleteIds = [...confirmedProjectDeletions];
+        // Phase 1 backend ignores the extra deletion field. Phase 2 backend validates
+        // it against the exact set of project IDs omitted from the submitted snapshot.
+        const payload = {
+          projects,
+          team,
+          confirmed_delete_project_ids: confirmedDeleteIds
+        };
+        if (!presourcingLegacyMode) {
+          payload.base_version = presourcingVersion;
+          payload.allow_empty_projects = allowEmptyProjects;
+        }
+
+        inFlightProjectIds = new Set(payload.projects.map(project => String(project.id)));
+        const response = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const result = await response.json().catch(() => ({}));
+
+        if (response.status === 409 || response.status === 428 ||
+            result.code === 'PRESOURCING_VERSION_CONFLICT' ||
+            result.code === 'PRESOURCING_VERSION_REQUIRED' ||
+            result.code === 'EMPTY_PROJECT_SET_CONFIRMATION_REQUIRED' ||
+            result.code === 'PROJECT_DELETION_CONFIRMATION_REQUIRED') {
+          presourcingConflict = true;
+          allSaved = false;
+          saveRequested = false;
+          inFlightProjectIds.clear();
+          const message = result.message || 'Data server berubah. Muat ulang dashboard sebelum melanjutkan.';
+          alert(`${message}\n\nPerubahan lokal belum dikirim ulang agar tidak menimpa data terbaru.`);
+          break;
+        }
+
+        if (!response.ok || result.success !== true) {
+          throw new Error(result.message || result.error || `Gagal menyimpan (HTTP ${response.status}).`);
+        }
+
+        if (presourcingLegacyMode) {
+          // Legacy Phase 1 API returns { success: true } without a version token.
+          // Keep the queued save behavior, but concurrency protection is unavailable.
+          storageOk = true;
+        } else {
+          if (typeof result.version !== 'string' || !result.version) {
+            throw new Error('Backend Phase 2 tidak mengembalikan version token setelah save. Status penyimpanan perlu diverifikasi.');
+          }
+          presourcingVersion = result.version;
+          storageOk = true;
+        }
+
+        knownServerProjectIds = new Set(payload.projects.map(project => String(project.id)));
+        confirmedDeleteIds.forEach(id => confirmedProjectDeletions.delete(id));
+        inFlightProjectIds.clear();
+      }
+    } catch (error) {
+      console.error('Gagal menyimpan data:', error);
+      storageOk = false;
+      presourcingConflict = true;
+      saveRequested = false;
+      queuedAllowEmptyProjects = false;
+      inFlightProjectIds.clear();
+      allSaved = false;
+      alert('Penyimpanan gagal atau status respons tidak pasti. Jangan ulangi perubahan sebelum memuat ulang dan memeriksa data server.');
+    } finally {
+      isSaving = false;
+      document.body.style.cursor = 'default';
+      saveInFlight = null;
+      render();
+    }
+    return allSaved;
+  })();
+
+  return saveInFlight;
 }
 
 // ============================================================================
@@ -272,7 +368,14 @@ function render() {
     headerHtml = `<div class="page-hero"><div class="page-hero-main"><div class="page-hero-title">Team &amp; Workload</div><div class="page-hero-sub">Distribusi project dan beban kerja tim</div></div></div>`;
   }
 
-  app.innerHTML = `<div class="page-shell">${headerHtml}<div id="tabcontent"></div></div>`;
+  const persistenceNotice = !storageOk
+    ? `<div class="persistence-notice error">Koneksi atau respons backend belum valid. Data server belum berhasil dimuat; jangan melakukan perubahan sampai koneksi pulih.</div>`
+    : presourcingConflict
+      ? `<div class="persistence-notice error">Penyimpanan ditahan karena konflik atau respons tidak pasti. Muat ulang dashboard setelah memeriksa data server.</div>`
+      : presourcingLegacyMode
+        ? `<div class="persistence-notice warning">Mode kompatibilitas Phase 1: data tetap ditampilkan dan dapat disimpan, tetapi perlindungan konflik antar-user Phase 2 belum aktif pada backend.</div>`
+        : '';
+  app.innerHTML = `<div class="page-shell"><style>.persistence-notice{padding:10px 14px;margin:0 0 12px;border-radius:8px;font-size:12px;line-height:1.45}.persistence-notice.warning{background:#FFF7ED;color:#9A3412;border:1px solid #FED7AA}.persistence-notice.error{background:#FEF2F2;color:#991B1B;border:1px solid #FECACA}</style>${persistenceNotice}${headerHtml}<div id="tabcontent"></div></div>`;
   const content = document.getElementById('tabcontent');
   
   if (activeTab === 'overview') content.innerHTML = renderOverview();
@@ -1084,8 +1187,9 @@ function wireEvents() {
     el.onclick = async (e) => { 
       e.stopPropagation(); 
       if (confirm('Hapus project ini?')) { 
+        confirmExistingProjectDeletion(el.dataset.deleteProject);
         projects = projects.filter(p => p.id !== el.dataset.deleteProject); 
-        await saveAll(); 
+        await saveAll({ allowEmptyProjects: projects.length === 0 });
         render(); 
       } 
     };

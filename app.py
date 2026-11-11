@@ -893,94 +893,326 @@ def assign_ticket():
 # ============================================================================
 # PRESOURCING API (TEROPTIMASI: BULK INSERT / BATCH EXECUTION)
 # ============================================================================
+# ============================================================================
+# PRESOURCING DASHBOARD STATE SAFETY
+# ============================================================================
+def _presourcing_state_version(projects, team):
+    """Return a stable version token for the relational M&S dashboard snapshot."""
+    canonical_projects = []
+    for project in projects or []:
+        p = dict(project)
+        p["comparison_docs"] = sorted(
+            [dict(x) for x in (p.get("comparison_docs") or [])],
+            key=lambda x: str(x.get("id") or ""),
+        )
+        canonical_sows = []
+        for sow in p.get("sows") or []:
+            s = dict(sow)
+            canonical_boqs = []
+            for boq in s.get("boqs") or []:
+                b = dict(boq)
+                b["items"] = sorted(
+                    [dict(x) for x in (b.get("items") or [])],
+                    key=lambda x: str(x.get("id") or ""),
+                )
+                canonical_boqs.append(b)
+            s["boqs"] = sorted(canonical_boqs, key=lambda x: str(x.get("id") or ""))
+            canonical_sows.append(s)
+        p["sows"] = sorted(canonical_sows, key=lambda x: str(x.get("id") or ""))
+        canonical_projects.append(p)
+
+    snapshot = {
+        "projects": sorted(canonical_projects, key=lambda x: str(x.get("id") or "")),
+        # Team order is user-visible in dropdowns, so preserve it in the token.
+        "team": list(team or []),
+    }
+    encoded = json.dumps(
+        snapshot, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str
+    )
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def _read_presourcing_team(cursor):
+    cursor.execute("SELECT json_data FROM dashboard_state WHERE data_type = 'team'")
+    row = cursor.fetchone()
+    if not row:
+        return []
+    raw_team = row.get("json_data") if hasattr(row, "get") else row[0]
+    if not raw_team:
+        return []
+    try:
+        team = json.loads(raw_team)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Data Team di dashboard_state tidak valid. Periksa data team sebelum menyimpan.") from exc
+    if not isinstance(team, list):
+        raise ValueError("Format data Team di database tidak valid.")
+    return team
+
+
+def _validate_presourcing_payload(payload):
+    """Validate the full M&S snapshot before any database mutation begins."""
+    if not isinstance(payload, dict):
+        raise ValueError("Payload harus berupa JSON object.")
+    if not isinstance(payload.get("projects"), list):
+        raise ValueError("Field projects wajib berupa array.")
+    if not isinstance(payload.get("team"), list):
+        raise ValueError("Field team wajib berupa array.")
+
+    team = []
+    seen_team = set()
+    for index, member in enumerate(payload["team"], start=1):
+        if not isinstance(member, str) or not member.strip():
+            raise ValueError(f"Anggota Team pada posisi {index} tidak valid.")
+        name = member.strip()
+        normalized = name.casefold()
+        if normalized in seen_team:
+            raise ValueError(f"Nama anggota Team duplikat: {name}.")
+        seen_team.add(normalized)
+        team.append(name)
+
+    raw_delete_ids = payload.get("confirmed_delete_project_ids", [])
+    if not isinstance(raw_delete_ids, list) or any(not isinstance(x, (str, int)) for x in raw_delete_ids):
+        raise ValueError("confirmed_delete_project_ids harus berupa array ID project.")
+    confirmed_delete_ids = [str(x).strip() for x in raw_delete_ids]
+    if any(not x for x in confirmed_delete_ids):
+        raise ValueError("confirmed_delete_project_ids berisi ID kosong.")
+    if len(confirmed_delete_ids) != len(set(confirmed_delete_ids)):
+        raise ValueError("confirmed_delete_project_ids tidak boleh berisi ID duplikat.")
+    payload["confirmed_delete_project_ids"] = confirmed_delete_ids
+
+    seen = {"projects": set(), "sows": set(), "boqs": set(), "items": set()}
+
+    def require_record_id(record, kind, location):
+        if not isinstance(record, dict):
+            raise ValueError(f"Data {kind} pada {location} harus berupa object.")
+        raw_id = record.get("id")
+        if raw_id is None or not str(raw_id).strip():
+            raise ValueError(f"ID {kind} wajib diisi pada {location}.")
+        record_id = str(raw_id).strip()
+        record["id"] = record_id
+        if len(record_id) > 200:
+            raise ValueError(f"ID {kind} terlalu panjang pada {location}.")
+        if record_id in seen[kind]:
+            raise ValueError(f"ID {kind} duplikat: {record_id}.")
+        seen[kind].add(record_id)
+        return record_id
+
+    for pi, project in enumerate(payload["projects"], start=1):
+        require_record_id(project, "projects", f"project ke-{pi}")
+        # Every nested collection must be present. Treating an omitted field as []
+        # would turn an incomplete payload into an instruction to delete stored data.
+        if "sows" not in project or not isinstance(project["sows"], list):
+            raise ValueError(f"sows pada project ke-{pi} wajib berupa array.")
+        if "comparison_docs" not in project or not isinstance(project["comparison_docs"], list):
+            raise ValueError(f"comparison_docs pada project ke-{pi} wajib berupa array.")
+
+        for si, sow in enumerate(project["sows"], start=1):
+            require_record_id(sow, "sows", f"project ke-{pi}, SoW ke-{si}")
+            if "boqs" not in sow or not isinstance(sow["boqs"], list):
+                raise ValueError(f"boqs pada SoW ke-{si} project ke-{pi} wajib berupa array.")
+            for bi, boq in enumerate(sow["boqs"], start=1):
+                require_record_id(boq, "boqs", f"project ke-{pi}, SoW ke-{si}, BoQ ke-{bi}")
+                if "items" not in boq or not isinstance(boq["items"], list):
+                    raise ValueError(f"items pada BoQ ke-{bi} project ke-{pi} wajib berupa array.")
+                for ii, item in enumerate(boq["items"], start=1):
+                    require_record_id(item, "items", f"BoQ ke-{bi}, item ke-{ii}")
+                    if "picIds" not in item or not isinstance(item["picIds"], list):
+                        raise ValueError(f"picIds pada item {item['id']} wajib berupa array.")
+                    pic_ids = item["picIds"]
+                    if any(not isinstance(x, str) for x in pic_ids):
+                        raise ValueError(f"picIds pada item {item['id']} harus berupa array string.")
+                    item["picIds"] = list(dict.fromkeys(x.strip() for x in pic_ids if x.strip()))
+
+        for di, doc in enumerate(project["comparison_docs"], start=1):
+            if not isinstance(doc, dict):
+                raise ValueError(f"Dokumen pembanding ke-{di} pada project ke-{pi} tidak valid.")
+
+    payload["team"] = team
+    return payload
+
+
+# ============================================================================
+# PRESOURCING API (MATERIAL & SERVICES ONLY)
+# ============================================================================
 @app.route("/api/presourcing", methods=["GET", "POST"])
 def api_presourcing():
+    # This endpoint contains only Material & Services dashboard data. Leasing APIs
+    # and its separate database are intentionally outside this route.
+    if not session.get("username"):
+        return jsonify({"success": False, "message": "Login diperlukan."}), 401
+    if not has_ms_access(session.get("role")):
+        return jsonify({"success": False, "message": "Akses hanya untuk tim Material & Services."}), 403
+
     if request.method == "GET":
         try:
             with get_db_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-                    cursor.execute("SELECT json_data FROM dashboard_state WHERE data_type = 'team'")
-                    team_row = cursor.fetchone()
-                    team_data = json.loads(team_row["json_data"]) if team_row and team_row["json_data"] else []
-                    return jsonify({"projects": get_projects_relational(cursor), "team": team_data}), 200
-        except Exception as e: 
-            return jsonify({"error": str(e)}), 500
+                    cursor.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
+                    projects = get_projects_relational(cursor)
+                    team = _read_presourcing_team(cursor)
+                    version = _presourcing_state_version(projects, team)
+                    return jsonify({"projects": projects, "team": team, "version": version}), 200
+        except Exception as exc:
+            app.logger.exception("Failed to load Presourcing dashboard state")
+            return jsonify({"success": False, "error": "Gagal memuat data Presourcing."}), 500
 
-    data = request.json or {}
+    payload = request.get_json(silent=True)
+    try:
+        payload = _validate_presourcing_payload(payload)
+    except ValueError as exc:
+        return jsonify({"success": False, "code": "INVALID_PRESOURCING_PAYLOAD", "message": str(exc)}), 400
+
+    base_version = str(payload.get("base_version") or "").strip()
+    if not base_version:
+        return jsonify({
+            "success": False,
+            "code": "PRESOURCING_VERSION_REQUIRED",
+            "message": "Versi data dasar tidak ditemukan. Muat ulang dashboard sebelum menyimpan.",
+        }), 428
+
+    incoming_projects = payload["projects"]
+    incoming_ids = {str(p["id"]).strip() for p in incoming_projects}
+    allow_empty_projects = payload.get("allow_empty_projects") is True
+
     try:
         with get_db_connection() as conn:
-            with conn.cursor() as cursor:
-                # 1. Simpan konfigurasi Tim (Upsert 1 Baris)
-                cursor.execute("INSERT INTO dashboard_state (data_type, json_data) VALUES ('team', %s) ON CONFLICT (data_type) DO UPDATE SET json_data = EXCLUDED.json_data", (json.dumps(data.get("team", [])),))
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                # Serialize full-dashboard saves and prevent concurrent M&S writers from
+                # changing the snapshot between the version check and commit.
+                cursor.execute(
+                    "LOCK TABLE dashboard_state, projects, sows, boqs, items, comparison_docs "
+                    "IN SHARE ROW EXCLUSIVE MODE"
+                )
 
-                incoming_projects = data.get("projects", [])
-                
-                # 2. Persiapan Data Hapus Massal (Bulk Delete)
-                cursor.execute("SELECT id FROM projects")
-                existing_db_ids = {row[0] for row in cursor.fetchall()}
-                incoming_ids = {p["id"] for p in incoming_projects}
-                
-                del_ids = tuple(existing_db_ids - incoming_ids)
-                if del_ids:
-                    # Menghapus parent project otomatis menghapus SOW, BoQ, dll via ON DELETE CASCADE PostgreSQL
-                    cursor.execute("DELETE FROM projects WHERE id IN %s", (del_ids,))
-                    cursor.execute("DELETE FROM request_items WHERE ticket_id IN %s", (del_ids,))
-                    cursor.execute("DELETE FROM requests WHERE ticket_id IN %s", (del_ids,))
+                current_projects = get_projects_relational(cursor)
+                current_team = _read_presourcing_team(cursor)
+                current_version = _presourcing_state_version(current_projects, current_team)
+                if not hmac.compare_digest(base_version, current_version):
+                    return jsonify({
+                        "success": False,
+                        "code": "PRESOURCING_VERSION_CONFLICT",
+                        "message": "Data Presourcing sudah berubah sejak dashboard dibuka. Periksa dan muat ulang data sebelum menyimpan agar perubahan terbaru tidak tertimpa.",
+                    }), 409
 
-                # Hapus project yang diupdate untuk ditimpa ulang (bersih)
-                incoming_tuple = tuple(incoming_ids)
+                existing_ids = {str(p["id"]) for p in current_projects}
+                removed_ids = existing_ids - incoming_ids
+                confirmed_delete_ids = set(payload.get("confirmed_delete_project_ids") or [])
+                if removed_ids != confirmed_delete_ids:
+                    return jsonify({
+                        "success": False,
+                        "code": "PROJECT_DELETION_CONFIRMATION_REQUIRED",
+                        "message": (
+                            f"Snapshot menghilangkan {len(removed_ids)} project. "
+                            "Setiap project yang dihapus harus dikonfirmasi melalui aksi Hapus di dashboard."
+                        ),
+                        "removed_project_count": len(removed_ids),
+                    }), 409
+                if removed_ids and not incoming_projects and not allow_empty_projects:
+                    return jsonify({
+                        "success": False,
+                        "code": "EMPTY_PROJECT_SET_CONFIRMATION_REQUIRED",
+                        "message": "Penghapusan project terakhir memerlukan konfirmasi eksplisit.",
+                    }), 409
+                if removed_ids:
+                    removed_tuple = tuple(sorted(removed_ids))
+                    cursor.execute("DELETE FROM projects WHERE id IN %s", (removed_tuple,))
+                    # Preserve the existing delete-project behavior, but only after the
+                    # caller supplied a current version and explicitly removed these IDs.
+                    cursor.execute("DELETE FROM request_items WHERE ticket_id IN %s", (removed_tuple,))
+                    cursor.execute("DELETE FROM requests WHERE ticket_id IN %s", (removed_tuple,))
+
+                incoming_tuple = tuple(sorted(incoming_ids))
                 if incoming_tuple:
-                    cursor.execute("DELETE FROM projects WHERE id IN %s", (incoming_tuple,))
+                    # Keep project rows/identity stable. Replace only their M&S child
+                    # collections; FK cascades clear BoQ items beneath each deleted SoW.
+                    cursor.execute("DELETE FROM comparison_docs WHERE project_id IN %s", (incoming_tuple,))
+                    cursor.execute("DELETE FROM sows WHERE project_id IN %s", (incoming_tuple,))
 
-                # 3. Penyusunan Array untuk Bulk Insert
                 projects_data, sows_data, boqs_data, items_data, docs_data = [], [], [], [], []
-                
-                for p in incoming_projects:
+                for project in incoming_projects:
                     projects_data.append((
-                        p["id"], p.get("name"), p.get("requestorName"), p.get("requestorDept"), 
-                        p.get("priority"), p.get("status"), p.get("leadId"), p.get("sphMode"), 
-                        p.get("projectSphAwal"), p.get("projectSphFinal"), p.get("createdAt"), 
-                        p.get("closedAt"), p.get("targetRfs"), p.get("pipelineStage"), p.get("progressPct")
+                        project["id"], project.get("name"), project.get("requestorName"), project.get("requestorDept"),
+                        project.get("priority"), project.get("status"), project.get("leadId"), project.get("sphMode"),
+                        project.get("projectSphAwal"), project.get("projectSphFinal"), project.get("createdAt"),
+                        project.get("closedAt"), project.get("targetRfs"), project.get("pipelineStage"), project.get("progressPct"),
                     ))
 
-                    for sow in p.get("sows", []):
-                        sows_data.append((sow["id"], p["id"], sow.get("name")))
+                    for sow in project.get("sows", []):
+                        sows_data.append((sow["id"], project["id"], sow.get("name")))
                         for boq in sow.get("boqs", []):
                             boqs_data.append((boq["id"], sow["id"], boq.get("name")))
-                            for it in boq.get("items", []):
-                                sph_awal_unit, sph_awal_total = resolve_sph_values(it.get("qty"), optional_number(it.get("sphAwalUnit")), it.get("sphAwal"))
-                                sph_final_unit, sph_final_total = resolve_sph_values(it.get("qty"), optional_number(it.get("sphFinalUnit")), it.get("sphFinal"))
-
+                            for item in boq.get("items", []):
+                                sph_awal_unit, sph_awal_total = resolve_sph_values(
+                                    item.get("qty"), optional_number(item.get("sphAwalUnit")), item.get("sphAwal")
+                                )
+                                sph_final_unit, sph_final_total = resolve_sph_values(
+                                    item.get("qty"), optional_number(item.get("sphFinalUnit")), item.get("sphFinal")
+                                )
                                 items_data.append((
-                                    it["id"], boq["id"], it.get("product"), it.get("qty"), it.get("uom"), it.get("vendor"), 
-                                    sph_awal_total, sph_final_total, it.get("notes"), json.dumps(it.get("picIds", [])), 
-                                    it.get("itemNo", ""), it.get("preferredBrand", ""), it.get("deliveryTime", ""), 
-                                    sph_awal_unit, sph_final_unit
+                                    item["id"], boq["id"], item.get("product"), item.get("qty"), item.get("uom"),
+                                    item.get("vendor"), sph_awal_total, sph_final_total, item.get("notes"),
+                                    json.dumps(item.get("picIds", [])), item.get("itemNo", ""), item.get("preferredBrand", ""),
+                                    item.get("deliveryTime", ""), sph_awal_unit, sph_final_unit,
                                 ))
 
-                    for doc in p.get("comparison_docs", []):
-                        docs_data.append((p["id"], doc.get("vendor_name"), doc.get("offered_price"), doc.get("file_path")))
+                    for doc in project.get("comparison_docs", []):
+                        docs_data.append((project["id"], doc.get("vendor_name"), doc.get("offered_price"), doc.get("file_path")))
 
-                # 4. Eksekusi Masif (Hanya 5 Query untuk Seluruh Tabel)
                 if projects_data:
-                    execute_values(cursor, "INSERT INTO projects (id, name, requestor_name, requestor_dept, priority, status, lead_id, sph_mode, project_sph_awal, project_sph_final, created_at, closed_at, target_rfs, pipeline_stage, progress_pct) VALUES %s", projects_data)
-                
+                    execute_values(cursor, """
+                        INSERT INTO projects
+                        (id, name, requestor_name, requestor_dept, priority, status, lead_id, sph_mode,
+                         project_sph_awal, project_sph_final, created_at, closed_at, target_rfs, pipeline_stage, progress_pct)
+                        VALUES %s
+                        ON CONFLICT (id) DO UPDATE SET
+                         name = EXCLUDED.name,
+                         requestor_name = EXCLUDED.requestor_name,
+                         requestor_dept = EXCLUDED.requestor_dept,
+                         priority = EXCLUDED.priority,
+                         status = EXCLUDED.status,
+                         lead_id = EXCLUDED.lead_id,
+                         sph_mode = EXCLUDED.sph_mode,
+                         project_sph_awal = EXCLUDED.project_sph_awal,
+                         project_sph_final = EXCLUDED.project_sph_final,
+                         created_at = EXCLUDED.created_at,
+                         closed_at = EXCLUDED.closed_at,
+                         target_rfs = EXCLUDED.target_rfs,
+                         pipeline_stage = EXCLUDED.pipeline_stage,
+                         progress_pct = EXCLUDED.progress_pct
+                    """, projects_data)
                 if sows_data:
                     execute_values(cursor, "INSERT INTO sows (id, project_id, name) VALUES %s", sows_data)
-                
                 if boqs_data:
                     execute_values(cursor, "INSERT INTO boqs (id, sow_id, name) VALUES %s", boqs_data)
-                
                 if items_data:
-                    execute_values(cursor, "INSERT INTO items (id, boq_id, product, qty, uom, vendor, sph_awal, sph_final, notes, pic_ids, item_no, preferred_brand, delivery_time, sph_awal_unit, sph_final_unit) VALUES %s", items_data)
-                
+                    execute_values(cursor, """
+                        INSERT INTO items
+                        (id, boq_id, product, qty, uom, vendor, sph_awal, sph_final, notes, pic_ids,
+                         item_no, preferred_brand, delivery_time, sph_awal_unit, sph_final_unit)
+                        VALUES %s
+                    """, items_data)
                 if docs_data:
-                    execute_values(cursor, "INSERT INTO comparison_docs (project_id, vendor_name, offered_price, file_path) VALUES %s", docs_data)
+                    execute_values(cursor, """
+                        INSERT INTO comparison_docs (project_id, vendor_name, offered_price, file_path)
+                        VALUES %s
+                    """, docs_data)
 
+                cursor.execute(
+                    "INSERT INTO dashboard_state (data_type, json_data) VALUES ('team', %s) "
+                    "ON CONFLICT (data_type) DO UPDATE SET json_data = EXCLUDED.json_data",
+                    (json.dumps(payload["team"], ensure_ascii=False),),
+                )
+
+                saved_projects = get_projects_relational(cursor)
+                saved_team = _read_presourcing_team(cursor)
+                saved_version = _presourcing_state_version(saved_projects, saved_team)
                 conn.commit()
-        return jsonify({"success": True}), 200
-    except Exception as e: 
-        return jsonify({"error": str(e)}), 500
+
+        return jsonify({"success": True, "version": saved_version}), 200
+    except Exception as exc:
+        app.logger.exception("Failed to save Presourcing dashboard state")
+        return jsonify({"success": False, "message": "Gagal menyimpan data Presourcing. Tidak ada perubahan parsial yang disimpan."}), 500
+
 
 def _build_project_boq_revision_workbook(template_path, items):
     """Build a revision workbook while preserving the template's metadata and layout."""
