@@ -9,13 +9,8 @@ let activeTab = 'overview';
 let openProjectId = null;
 let modal = null; 
 let filters = { priority: 'all', status: 'all' };
-let storageOk = false;
-let isSaving = false;
-let presourcingVersion = null;
-let presourcingConflict = false;
-let saveInFlight = null;
-let saveRequested = false;
-let queuedAllowEmptyProjects = false;
+let storageOk = true;
+let isSaving = false; 
 let dCharts = {}; 
 
 // ============================================================================
@@ -59,117 +54,69 @@ function calculateUiSphTotal(qty, unitPrice) {
 // ============================================================================
 // DATA PERSISTENCE
 // ============================================================================
-async function loadAll() {
-  // Wait for a pending save to settle before replacing local state with a fresh GET.
-  if (saveInFlight) {
-    const saveSucceeded = await saveInFlight;
-    if (!saveSucceeded) return false;
-  }
-  // A conflict requires a deliberate full page reload; do not silently discard
-  // unsaved local edits through an incidental loadAll() call.
-  if (presourcingConflict) return false;
-  try {
-    const response = await fetch(`${API_URL}?t=${Date.now()}`, { cache: 'no-store' });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      throw new Error(data.message || data.error || `Backend returned HTTP ${response.status}`);
+function seedData() {
+  team = ['Budi', 'Sari', 'Andi', 'Rahma', 'Fajar'];
+  projects = [
+    {
+      id: uid('proj'), name: 'Project Backbone Expansion', requestorName: 'Marcel', requestorDept: 'SA G&P',
+      priority: 'High', status: 'ongoing', leadId: 'Andi', sphMode: 'item', projectSphAwal: null, projectSphFinal: null,
+      createdAt: '2026-07-02', closedAt: null, targetRfs: '2026-10-15', pipelineStage: '4 - Negotiation', progressPct: 85, comparison_docs: [],
+      sows: [{ id: uid('sow'), name: 'SoW Core', boqs: [{ id: uid('boq'), name: 'BoQ Utama', items: [{ id: uid('item'), product: 'Router', qty: 1, vendor: '', notes: '', picIds: ['Andi'], sphAwalUnit: 25000000000, sphAwal: 25000000000, sphFinalUnit: null, sphFinal: null }] }] }]
     }
-    if (!Array.isArray(data.projects) || !Array.isArray(data.team) || typeof data.version !== 'string' || !data.version) {
-      throw new Error('Respons backend tidak memiliki projects, team, atau version yang valid.');
-    }
-
-    projects = data.projects;
-    // Keep the established default member list for a new/empty Team configuration,
-    // but do not persist it automatically during page load.
-    team = data.team.length ? data.team : [
-      'Decki Okmal Pratama', 'Ahmad Fauzi', 'Siti Rahma', 'Budi Santoso'
-    ];
-    presourcingVersion = data.version;
-    presourcingConflict = false;
-    storageOk = true;
-  } catch (error) {
-    console.error('Backend error/offline:', error);
-    storageOk = false;
-    // Never replace unavailable server data with demo data. Keep current in-memory
-    // state visible, but saveAll() will refuse writes until a successful reload.
-  }
-  render();
-  return storageOk;
+  ];
 }
 
-async function saveAll(options = {}) {
-  if (!storageOk || !presourcingVersion || presourcingConflict) {
-    const message = 'Data belum tersinkron atau terjadi konflik versi. Muat ulang dashboard dan periksa data server sebelum menyimpan kembali.';
-    console.error(message);
-    alert(message);
-    return false;
-  }
-
-  saveRequested = true;
-  if (options.allowEmptyProjects === true) queuedAllowEmptyProjects = true;
-  if (saveInFlight) return saveInFlight;
-
-  saveInFlight = (async () => {
-    let allSaved = true;
-    isSaving = true;
-    document.body.style.cursor = 'wait';
-
-    try {
-      while (saveRequested) {
-        saveRequested = false;
-        const allowEmptyProjects = queuedAllowEmptyProjects;
-        queuedAllowEmptyProjects = false;
-        const payload = {
-          projects,
-          team,
-          base_version: presourcingVersion,
-          allow_empty_projects: allowEmptyProjects
-        };
-
-        const response = await fetch(API_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-        const result = await response.json().catch(() => ({}));
-
-        if (response.status === 409 || response.status === 428 ||
-            result.code === 'PRESOURCING_VERSION_CONFLICT' ||
-            result.code === 'EMPTY_PROJECT_SET_CONFIRMATION_REQUIRED') {
-          presourcingConflict = true;
-          allSaved = false;
-          saveRequested = false;
-          const message = result.message || 'Data server berubah. Muat ulang dashboard sebelum melanjutkan.';
-          alert(`${message}
-
-Perubahan lokal belum dikirim ulang agar tidak menimpa data terbaru.`);
-          break;
-        }
-        if (!response.ok || !result.success || typeof result.version !== 'string' || !result.version) {
-          throw new Error(result.message || result.error || `Gagal menyimpan (HTTP ${response.status}).`);
-        }
-
-        presourcingVersion = result.version;
-        storageOk = true;
-      }
-    } catch (error) {
-      console.error('Gagal menyimpan data:', error);
-      storageOk = false;
-      presourcingConflict = true;
-      saveRequested = false;
-      queuedAllowEmptyProjects = false;
-      allSaved = false;
-      alert('Penyimpanan gagal atau status respons tidak pasti. Jangan ulangi perubahan sebelum memuat ulang dan memeriksa data server.');
-    } finally {
-      isSaving = false;
-      document.body.style.cursor = 'default';
-      saveInFlight = null;
-      render();
+async function loadAll() {
+  try {
+    const timestamp = new Date().getTime();
+    const response = await fetch(`${API_URL}?t=${timestamp}`, { cache: 'no-store' });
+    if (!response.ok) throw new Error("Gagal terhubung ke Backend");
+    
+    const data = await response.json();
+    projects = data.projects || [];
+    
+    if (data.team && data.team.length > 0) {
+      team = data.team;
+    } else {
+      team = ['Decki Okmal Pratama', 'Ahmad Fauzi', 'Siti Rahma', 'Budi Santoso'];
+      saveAll(); 
     }
-    return allSaved;
-  })();
 
-  return saveInFlight;
+    if (projects.length === 0 && (!data.team || data.team.length === 0)) {
+      seedData();
+      await saveAll();
+    }
+    
+    storageOk = true;
+  } catch(e) {
+    console.error("Backend error/offline:", e);
+    storageOk = false;
+    if (projects.length === 0) seedData();
+  }
+  render();
+}
+
+async function saveAll() {
+  if (isSaving) return;
+  isSaving = true;
+  document.body.style.cursor = 'wait';
+
+  try {
+    const response = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projects, team })
+    });
+    if (!response.ok) throw new Error("Gagal menyimpan ke Backend");
+    storageOk = true;
+  } catch(e) {
+    console.error("Gagal menyimpan data:", e);
+    storageOk = false; 
+  } finally {
+    isSaving = false; 
+    document.body.style.cursor = 'default';
+  }
+  render(); 
 }
 
 // ============================================================================
@@ -1138,7 +1085,7 @@ function wireEvents() {
       e.stopPropagation(); 
       if (confirm('Hapus project ini?')) { 
         projects = projects.filter(p => p.id !== el.dataset.deleteProject); 
-        await saveAll({ allowEmptyProjects: projects.length === 0 });
+        await saveAll(); 
         render(); 
       } 
     };
