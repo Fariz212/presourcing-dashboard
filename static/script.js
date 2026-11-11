@@ -1110,7 +1110,7 @@ function downloadRevisionTemplate(projectId) {
 async function triggerRevisiBoq(projectId) {
   const fileInput = document.createElement('input');
   fileInput.type = 'file';
-  fileInput.accept = '.xlsx, .xls';
+  fileInput.accept = '.xlsx';
   fileInput.style.display = 'none';
   document.body.appendChild(fileInput);
 
@@ -1118,6 +1118,10 @@ async function triggerRevisiBoq(projectId) {
     const file = fileInput.files[0];
     document.body.removeChild(fileInput);
     if (!file) return;
+    if (!file.name.toLowerCase().endsWith('.xlsx')) {
+      alert('File revisi harus berformat .xlsx. Download ulang template dari project.');
+      return;
+    }
 
     const formData = new FormData();
     formData.append('file', file);
@@ -1170,6 +1174,12 @@ function showRevisionPreview(projectId, file, data) {
       ${issues.length > 8 ? `<div style="margin-top:4px; color:#A16207;">+ ${issues.length - 8} issue lainnya</div>` : ''}
     </div>` : '';
 
+  const deletionNotice = removed.length ? `
+    <div style="margin-bottom:12px; padding:10px 12px; border:1px solid #FCA5A5; border-radius:6px; background:#FEF2F2; color:#991B1B; font-size:9.5px;">
+      <strong>Perhatian: ${removed.length} item existing akan dihapus.</strong>
+      <div style="margin-top:3px;">Penghapusan hanya akan dilakukan setelah dikonfirmasi secara eksplisit.</div>
+    </div>` : '';
+
   const addedHtml = added.length ? added.map(item => `
     <div class="revision-row added">
       <div class="revision-mark">+</div>
@@ -1216,6 +1226,7 @@ function showRevisionPreview(projectId, file, data) {
       </div>
       <div class="modal-body">
         ${issueHtml}
+        ${deletionNotice}
         <div style="padding:12px; background:#F8FAFC; border:1px solid #E2E8F0; border-radius:7px; margin-bottom:14px;">
           <div style="font-size:10px; color:#64748B; margin-bottom:8px;">Perubahan yang akan diterapkan</div>
           <div style="display:grid; grid-template-columns: repeat(4,1fr); gap:7px;">
@@ -1232,7 +1243,7 @@ function showRevisionPreview(projectId, file, data) {
       <div class="modal-ft">
         <button class="btn-ghost" type="button" onclick="closeRevisionPreview()">Batal</button>
         <button class="btn-primary" id="btn-confirm-revision" type="button" ${canApply ? '' : 'disabled'} onclick="confirmRevisionBoq('${escAttr(projectId)}')">
-          ${canApply ? 'Confirm & Apply Revision' : 'Perbaiki Error Terlebih Dahulu'}
+          ${canApply ? (removed.length ? `Confirm & Apply (${removed.length} deletions)` : 'Confirm & Apply Revision') : 'Perbaiki Error Terlebih Dahulu'}
         </button>
       </div>
     </div>
@@ -1240,21 +1251,40 @@ function showRevisionPreview(projectId, file, data) {
 
   document.body.appendChild(overlay);
   window.pendingRevisionFile = file;
+  window.pendingRevisionRemovedCount = removed.length;
+  window.pendingRevisionSnapshotToken = data.snapshot_token || '';
+  window.pendingRevisionWorkbookToken = data.workbook_token || '';
 }
 
 function closeRevisionPreview() {
   const modal = document.getElementById('revision-preview-modal');
   if (modal) modal.remove();
   window.pendingRevisionFile = null;
+  window.pendingRevisionRemovedCount = 0;
+  window.pendingRevisionSnapshotToken = '';
+  window.pendingRevisionWorkbookToken = '';
 }
 
 async function confirmRevisionBoq(projectId) {
   const file = window.pendingRevisionFile;
   if (!file) { alert('File revision tidak ditemukan.'); return; }
 
+  const removedCount = Number(window.pendingRevisionRemovedCount || 0);
+  let confirmDeletions = false;
+  if (removedCount > 0) {
+    confirmDeletions = window.confirm(
+      `Revisi ini akan menghapus ${removedCount} item existing dari project.\n\n` +
+      'Pastikan daftar Removed pada preview sudah benar. Lanjutkan penghapusan?'
+    );
+    if (!confirmDeletions) return;
+  }
+
   const formData = new FormData();
   formData.append('file', file);
   formData.append('ticket_id', projectId);
+  formData.append('confirm_deletions', confirmDeletions ? '1' : '0');
+  formData.append('snapshot_token', window.pendingRevisionSnapshotToken || '');
+  formData.append('workbook_token', window.pendingRevisionWorkbookToken || '');
 
   const btn = document.getElementById('btn-confirm-revision');
   if (btn) { btn.disabled = true; btn.innerText = 'Applying revision...'; }
@@ -1276,7 +1306,10 @@ async function confirmRevisionBoq(projectId) {
     console.error('Apply revision error:', error);
     alert('Terjadi kesalahan saat menerapkan revisi.');
   } finally {
-    if (btn) { btn.disabled = false; btn.innerText = 'Confirm & Apply Revision'; }
+    if (btn) {
+      btn.disabled = false;
+      btn.innerText = removedCount > 0 ? `Confirm & Apply (${removedCount} deletions)` : 'Confirm & Apply Revision';
+    }
   }
 }
 

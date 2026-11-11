@@ -112,6 +112,26 @@ BOQ_DERIVED_COLUMNS = ["Total SPH Awal", "Total SPH Final"]
 BOQ_SYSTEM_COLUMN = "Item ID (System)"
 BOQ_TEMPLATE_FILENAME = "Template_BoQ_Presourcing.xlsx"
 
+# The master workbook is the source of truth for this geometry:
+# row 1-2 = title/instructions, row 4 = headers, row 5 onward = BoQ rows.
+BOQ_HEADER_ROW = 4
+BOQ_DATA_START_ROW = 5
+BOQ_LAST_COLUMN = 14
+BOQ_TEMPLATE_TABLE_NAME = "BoQRequestTable"
+BOQ_TEMPLATE_HEADERS = [
+    "Item No", "Deskripsi Item", "Qty", "UoM", "Preferred Brand",
+    "Delivery Time (RFS)", "Scope of Work (Opsional)",
+    "Bill of Quantity (Opsional)", "Vendor (Opsional)",
+    "SPH Awal / Unit", "Total SPH Awal", "SPH Final / Unit",
+    "Total SPH Final", "Item ID (System)",
+]
+BOQ_INPUT_COLUMNS = [
+    "Item No", "Deskripsi Item", "Qty", "UoM", "Preferred Brand",
+    "Delivery Time (RFS)", "Scope of Work (Opsional)",
+    "Bill of Quantity (Opsional)", "Vendor (Opsional)",
+    "SPH Awal / Unit", "SPH Final / Unit", "Item ID (System)",
+]
+
 # ============================================================================
 # EXCEL HELPERS
 # ============================================================================
@@ -142,9 +162,11 @@ def _excel_qty(value, default=0):
     except (TypeError, ValueError): 
         raise ValueError("Qty harus berupa angka.")
     
-    if number < 0: 
+    if not math.isfinite(number):
+        raise ValueError("Qty harus berupa angka finite yang valid.")
+    if number < 0:
         raise ValueError("Qty tidak boleh negatif.")
-    
+
     return number
 
 def optional_number(value):
@@ -168,6 +190,8 @@ def optional_number(value):
     except (TypeError, ValueError):
         raise ValueError(f"Nilai harga harus berupa angka (diterima: '{text}').")
 
+    if not math.isfinite(number):
+        raise ValueError("Harga harus berupa angka finite yang valid.")
     if number < 0:
         raise ValueError("Harga tidak boleh negatif.")
 
@@ -206,91 +230,144 @@ def resolve_sph_values(qty, unit_price, legacy_total=None):
     return (None, optional_number(legacy_total))
 
 def _read_boq_excel(file, require_system_id=False):
-    file.stream.seek(0)
-    df = pd.read_excel(file, sheet_name=0, header=None)
-    
-    header_row_idx = 0
-    for idx, row in df.iterrows():
-        row_str_values = [str(val).strip() for val in row.values]
-        if "Deskripsi Item" in row_str_values or "Item No" in row_str_values:
-            header_row_idx = idx
-            break
+    """Read a BoQ workbook by its real header row and preserve physical Excel row numbers."""
+    try:
+        file.stream.seek(0)
+        df = pd.read_excel(file, sheet_name=0, header=None, dtype=object)
+    except Exception as exc:
+        raise ValueError("File Excel tidak dapat dibaca. Gunakan workbook .xlsx dari template Presourcing.") from exc
 
-    df.columns = df.iloc[header_row_idx]
-    df = df.iloc[header_row_idx + 1:].reset_index(drop=True)
+    required_headers = set(BOQ_CORE_COLUMNS + BOQ_DERIVED_COLUMNS)
+    if require_system_id:
+        required_headers.add(BOQ_SYSTEM_COLUMN)
+
+    header_row_idx = None
+    header_values = None
+    partial_header_missing = None
+
+    for idx, row in df.iterrows():
+        values = [_excel_text(value) for value in row.values]
+        non_empty = [value for value in values if value]
+        if not non_empty:
+            continue
+        value_set = set(non_empty)
+        if required_headers.issubset(value_set):
+            header_row_idx = int(idx)
+            header_values = values
+            break
+        # Remember the closest candidate so the eventual error is actionable.
+        if "Deskripsi Item" in value_set or "Item No" in value_set:
+            missing = sorted(required_headers - value_set)
+            if partial_header_missing is None or len(missing) < len(partial_header_missing):
+                partial_header_missing = missing
+
+    if header_row_idx is None:
+        if partial_header_missing:
+            raise ValueError(
+                "Header BoQ tidak lengkap. Kolom yang belum ditemukan: "
+                + ", ".join(partial_header_missing)
+                + ". Download ulang template revisi dari project."
+            )
+        raise ValueError(
+            f"Header BoQ tidak ditemukan. Header harus berada pada row {BOQ_HEADER_ROW} "
+            "dan file harus menggunakan template Presourcing yang benar."
+        )
+
+    # Duplicate column labels make pandas row lookups ambiguous; reject them explicitly.
+    seen_headers = set()
+    duplicate_headers = []
+    for header in header_values:
+        if not header:
+            continue
+        if header in seen_headers and header not in duplicate_headers:
+            duplicate_headers.append(header)
+        seen_headers.add(header)
+    if duplicate_headers:
+        raise ValueError("Nama kolom Excel duplikat: " + ", ".join(duplicate_headers))
+
+    df = df.iloc[header_row_idx + 1:].copy()
+    df.columns = header_values
+    df = df.loc[:, [bool(column) for column in df.columns]]
     df.columns = [_excel_text(col) for col in df.columns]
 
-    required_columns = BOQ_CORE_COLUMNS + BOQ_DERIVED_COLUMNS
-    missing = [col for col in required_columns if col not in df.columns]
-    if missing:
-        raise ValueError("Format template tidak sesuai. Kolom wajib tidak ditemukan: " + ", ".join(missing))
-
-    if require_system_id and BOQ_SYSTEM_COLUMN not in df.columns:
-        raise ValueError(f"Kolom '{BOQ_SYSTEM_COLUMN}' wajib ada untuk file revisi.")
+    # The DataFrame index now equals the actual 1-based Excel row number.
+    first_data_excel_row = header_row_idx + 2
+    df.index = range(first_data_excel_row, first_data_excel_row + len(df))
 
     if BOQ_SYSTEM_COLUMN not in df.columns:
+        if require_system_id:
+            raise ValueError(f"Kolom '{BOQ_SYSTEM_COLUMN}' wajib ada untuk file revisi.")
         df[BOQ_SYSTEM_COLUMN] = ""
 
     for col in BOQ_OPTIONAL_COLUMNS:
-        if col not in df.columns: 
+        if col not in df.columns:
             df[col] = ""
 
-    for col in BOQ_DERIVED_COLUMNS:
-        if col not in df.columns: 
-            df[col] = ""
+    # Derived columns are required as headers for template compatibility, but values
+    # are recalculated by the application; formula cached values are never trusted.
+    return df.where(pd.notna(df), "")
 
-    return df.fillna("")
 
 def _parse_boq_rows(df):
+    """Parse BoQ rows; `df.index` contains the physical Excel row number."""
     rows = []
     issues = []
     seen_ids = {}
 
     for excel_idx, row in df.iterrows():
-        excel_row = excel_idx + 2
+        excel_row = int(excel_idx)
         description = _excel_text(row.get("Deskripsi Item"))
-        
-        if not description: 
+        item_id = _excel_text(row.get(BOQ_SYSTEM_COLUMN))
+
+        # Ignore truly empty template rows, but never silently discard partially
+        # populated rows (especially rows carrying a system Item ID).
+        has_user_input = any(_excel_text(row.get(column)) for column in BOQ_INPUT_COLUMNS)
+        if not description:
+            if has_user_input:
+                issues.append({
+                    "row": excel_row,
+                    "severity": "error",
+                    "message": "Deskripsi Item wajib diisi pada baris yang memiliki input atau Item ID.",
+                })
             continue
 
-        item_id = _excel_text(row.get(BOQ_SYSTEM_COLUMN))
         if item_id:
             if item_id in seen_ids:
                 issues.append({"row": excel_row, "severity": "error", "message": f"Item ID duplikat dengan row {seen_ids[item_id]}."})
             else:
                 seen_ids[item_id] = excel_row
 
+        item_no = _excel_text(row.get("Item No"))
+
         qty_raw = row.get("Qty", "")
         qty = 0
         if _excel_text(qty_raw):
-            try: 
+            try:
                 qty = _excel_qty(qty_raw)
-            except ValueError as exc: 
+            except ValueError as exc:
                 issues.append({"row": excel_row, "severity": "error", "message": str(exc)})
         else:
             issues.append({"row": excel_row, "severity": "warning", "message": "Qty kosong; sistem menyimpan Qty = 0."})
 
         uom = _excel_text(row.get("UoM"))
-        if not uom: 
+        if not uom:
             issues.append({"row": excel_row, "severity": "warning", "message": "UoM kosong."})
 
         sph_awal_unit = None
         sph_final_unit = None
-
-        try: 
+        try:
             sph_awal_unit = optional_number(row.get("SPH Awal / Unit"))
-        except ValueError as exc: 
+        except ValueError as exc:
             issues.append({"row": excel_row, "severity": "error", "message": f"SPH Awal / Unit: {exc}"})
-
-        try: 
+        try:
             sph_final_unit = optional_number(row.get("SPH Final / Unit"))
-        except ValueError as exc: 
+        except ValueError as exc:
             issues.append({"row": excel_row, "severity": "error", "message": f"SPH Final / Unit: {exc}"})
 
         rows.append({
             "excelRow": excel_row,
             "id": item_id,
-            "itemNo": _excel_text(row.get("Item No")),
+            "itemNo": item_no,
             "product": description,
             "qty": qty,
             "uom": uom,
@@ -302,11 +379,11 @@ def _parse_boq_rows(df):
             "sphAwalUnit": sph_awal_unit,
             "sphAwalTotal": calculate_sph_total(qty, sph_awal_unit),
             "sphFinalUnit": sph_final_unit,
-            "sphFinalTotal": calculate_sph_total(qty, sph_final_unit)
+            "sphFinalTotal": calculate_sph_total(qty, sph_final_unit),
         })
 
     for idx, item in enumerate(rows, start=1):
-        if not item["itemNo"]: 
+        if not item["itemNo"]:
             item["itemNo"] = str(idx)
 
     return rows, issues
@@ -723,11 +800,9 @@ def upload_boq():
                 issues.append({"row": item["excelRow"], "severity": "error", "message": f"'{BOQ_SYSTEM_COLUMN}' harus kosong untuk Initial Request."})
         
         errors = [x for x in issues if x["severity"] == "error"]
-        if errors: 
-            with get_db_connection() as conn:
-                with conn.cursor() as cursor:
-                    cursor.execute("DELETE FROM requests WHERE ticket_id = %s", (ticket_id,))
-                    conn.commit()
+        if errors:
+            # Invalid Excel must never delete the already-created request record.
+            # No request_items have been modified at this point.
             return jsonify({"success": False, "message": "Excel memiliki error. Perbaiki file terlebih dahulu.", "issues": issues[:50]}), 400
 
         with get_db_connection() as conn:
@@ -745,11 +820,10 @@ def upload_boq():
             
         return jsonify({"success": True, "message": "File BoQ berhasil diunggah.", "summary": {"items": len(rows), "warnings": sum(1 for x in issues if x["severity"] == "warning")}}), 200
         
-    except Exception as e: 
-        with get_db_connection() as conn:
-            with conn.cursor() as cursor:
-                cursor.execute("DELETE FROM requests WHERE ticket_id = %s", (ticket_id,))
-                conn.commit()
+    except Exception as e:
+        # The request header is independent of this Excel upload and must remain
+        # available for correction/retry. The upload transaction rolls back itself.
+        app.logger.exception("Initial request BoQ upload failed")
         return jsonify({"success": False, "message": str(e)}), 400
 
 @app.route("/api/request_items/<ticket_id>", methods=["GET"])
@@ -908,79 +982,155 @@ def api_presourcing():
     except Exception as e: 
         return jsonify({"error": str(e)}), 500
 
+def _build_project_boq_revision_workbook(template_path, items):
+    """Build a revision workbook while preserving the template's metadata and layout."""
+    wb = load_workbook(template_path)
+    if "BoQ Request" not in wb.sheetnames:
+        raise ValueError("Sheet 'BoQ Request' tidak ditemukan pada template master.")
+    ws = wb["BoQ Request"]
+
+    actual_headers = [_excel_text(ws.cell(BOQ_HEADER_ROW, col).value) for col in range(1, BOQ_LAST_COLUMN + 1)]
+    if actual_headers != BOQ_TEMPLATE_HEADERS:
+        raise ValueError(
+            f"Struktur header template tidak sesuai. Header harus berada di row {BOQ_HEADER_ROW} "
+            "dengan 14 kolom BoQ standar."
+        )
+
+    if BOQ_TEMPLATE_TABLE_NAME not in ws.tables:
+        raise ValueError(f"Excel Table '{BOQ_TEMPLATE_TABLE_NAME}' tidak ditemukan pada template master.")
+    table = ws.tables[BOQ_TEMPLATE_TABLE_NAME]
+    if not table.ref.startswith(f"A{BOQ_HEADER_ROW}:"):
+        raise ValueError(f"Range Excel Table harus dimulai dari A{BOQ_HEADER_ROW}.")
+
+    # Keep the template's prepared 100-row input area, extending it when a project
+    # contains more items than the master workbook's current capacity.
+    table_min_col, table_min_row, table_max_col, table_max_row = __import__(
+        "openpyxl.utils.cell", fromlist=["range_boundaries"]
+    ).range_boundaries(table.ref)
+    if table_min_col != 1 or table_min_row != BOQ_HEADER_ROW or table_max_col != BOQ_LAST_COLUMN:
+        raise ValueError("Range BoQRequestTable tidak sesuai dengan struktur A4:N104.")
+
+    last_item_row = BOQ_DATA_START_ROW + len(items) - 1 if items else BOQ_DATA_START_ROW - 1
+    output_last_row = max(ws.max_row, table_max_row, last_item_row)
+    style_source_row = BOQ_DATA_START_ROW
+
+    # Extend row formatting only when item count exceeds preformatted template rows.
+    for excel_row in range(ws.max_row + 1, output_last_row + 1):
+        for col in range(1, BOQ_LAST_COLUMN + 1):
+            source = ws.cell(style_source_row, col)
+            target = ws.cell(excel_row, col)
+            if not isinstance(source, MergedCell) and not isinstance(target, MergedCell):
+                if source.has_style:
+                    target._style = copy(source._style)
+                if source.number_format:
+                    target.number_format = source.number_format
+        source_height = ws.row_dimensions[style_source_row].height
+        if source_height is not None:
+            ws.row_dimensions[excel_row].height = source_height
+
+    # Clear only the data region. Header, title, explanatory text, table, and guide
+    # sheet remain untouched. Formulas are then restored for the complete input area.
+    for excel_row in range(BOQ_DATA_START_ROW, output_last_row + 1):
+        for col in range(1, BOQ_LAST_COLUMN + 1):
+            cell = ws.cell(excel_row, col)
+            if not isinstance(cell, MergedCell):
+                cell.value = None
+
+        ws.cell(excel_row, 11).value = f'=IF(OR(C{excel_row}="",J{excel_row}=""),"",C{excel_row}*J{excel_row})'
+        ws.cell(excel_row, 13).value = f'=IF(OR(C{excel_row}="",L{excel_row}=""),"",C{excel_row}*L{excel_row})'
+
+    for excel_row, item in enumerate(items, start=BOQ_DATA_START_ROW):
+        awal_unit = item.get("sph_awal_unit")
+        if awal_unit is None:
+            awal_unit = derive_unit_price(item.get("qty"), item.get("sph_awal"))
+        final_unit = item.get("sph_final_unit")
+        if final_unit is None:
+            final_unit = derive_unit_price(item.get("qty"), item.get("sph_final"))
+
+        values = {
+            1: item.get("item_no", ""),
+            2: item.get("product", ""),
+            3: item.get("qty", 0),
+            4: item.get("uom", ""),
+            5: item.get("preferred_brand", ""),
+            6: item.get("delivery_time", ""),
+            7: item.get("sow_name", ""),
+            8: item.get("boq_name", ""),
+            9: item.get("vendor", ""),
+            10: awal_unit,
+            12: final_unit,
+            14: item.get("item_id", ""),
+        }
+
+        for col, value in values.items():
+            cell = ws.cell(excel_row, col)
+            if isinstance(cell, MergedCell):
+                continue
+            if col == 6 and value:
+                if isinstance(value, datetime):
+                    cell.value = value.date()
+                    cell.number_format = "yyyy-mm-dd"
+                else:
+                    try:
+                        cell.value = datetime.strptime(str(value), "%Y-%m-%d").date()
+                        cell.number_format = "yyyy-mm-dd"
+                    except (TypeError, ValueError):
+                        cell.value = value
+            else:
+                cell.value = value
+
+    table.ref = f"A{BOQ_HEADER_ROW}:N{output_last_row}"
+    if getattr(table, "autoFilter", None) is not None:
+        table.autoFilter.ref = table.ref
+
+    # Ask Excel/LibreOffice to recalculate formula cells when the workbook is opened.
+    if getattr(wb, "calculation", None) is not None:
+        wb.calculation.calcMode = "auto"
+        wb.calculation.fullCalcOnLoad = True
+        wb.calculation.forceFullCalc = True
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return output
+
+
 @app.route("/api/projects/<project_id>/download_boq_template", methods=["GET"])
 def download_project_boq_template(project_id):
-    if "username" not in session: 
-        return jsonify({"success": False, "message": "Akses ditolak. Silakan login."}), 403
+    if "username" not in session or not has_ms_access(session.get("role")):
+        return jsonify({"success": False, "message": "Akses ditolak. Silakan login sebagai tim Material & Services."}), 403
     try:
         template_path = os.path.join(app.static_folder, BOQ_TEMPLATE_FILENAME)
-        if not os.path.isfile(template_path): 
+        if not os.path.isfile(template_path):
             return jsonify({"success": False, "message": "Template BoQ tidak ditemukan."}), 404
 
         with get_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-                cursor.execute("SELECT i.item_no, i.product, i.qty, i.uom, i.preferred_brand, i.delivery_time, i.vendor, i.sph_awal, i.sph_final, i.sph_awal_unit, i.sph_final_unit, i.id AS item_id, s.name AS sow_name, b.name AS boq_name FROM items i JOIN boqs b ON i.boq_id = b.id JOIN sows s ON b.sow_id = s.id WHERE s.project_id = %s ORDER BY s.name, b.name, i.item_no", (project_id,))
+                cursor.execute("SELECT id FROM projects WHERE id = %s", (project_id,))
+                if not cursor.fetchone():
+                    return jsonify({"success": False, "message": "Project tidak ditemukan."}), 404
+
+                cursor.execute(
+                    "SELECT i.item_no, i.product, i.qty, i.uom, i.preferred_brand, i.delivery_time, "
+                    "i.vendor, i.sph_awal, i.sph_final, i.sph_awal_unit, i.sph_final_unit, "
+                    "i.id AS item_id, s.name AS sow_name, b.name AS boq_name "
+                    "FROM items i JOIN boqs b ON i.boq_id = b.id JOIN sows s ON b.sow_id = s.id "
+                    "WHERE s.project_id = %s ORDER BY s.name, b.name, i.item_no",
+                    (project_id,),
+                )
                 items = [dict(row) for row in cursor.fetchall()]
 
-        wb = load_workbook(template_path)
-        ws = wb["BoQ Request"]
-        
-        for row in ws.iter_rows(min_row=2, max_row=ws.max_row, max_col=14):
-            for cell in row: 
-                if not isinstance(cell, MergedCell):
-                    cell.value = None
-
-        style_row = min(51, ws.max_row)
-
-        for excel_row, item in enumerate(items, start=2):
-            awal_unit = item.get("sph_awal_unit") if item.get("sph_awal_unit") is not None else derive_unit_price(item.get("qty"), item.get("sph_awal"))
-            final_unit = item.get("sph_final_unit") if item.get("sph_final_unit") is not None else derive_unit_price(item.get("qty"), item.get("sph_final"))
-
-            values = {
-                1: item.get("item_no", ""), 2: item.get("product", ""), 3: item.get("qty", 0), 4: item.get("uom", ""), 
-                5: item.get("preferred_brand", ""), 6: item.get("delivery_time", ""), 7: item.get("sow_name", ""), 
-                8: item.get("boq_name", ""), 9: item.get("vendor", ""), 10: awal_unit, 12: final_unit, 14: item.get("item_id", "")
-            }
-
-            if excel_row > style_row:
-                for col in range(1, 15):
-                    source, target = ws.cell(style_row, col), ws.cell(excel_row, col)
-                    if not isinstance(source, MergedCell) and not isinstance(target, MergedCell):
-                        if source.has_style: 
-                            target._style = copy(source._style)
-                        target.number_format = source.number_format
-
-            for col, value in values.items():
-                cell = ws.cell(excel_row, col)
-                if not isinstance(cell, MergedCell):
-                    if col == 6 and value:
-                        try:
-                            cell.value = datetime.strptime(str(value), "%Y-%m-%d").date()
-                            cell.number_format = "yyyy-mm-dd"
-                        except ValueError: 
-                            cell.value = value
-                    else: 
-                        cell.value = value
-
-            formula_cell_k = ws.cell(excel_row, 11)
-            formula_cell_m = ws.cell(excel_row, 13)
-            if not isinstance(formula_cell_k, MergedCell):
-                formula_cell_k.value = f'=IF(OR(C{excel_row}="",J{excel_row}=""),"",C{excel_row}*J{excel_row})'
-            if not isinstance(formula_cell_m, MergedCell):
-                formula_cell_m.value = f'=IF(OR(C{excel_row}="",L{excel_row}=""),"",C{excel_row}*L{excel_row})'
-
-        if "BoQInputTable" in ws.tables: 
-            ws.tables["BoQInputTable"].ref = f"A1:N{max(2, len(items) + 1)}"
-
-        output = io.BytesIO()
-        wb.save(output)
-        output.seek(0)
-        return send_file(output, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", as_attachment=True, download_name=f"BoQ_Revisi_{project_id}.xlsx")
-    
-    except Exception as e: 
-        import traceback
-        traceback.print_exc()
-        return jsonify({"success": False, "message": str(e)}), 500
+        output = _build_project_boq_revision_workbook(template_path, items)
+        safe_project_id = str(project_id).replace("/", "_").replace("\\", "_")
+        return send_file(
+            output,
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            as_attachment=True,
+            download_name=f"BoQ_Revisi_{safe_project_id}.xlsx",
+        )
+    except Exception as exc:
+        app.logger.exception("Failed to generate project BoQ revision workbook")
+        return jsonify({"success": False, "message": str(exc)}), 500
 
 @app.route("/api/projects/<project_id>", methods=["DELETE"])
 def delete_project(project_id):
@@ -1277,7 +1427,7 @@ def preview_project_import_boq():
             "success": True, 
             "data": {
                 "summary": {
-                    "rows": len(df), "items": total_items, "sows": len(result_sows), 
+                    "rows": len(rows), "items": total_items, "sows": len(result_sows), 
                     "boqs": total_boqs, "errors": errors, "warnings": warnings
                 }, 
                 "issues": issues[:50], 
@@ -1288,141 +1438,268 @@ def preview_project_import_boq():
     except Exception as e: 
         return jsonify({"success": False, "message": str(e)}), 400
 
-def _revision_items_for_project(cursor, ticket_id):
-    cursor.execute("SELECT i.*, b.name AS boq_name, s.name AS sow_name FROM items i JOIN boqs b ON i.boq_id = b.id JOIN sows s ON b.sow_id = s.id WHERE s.project_id = %s", (ticket_id,))
+def _revision_items_for_project(cursor, ticket_id, for_update=False):
+    query = (
+        "SELECT i.*, b.name AS boq_name, s.name AS sow_name "
+        "FROM items i JOIN boqs b ON i.boq_id = b.id JOIN sows s ON b.sow_id = s.id "
+        "WHERE s.project_id = %s"
+    )
+    if for_update:
+        query += " FOR UPDATE OF i"
+    cursor.execute(query, (ticket_id,))
     return [dict(row) for row in cursor.fetchall()]
+
+
+def _boq_workbook_fingerprint(upload):
+    """Return a content fingerprint and rewind the uploaded workbook stream."""
+    upload.stream.seek(0)
+    digest = hashlib.sha256()
+    for chunk in iter(lambda: upload.stream.read(1024 * 1024), b""):
+        digest.update(chunk)
+    upload.stream.seek(0)
+    return digest.hexdigest()
+
+
+def _revision_snapshot_token(ticket_id, existing_rows):
+    """Fingerprint the project BoQ state so commit must match the reviewed preview."""
+    snapshot_fields = (
+        "id", "boq_id", "product", "qty", "uom", "vendor", "item_no",
+        "preferred_brand", "delivery_time", "sph_awal", "sph_final",
+        "sph_awal_unit", "sph_final_unit", "sow_name", "boq_name",
+    )
+    snapshot_rows = []
+    for row in sorted(existing_rows, key=lambda item: str(item.get("id") or "")):
+        snapshot_rows.append({key: _excel_text(row.get(key)) for key in snapshot_fields})
+    payload = json.dumps(
+        {"project_id": str(ticket_id), "items": snapshot_rows},
+        ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _analyze_boq_revision(incoming, parse_issues, existing_rows):
+    """Single source of truth for preview and commit validation/diff calculation."""
+    existing = {
+        str(row["id"]).strip(): row
+        for row in existing_rows
+        if row.get("id") is not None and str(row.get("id")).strip()
+    }
+    issues = list(parse_issues)
+    seen_ids = set()
+    incoming_existing_ids = set()
+
+    if not incoming:
+        issues.append({"row": "-", "severity": "error", "message": "Tidak ada item BoQ yang dapat diproses. File kosong tidak boleh menghapus seluruh item project."})
+
+    for item in incoming:
+        item_id = str(item.get("id") or "").strip()
+        if not item_id:
+            continue
+        if item_id in seen_ids:
+            # Normally reported by _parse_boq_rows; keep this helper safe if called independently.
+            if not any(x.get("row") == item["excelRow"] and "Item ID duplikat" in x.get("message", "") for x in issues):
+                issues.append({"row": item["excelRow"], "severity": "error", "message": f"Item ID duplikat: {item_id}."})
+        seen_ids.add(item_id)
+        if item_id not in existing:
+            issues.append({"row": item["excelRow"], "severity": "error", "message": f"Item ID '{item_id}' tidak ditemukan di project."})
+        else:
+            incoming_existing_ids.add(item_id)
+
+    # Guard against a malformed workbook that has lost every existing system ID.
+    # A revision must retain at least one existing ID when the project already has items.
+    if existing and incoming and not incoming_existing_ids:
+        issues.append({
+            "row": "-",
+            "severity": "error",
+            "message": "Semua Item ID existing tidak ditemukan. Untuk mencegah penghapusan seluruh BoQ akibat format Excel yang rusak, revisi diblokir. Download ulang template dari project.",
+        })
+
+    added, updated, unchanged = [], [], []
+
+    def norm(value, is_number=False):
+        if is_number:
+            if value is None or value == "":
+                return None
+            try:
+                number = float(value)
+                return number if math.isfinite(number) else None
+            except (TypeError, ValueError):
+                return None
+        return _excel_text(value).lower()
+
+    for item in incoming:
+        item_id = str(item.get("id") or "").strip()
+        if not item_id:
+            added.append({
+                "description": item["product"], "qty": item["qty"], "uom": item["uom"],
+                "vendor": item["vendor"], "sphAwalUnit": item["sphAwalUnit"],
+                "sphFinalUnit": item["sphFinalUnit"],
+            })
+            continue
+
+        old = existing.get(item_id)
+        if not old:
+            continue
+
+        changes = {}
+        comparisons = [
+            ("Item No", old.get("item_no"), item["itemNo"], False),
+            ("Deskripsi Item", old.get("product"), item["product"], False),
+            ("Qty", old.get("qty"), item["qty"], True),
+            ("UoM", old.get("uom"), item["uom"], False),
+            ("Preferred Brand", old.get("preferred_brand"), item["preferredBrand"], False),
+            ("Delivery Time (RFS)", old.get("delivery_time"), item["deliveryTime"], False),
+            ("Scope of Work", old.get("sow_name"), item["sowName"], False),
+            ("Bill of Quantity", old.get("boq_name"), item["boqName"], False),
+            ("Vendor", old.get("vendor"), item["vendor"], False),
+            ("SPH Awal / Unit", old.get("sph_awal_unit"), item["sphAwalUnit"], True),
+            ("SPH Final / Unit", old.get("sph_final_unit"), item["sphFinalUnit"], True),
+        ]
+        for label, old_value, new_value, is_number in comparisons:
+            if norm(old_value, is_number) != norm(new_value, is_number):
+                changes[label] = [_excel_text(old_value), _excel_text(new_value)]
+
+        if changes:
+            updated.append({
+                "id": item_id, "description": item["product"], "qty": item["qty"],
+                "uom": item["uom"], "vendor": item["vendor"], "changes": changes,
+            })
+        else:
+            unchanged.append({"id": item_id, "description": item["product"]})
+
+    removed = [
+        {"id": item_id, "description": row.get("product"), "itemNo": row.get("item_no", "")}
+        for item_id, row in existing.items()
+        if item_id not in incoming_existing_ids
+    ]
+
+    return {
+        "existing": existing,
+        "issues": issues,
+        "incoming_existing_ids": incoming_existing_ids,
+        "added": added,
+        "updated": updated,
+        "removed": removed,
+        "unchanged": unchanged,
+    }
+
 
 @app.route("/api/revisi_boq/preview", methods=["POST"])
 def preview_revisi_boq():
-    ticket_id = request.form.get("ticket_id")
-    if "file" not in request.files or not ticket_id: 
+    if "username" not in session or not has_ms_access(session.get("role")):
+        return jsonify({"success": False, "message": "Akses ditolak. Silakan login sebagai tim Material & Services."}), 403
+    ticket_id = str(request.form.get("ticket_id") or "").strip()
+    if "file" not in request.files or not ticket_id:
         return jsonify({"success": False, "message": "Data tidak valid."}), 400
-    
+
     try:
-        df = _read_boq_excel(request.files["file"], require_system_id=True)
-        incoming, issues = _parse_boq_rows(df)
+        upload = request.files["file"]
+        if not (upload.filename or "").lower().endswith(".xlsx"):
+            raise ValueError("File revisi harus berformat .xlsx. Download ulang template dari project.")
+        workbook_token = _boq_workbook_fingerprint(upload)
+        df = _read_boq_excel(upload, require_system_id=True)
+        incoming, parse_issues = _parse_boq_rows(df)
 
         with get_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cursor:
                 cursor.execute("SELECT id FROM projects WHERE id = %s", (ticket_id,))
-                if not cursor.fetchone(): 
+                if not cursor.fetchone():
                     return jsonify({"success": False, "message": "Project tidak ditemukan."}), 404
-                
                 existing_rows = _revision_items_for_project(cursor, ticket_id)
 
-        existing = {str(row["id"]).strip(): row for row in existing_rows if row["id"]}
-        incoming_ids = {item["id"] for item in incoming if item["id"]}
-
-        for item in incoming:
-            if item["id"] and item["id"] not in existing:
-                issues.append({"row": item["excelRow"], "severity": "error", "message": f"Item ID '{item['id']}' tidak ditemukan di project."})
-
-        added, updated, unchanged = [], [], []
-
-        def norm(value, is_number=False):
-            if is_number:
-                if value is None or value == "": 
-                    return None
-                try: 
-                    return float(value)
-                except (TypeError, ValueError): 
-                    return None
-            return _excel_text(value).lower()
-
-        for item in incoming:
-            if not item["id"]:
-                added.append({"description": item["product"], "qty": item["qty"], "uom": item["uom"], "vendor": item["vendor"], "sphAwalUnit": item["sphAwalUnit"], "sphFinalUnit": item["sphFinalUnit"]})
-                continue
-
-            old = existing.get(item["id"])
-            if not old: 
-                continue
-
-            changes = {}
-            comparisons = [
-                ("Item No", old.get("item_no"), item["itemNo"], False), 
-                ("Deskripsi Item", old.get("product"), item["product"], False), 
-                ("Qty", old.get("qty"), item["qty"], True), 
-                ("UoM", old.get("uom"), item["uom"], False), 
-                ("Preferred Brand", old.get("preferred_brand"), item["preferredBrand"], False), 
-                ("Delivery Time (RFS)", old.get("delivery_time"), item["deliveryTime"], False), 
-                ("Scope of Work", old.get("sow_name"), item["sowName"], False), 
-                ("Bill of Quantity", old.get("boq_name"), item["boqName"], False), 
-                ("Vendor", old.get("vendor"), item["vendor"], False), 
-                ("SPH Awal / Unit", old.get("sph_awal_unit"), item["sphAwalUnit"], True), 
-                ("SPH Final / Unit", old.get("sph_final_unit"), item["sphFinalUnit"], True),
-            ]
-
-            for (label, old_value, new_value, is_number) in comparisons:
-                if norm(old_value, is_number) != norm(new_value, is_number): 
-                    changes[label] = [_excel_text(old_value), _excel_text(new_value)]
-
-            if changes: 
-                updated.append({"id": item["id"], "description": item["product"], "qty": item["qty"], "uom": item["uom"], "vendor": item["vendor"], "changes": changes})
-            else: 
-                unchanged.append({"id": item["id"], "description": item["product"]})
-
-        removed = [{"id": row["id"], "description": row["product"], "itemNo": row.get("item_no", "")} for item_id, row in existing.items() if item_id not in incoming_ids]
-        errors = sum(1 for x in issues if x["severity"] == "error")
-        warnings = sum(1 for x in issues if x["severity"] == "warning")
+        snapshot_token = _revision_snapshot_token(ticket_id, existing_rows)
+        analysis = _analyze_boq_revision(incoming, parse_issues, existing_rows)
+        issues = analysis["issues"]
+        errors = sum(1 for issue in issues if issue["severity"] == "error")
+        warnings = sum(1 for issue in issues if issue["severity"] == "warning")
+        added, updated = analysis["added"], analysis["updated"]
+        removed, unchanged = analysis["removed"], analysis["unchanged"]
 
         return jsonify({
-            "success": True, 
+            "success": True,
             "data": {
                 "summary": {
-                    "added": len(added), "updated": len(updated), "removed": len(removed), 
-                    "unchanged": len(unchanged), "errors": errors, "warnings": warnings
-                }, 
-                "issues": issues[:50], 
-                "has_errors": errors > 0, 
-                "added": added, "updated": updated, "removed": removed, "unchanged": unchanged
-            }
+                    "added": len(added), "updated": len(updated), "removed": len(removed),
+                    "unchanged": len(unchanged), "errors": errors, "warnings": warnings,
+                },
+                "issues": issues[:50],
+                "has_errors": errors > 0,
+                "requires_delete_confirmation": bool(removed),
+                "snapshot_token": snapshot_token,
+                "workbook_token": workbook_token,
+                "added": added, "updated": updated, "removed": removed, "unchanged": unchanged,
+            },
         }), 200
-    except Exception as e: 
-        return jsonify({"success": False, "message": str(e)}), 400
+    except Exception as exc:
+        return jsonify({"success": False, "message": str(exc)}), 400
+
 
 @app.route("/api/revisi_boq", methods=["POST"])
 def revisi_boq():
-    ticket_id = request.form.get("ticket_id")
-    if "file" not in request.files or not ticket_id: 
+    if "username" not in session or not has_ms_access(session.get("role")):
+        return jsonify({"success": False, "message": "Akses ditolak. Silakan login sebagai tim Material & Services."}), 403
+    ticket_id = str(request.form.get("ticket_id") or "").strip()
+    if "file" not in request.files or not ticket_id:
         return jsonify({"success": False, "message": "Data tidak valid."}), 400
-    
+
     try:
-        df = _read_boq_excel(request.files["file"], require_system_id=True)
-        incoming, issues = _parse_boq_rows(df)
+        upload = request.files["file"]
+        if not (upload.filename or "").lower().endswith(".xlsx"):
+            raise ValueError("File revisi harus berformat .xlsx. Download ulang template dari project.")
+        current_workbook_token = _boq_workbook_fingerprint(upload)
+        expected_workbook_token = str(request.form.get("workbook_token") or "").strip()
+        if not expected_workbook_token or expected_workbook_token != current_workbook_token:
+            return jsonify({
+                "success": False,
+                "code": "REVISION_WORKBOOK_CHANGED",
+                "message": "File yang dikirim berbeda dari file yang ditinjau pada preview. Jalankan preview kembali.",
+            }), 409
+        df = _read_boq_excel(upload, require_system_id=True)
+        incoming, parse_issues = _parse_boq_rows(df)
 
         with get_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-                cursor.execute("SELECT id FROM projects WHERE id = %s", (ticket_id,))
-                if not cursor.fetchone(): 
+                # Serialize revisions per project and lock its item rows during validation/apply.
+                cursor.execute("SELECT id FROM projects WHERE id = %s FOR UPDATE", (ticket_id,))
+                if not cursor.fetchone():
                     return jsonify({"success": False, "message": "Project tidak ditemukan."}), 404
 
-                existing = {str(row["id"]).strip(): row for row in _revision_items_for_project(cursor, ticket_id) if row["id"]}
-                validation_errors = list(issues)
-                seen_ids = set()
+                existing_rows = _revision_items_for_project(cursor, ticket_id, for_update=True)
+                expected_snapshot = str(request.form.get("snapshot_token") or "").strip()
+                current_snapshot = _revision_snapshot_token(ticket_id, existing_rows)
+                if not expected_snapshot or expected_snapshot != current_snapshot:
+                    return jsonify({
+                        "success": False,
+                        "code": "REVISION_SNAPSHOT_CHANGED",
+                        "message": "Data project berubah setelah preview dibuat. Jalankan preview kembali sebelum menerapkan revisi.",
+                    }), 409
+                analysis = _analyze_boq_revision(incoming, parse_issues, existing_rows)
+                issues = analysis["issues"]
+                if any(issue["severity"] == "error" for issue in issues):
+                    return jsonify({
+                        "success": False,
+                        "message": "Excel revisi memiliki error. Tidak ada perubahan yang disimpan.",
+                        "issues": issues[:50],
+                    }), 400
 
-                for item in incoming:
-                    item_id = item["id"]
-                    if not item_id: 
-                        continue
-                    if item_id in seen_ids: 
-                        validation_errors.append({"row": item["excelRow"], "severity": "error", "message": f"Item ID duplikat: {item_id}."})
-                    seen_ids.add(item_id)
-                    if item_id not in existing: 
-                        validation_errors.append({"row": item["excelRow"], "severity": "error", "message": f"Item ID '{item_id}' tidak ditemukan di project."})
+                removed = analysis["removed"]
+                if removed and request.form.get("confirm_deletions") != "1":
+                    return jsonify({
+                        "success": False,
+                        "code": "REVISION_DELETE_CONFIRMATION_REQUIRED",
+                        "message": f"Revisi akan menghapus {len(removed)} item existing. Konfirmasi penghapusan diperlukan.",
+                        "removed_count": len(removed),
+                    }), 409
 
-                if any(x["severity"] == "error" for x in validation_errors):
-                    return jsonify({"success": False, "message": "Excel revisi memiliki error. Perbaiki file lalu upload kembali.", "issues": validation_errors[:50]}), 400
-
+                existing = analysis["existing"]
+                incoming_existing_ids = analysis["incoming_existing_ids"]
                 sow_map, boq_map = {}, {}
                 cursor.execute("SELECT id, name FROM sows WHERE project_id = %s", (ticket_id,))
                 for s_row in cursor.fetchall():
                     sow_map[s_row["name"]] = s_row["id"]
                     cursor.execute("SELECT id, name FROM boqs WHERE sow_id = %s", (s_row["id"],))
-                    for b_row in cursor.fetchall(): 
+                    for b_row in cursor.fetchall():
                         boq_map[(s_row["name"], b_row["name"])] = b_row["id"]
-
-                incoming_existing_ids = set()
 
                 for item in incoming:
                     s_name, b_name = item["sowName"], item["boqName"]
@@ -1430,7 +1707,6 @@ def revisi_boq():
                         sow_id = f"sow_{uuid.uuid4().hex[:8]}"
                         cursor.execute("INSERT INTO sows (id, project_id, name) VALUES (%s, %s, %s)", (sow_id, ticket_id, s_name))
                         sow_map[s_name] = sow_id
-                    
                     sow_id = sow_map[s_name]
 
                     boq_key = (s_name, b_name)
@@ -1438,42 +1714,56 @@ def revisi_boq():
                         boq_id = f"boq_{uuid.uuid4().hex[:8]}"
                         cursor.execute("INSERT INTO boqs (id, sow_id, name) VALUES (%s, %s, %s)", (boq_id, sow_id, b_name))
                         boq_map[boq_key] = boq_id
-                    
                     boq_id = boq_map[boq_key]
 
-                    item_id = item["id"]
-                    old = existing[item_id] if item_id else None
-
+                    item_id = str(item.get("id") or "").strip()
+                    old = existing.get(item_id) if item_id else None
                     if old is not None:
                         sph_awal_unit, sph_awal_total = resolve_sph_values(item["qty"], item["sphAwalUnit"], old["sph_awal"])
                         sph_final_unit, sph_final_total = resolve_sph_values(item["qty"], item["sphFinalUnit"], old["sph_final"])
+                        cursor.execute(
+                            "UPDATE items SET boq_id = %s, product = %s, qty = %s, uom = %s, vendor = %s, "
+                            "item_no = %s, preferred_brand = %s, delivery_time = %s, sph_awal = %s, sph_final = %s, "
+                            "sph_awal_unit = %s, sph_final_unit = %s WHERE id = %s",
+                            (boq_id, item["product"], item["qty"], item["uom"], item["vendor"], item["itemNo"],
+                             item["preferredBrand"], item["deliveryTime"], sph_awal_total, sph_final_total,
+                             sph_awal_unit, sph_final_unit, old["id"]),
+                        )
                     else:
                         sph_awal_unit, sph_final_unit = item["sphAwalUnit"], item["sphFinalUnit"]
                         sph_awal_total = calculate_sph_total(item["qty"], sph_awal_unit)
                         sph_final_total = calculate_sph_total(item["qty"], sph_final_unit)
-
-                    if item_id:
-                        incoming_existing_ids.add(item_id)
                         cursor.execute(
-                            "UPDATE items SET boq_id = %s, product = %s, qty = %s, uom = %s, vendor = %s, item_no = %s, preferred_brand = %s, delivery_time = %s, sph_awal = %s, sph_final = %s, sph_awal_unit = %s, sph_final_unit = %s WHERE id = %s", 
-                            (boq_id, item["product"], item["qty"], item["uom"], item["vendor"], item["itemNo"], item["preferredBrand"], item["deliveryTime"], sph_awal_total, sph_final_total, sph_awal_unit, sph_final_unit, old["id"])
-                        )
-                    else:
-                        cursor.execute(
-                            "INSERT INTO items (id, boq_id, product, qty, uom, vendor, sph_awal, sph_final, notes, pic_ids, item_no, preferred_brand, delivery_time, sph_awal_unit, sph_final_unit) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)", 
-                            (f"item_{uuid.uuid4().hex[:8]}", boq_id, item["product"], item["qty"], item["uom"], item["vendor"], sph_awal_total, sph_final_total, "", "[]", item["itemNo"], item["preferredBrand"], item["deliveryTime"], sph_awal_unit, sph_final_unit)
+                            "INSERT INTO items (id, boq_id, product, qty, uom, vendor, sph_awal, sph_final, notes, "
+                            "pic_ids, item_no, preferred_brand, delivery_time, sph_awal_unit, sph_final_unit) "
+                            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                            (f"item_{uuid.uuid4().hex[:8]}", boq_id, item["product"], item["qty"], item["uom"],
+                             item["vendor"], sph_awal_total, sph_final_total, "", "[]", item["itemNo"],
+                             item["preferredBrand"], item["deliveryTime"], sph_awal_unit, sph_final_unit),
                         )
 
+                # Delete only omitted existing items in this project.
                 for item_id in (set(existing) - incoming_existing_ids):
                     cursor.execute("DELETE FROM items WHERE id = %s", (item_id,))
 
-                cursor.execute("DELETE FROM boqs WHERE id NOT IN (SELECT DISTINCT boq_id FROM items)")
-                cursor.execute("DELETE FROM sows WHERE id NOT IN (SELECT DISTINCT sow_id FROM boqs)")
+                # Clean up empty groups only inside the project being revised.
+                cursor.execute(
+                    "DELETE FROM boqs b USING sows s "
+                    "WHERE b.sow_id = s.id AND s.project_id = %s "
+                    "AND NOT EXISTS (SELECT 1 FROM items i WHERE i.boq_id = b.id)",
+                    (ticket_id,),
+                )
+                cursor.execute(
+                    "DELETE FROM sows s WHERE s.project_id = %s "
+                    "AND NOT EXISTS (SELECT 1 FROM boqs b WHERE b.sow_id = s.id)",
+                    (ticket_id,),
+                )
                 conn.commit()
 
         return jsonify({"success": True, "message": "BoQ berhasil direvisi!"}), 200
-    except Exception as e: 
-        return jsonify({"success": False, "message": str(e)}), 400
+    except Exception as exc:
+        app.logger.exception("BoQ revision failed")
+        return jsonify({"success": False, "message": str(exc)}), 400
 
 @app.route("/api/download_template_boq", methods=["GET"])
 def download_template_boq():
