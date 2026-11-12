@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+from io import BytesIO
 
 import pytest
 from flask import Flask
@@ -369,3 +370,14 @@ def test_export_csv_streams_and_guards_spreadsheet_formulas(make_client):
     assert "'=HYPERLINK(" in content
     assert "Vendor A" in content
     assert response.headers["Cache-Control"] == "no-store"
+
+
+def test_document_upload_rejects_unsupported_file_extensions(make_client):
+    client = make_client(FakePool(row=None))
+    response = client.post(
+        "/api/dashboard/khs/KHS-2026-0001/documents",
+        data={"file": (BytesIO(b"not a supported document"), "payload.exe")},
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 400
+    assert "Supported formats" in response.get_json()["message"]
