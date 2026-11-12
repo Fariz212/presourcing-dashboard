@@ -117,6 +117,115 @@ def test_valid_template_parses_successfully():
     assert item["dispatch_date"] == date(2026, 11, 1)
 
 
+
+def test_legacy_v22_workbook_remains_supported():
+    result = parse_khs_workbook(
+        build_workbook(),
+        known_executors={"ALW", "AME"},
+        known_requests={},
+    )
+    assert result["summary"]["can_import"] is True
+    assert result["template_version"] == "2.2-compatible"
+
+
+def test_current_v23_workbook_round_trips_khs_inject_dates():
+    workbook = build_current_khs_workbook(
+        requests=[{
+            "request_id": "REQ-2026-001",
+            "request_date": date(2026, 11, 1),
+            "request_subject": "Annual maintenance contract",
+            "requester_owner": "Procurement",
+            "vendor_summary": "PT Test Vendor",
+            "total_khs": 1,
+            "completed_khs": 0,
+            "open_khs": 1,
+            "request_status": "In Progress",
+        }],
+        items=[{
+            "khs_id": "KHS-2026-0001",
+            "request_id": "REQ-2026-001",
+            "request_date": date(2026, 11, 1),
+            "request_subject": "Annual maintenance contract",
+            "vendor_name": "PT Test Vendor",
+            "executor_code": "ALW",
+            "subtype": "Renewal",
+            "dispatch_date": date(2026, 11, 2),
+            "lp_circulation_start_date": date(2026, 11, 10),
+            "lp_completion_date": date(2026, 11, 12),
+            "khs_inject_start_date": date(2026, 11, 13),
+            "khs_inject_completion_date": date(2026, 11, 14),
+        }],
+        executors=[{"executor_code": "ALW", "display_name": "Executor A"}],
+        subtypes=["Renewal", "Kontrak Baru"],
+        waiting_for=["Executor", "Requester / User"],
+    )
+
+    result = parse_khs_workbook(
+        workbook,
+        known_executors={"ALW"},
+        known_requests={
+            "REQ-2026-001": {
+                "request_date": date(2026, 11, 1),
+                "request_subject": "Annual maintenance contract",
+            }
+        },
+    )
+
+    assert result["template_version"] == "2.3"
+    assert result["summary"]["can_import"] is True
+    item = result["items"][0]
+    assert item["khs_inject_start_date"] == date(2026, 11, 13)
+    assert item["khs_inject_completion_date"] == date(2026, 11, 14)
+
+
+def test_khs_only_partial_workbook_can_reference_existing_request():
+    workbook = build_current_khs_workbook(
+        requests=[],
+        items=[{
+            "khs_id": "KHS-2026-0001",
+            "request_id": "REQ-2026-001",
+            "request_date": date(2026, 11, 1),
+            "request_subject": "Annual maintenance contract",
+            "vendor_name": "PT Test Vendor",
+            "executor_code": "ALW",
+            "subtype": "Renewal",
+            "lp_completion_date": date(2026, 11, 12),
+            "khs_inject_start_date": date(2026, 11, 13),
+        }],
+        executors=[{"executor_code": "ALW", "display_name": "Executor A"}],
+        subtypes=["Renewal", "Kontrak Baru"],
+    )
+
+    result = parse_khs_workbook(
+        workbook,
+        known_executors={"ALW"},
+        known_requests={
+            "REQ-2026-001": {
+                "request_date": date(2026, 11, 1),
+                "request_subject": "Annual maintenance contract",
+            }
+        },
+    )
+
+    assert result["summary"]["can_import"] is True
+    assert result["requests"] == []
+    assert result["items"][0]["request_id"] == "REQ-2026-001"
+
+
+def test_inject_completion_chronology_is_validated():
+    result = parse_khs_workbook(
+        build_workbook({
+            "LP Circulation Start Date": datetime(2026, 11, 10),
+            "LP Completion Date (Director Signed)": datetime(2026, 11, 12),
+            "KHS Inject Start Date": datetime(2026, 11, 13),
+            "KHS Inject Completion Date": datetime(2026, 11, 12),
+        }),
+        known_executors={"ALW"},
+    )
+    codes = {issue["code"] for issue in result["issues"]}
+    assert result["summary"]["can_import"] is False
+    assert "INJECT_COMPLETION_BEFORE_START" in codes
+
 def test_lp_start_without_mi_gm_generates_warning():
     result = parse_khs_workbook(
         build_workbook({
