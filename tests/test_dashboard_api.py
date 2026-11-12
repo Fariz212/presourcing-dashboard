@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+from io import BytesIO
 
 import pytest
 from flask import Flask
@@ -57,10 +58,8 @@ def make_client(monkeypatch):
 
 
 def test_dashboard_summary_returns_expected_kpis(make_client):
-    # total_requests, total_khs, LP completed, in progress,
-    # not started, MI GM approved, MI GM pending,
-    # legal submitted, LP without MI GM, awaiting LP.
-    row = (9, 64, 0, 34, 30, 27, 37, 34, 7, 0)
+    # Requests, KHS, LP counts, inject counts, workflow checkpoints and data quality.
+    row = (9, 64, 0, 34, 30, 0, 0, 0, 27, 37, 34, 7, 0)
     pool = FakePool(row=row)
 
     response = make_client(pool).get("/api/dashboard/summary")
@@ -78,6 +77,14 @@ def test_dashboard_summary_returns_expected_kpis(make_client):
         "not_started": 30,
         "completion_rate_percent": 0.0,
     }
+
+    assert payload["data"]["khs_inject"] == {
+        "completed": 0,
+        "in_progress": 0,
+        "pending": 0,
+        "completion_rate_percent": 0.0,
+    }
+    assert payload["data"]["fully_injected"] == 0
 
     assert payload["data"]["workflow"] == {
         "mi_gm_approved": 27,
@@ -97,7 +104,7 @@ def test_dashboard_summary_returns_expected_kpis(make_client):
 
 
 def test_dashboard_summary_handles_empty_database(make_client):
-    pool = FakePool(row=(0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
+    pool = FakePool(row=(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
 
     response = make_client(pool).get("/api/dashboard/summary")
 
@@ -209,6 +216,9 @@ def test_khs_register_returns_paginated_records(make_client):
         "remarks": None,
         "updated_at": None,
         "lp_status": "in_progress",
+        "workflow_status": "in_progress",
+        "khs_inject_start_date": None,
+        "khs_inject_completion_date": None,
         "current_stage_code": "LP_CIRCULATION",
         "current_stage_name": "LP Circulation",
         "lp_started_without_mi_gm_approval": True,
@@ -240,6 +250,7 @@ def test_khs_register_returns_paginated_records(make_client):
     assert payload["data"][0]["khs_id"] == "KHS-2026-0008"
     assert payload["data"][0]["request_date"] == "2026-01-05"
     assert payload["data"][0]["current_stage_code"] == "LP_CIRCULATION"
+    assert payload["data"][0]["workflow_status"] == "in_progress"
     assert payload["data"][0]["lp_started_without_mi_gm_approval"] is True
 
     # Search and filters must be parameterized, not interpolated into SQL.
@@ -359,3 +370,14 @@ def test_export_csv_streams_and_guards_spreadsheet_formulas(make_client):
     assert "'=HYPERLINK(" in content
     assert "Vendor A" in content
     assert response.headers["Cache-Control"] == "no-store"
+
+
+def test_document_upload_rejects_unsupported_file_extensions(make_client):
+    client = make_client(FakePool(row=None))
+    response = client.post(
+        "/api/dashboard/khs/KHS-2026-0001/documents",
+        data={"file": (BytesIO(b"not a supported document"), "payload.exe")},
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 400
+    assert "Supported formats" in response.get_json()["message"]

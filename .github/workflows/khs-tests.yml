@@ -48,7 +48,10 @@ jobs:
           sudo apt-get install -y postgresql-client
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/001_initial_schema.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/002_import_change_classification.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/003_khs_injection_and_evidence.sql
       - name: Compile application and tests
         run: python -m compileall -q app tests
+      - name: Check dashboard JavaScript syntax
+        run: node --check app/static/js/dashboard.js
       - name: Run test suite
         run: python -m pytest -q
