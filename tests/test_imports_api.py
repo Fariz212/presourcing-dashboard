@@ -1,7 +1,7 @@
 from io import BytesIO
 
 import pytest
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 
 from app import create_app
 
@@ -108,3 +108,35 @@ def test_confirmation_rejects_non_json_array(client):
     )
 
     assert response.status_code == 400
+
+
+
+def test_download_current_workbook_contains_v23_schema(client):
+    response = client.get("/api/imports/workbook.xlsx")
+
+    assert response.status_code == 200
+    assert response.mimetype == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    assert "attachment;" in response.headers["Content-Disposition"]
+    assert response.headers["Cache-Control"] == "no-store"
+
+    workbook = load_workbook(BytesIO(response.data), data_only=True)
+    try:
+        assert workbook.sheetnames == [
+            "00 - Instructions",
+            "01 - Request Register",
+            "02 - KHS Tracking",
+            "03 - Master Data",
+        ]
+        request_headers = {
+            cell.value for cell in workbook["01 - Request Register"][5]
+        }
+        khs_headers = {
+            cell.value for cell in workbook["02 - KHS Tracking"][5]
+        }
+        assert "Request Subject" in request_headers
+        assert "KHS Inject Start Date" in khs_headers
+        assert "KHS Inject Completion Date" in khs_headers
+        assert "KHS ID" in khs_headers
+        assert "Blank cells do not erase existing database values." in workbook["00 - Instructions"]["B7"].value
+    finally:
+        workbook.close()
