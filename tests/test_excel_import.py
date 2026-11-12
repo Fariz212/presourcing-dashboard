@@ -216,6 +216,47 @@ def test_khs_only_partial_workbook_can_reference_existing_request():
     assert result["items"][0]["request_id"] == "REQ-2026-001"
 
 
+def test_request_register_edit_does_not_flag_its_own_khs_snapshot_as_stale():
+    workbook = build_current_khs_workbook(
+        requests=[{
+            "request_id": "REQ-2026-001",
+            "request_date": date(2026, 11, 2),
+            "request_subject": "Updated request subject",
+        }],
+        items=[{
+            "khs_id": "KHS-2026-0001",
+            "request_id": "REQ-2026-001",
+            "request_date": date(2026, 11, 1),
+            "request_subject": "Original request subject",
+            "vendor_name": "PT Test Vendor",
+            "dispatch_date": date(2026, 11, 3),
+        }],
+        executors=[],
+    )
+    result = parse_khs_workbook(
+        workbook,
+        known_executors=set(),
+        known_requests={
+            "REQ-2026-001": {
+                "request_date": date(2026, 11, 1),
+                "request_subject": "Original request subject",
+            }
+        },
+        known_items={
+            "KHS-2026-0001": {
+                "khs_id": "KHS-2026-0001",
+                "request_id": "REQ-2026-001",
+                "vendor_name": "PT Test Vendor",
+            }
+        },
+    )
+
+    codes = {issue["code"] for issue in result["issues"]}
+    assert result["summary"]["can_import"] is True
+    assert "REQUEST_DATE_MISMATCH" not in codes
+    assert "REQUEST_SUBJECT_MISMATCH" not in codes
+
+
 def test_minimal_khs_row_uses_existing_values_for_validation_and_matching():
     workbook = build_current_khs_workbook(
         requests=[],
