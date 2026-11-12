@@ -54,7 +54,7 @@ WHERE stage_code = 'COMPLETED';
 INSERT INTO khs_stage_config (
     stage_code, stage_name, sequence_number, is_active
 )
-VALUES ('KHS_INJECTION', 'KHS Injection', 12, TRUE)
+VALUES ('KHS_INJECTION', 'KHS Inject', 12, TRUE)
 ON CONFLICT (stage_code) DO UPDATE
 SET stage_name = EXCLUDED.stage_name,
     sequence_number = EXCLUDED.sequence_number,
@@ -102,7 +102,7 @@ SELECT
 
     CASE
         WHEN i.khs_inject_completion_date IS NOT NULL THEN 'Fully Injected'
-        WHEN i.lp_completion_date IS NOT NULL THEN 'KHS Injection'
+        WHEN i.lp_completion_date IS NOT NULL THEN 'KHS Inject'
         WHEN i.lp_circulation_start_date IS NOT NULL THEN 'LP Circulation'
         WHEN i.legal_submission_date IS NOT NULL THEN 'Legal Processing'
         WHEN i.mi_gm_approval_date IS NOT NULL THEN 'Legal Submission'
