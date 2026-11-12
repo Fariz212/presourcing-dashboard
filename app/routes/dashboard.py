@@ -990,10 +990,12 @@ def upload_khs_document(khs_id):
     if not target.is_relative_to(upload_root):
         return jsonify(success=False, message="Invalid storage location."), 400
 
-    target.parent.mkdir(parents=True, exist_ok=True)
+    target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    target.parent.chmod(0o700)
     digest = hashlib.sha256(payload).hexdigest()
     mime_type = mimetypes.guess_type(original_name)[0] or "application/octet-stream"
     target.write_bytes(payload)
+    target.chmod(0o600)
 
     try:
         with get_db_pool().connection() as conn, conn.transaction():
