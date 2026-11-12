@@ -504,7 +504,7 @@ async function openDetails(id) {
         '</small></div><a class="view-button" href="' + esc(doc.download_url) + '">Download</a></div>'
       ).join("") : '<p class="muted">No evidence documents uploaded yet.</p>';
     }
-    $("detailDialog").showModal();
+    if (!$("detailDialog").open) $("detailDialog").showModal();
   } catch (err) {
     toast(err.message);
   }
@@ -602,6 +602,7 @@ async function uploadEvidence(event) {
       body: form
     });
     toast("Evidence document uploaded.", true);
+    $("documentUploadForm").reset();
     await openDetails(r.khs_id);
   } catch (err) {
     toast(err.message);
