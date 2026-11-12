@@ -6,6 +6,7 @@ import pytest
 from openpyxl import Workbook, load_workbook
 
 from app import create_app
+from app.services.excel_workbook import build_current_khs_workbook
 
 
 @pytest.fixture()
