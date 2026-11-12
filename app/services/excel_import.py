@@ -73,7 +73,6 @@ ITEM_DATE_FIELDS = {
     "LP Completion Date (Director Signed)": "lp_completion_date",
     "KHS Inject Start Date": "khs_inject_start_date",
     "KHS Inject Completion Date": "khs_inject_completion_date",
-    "Last Updated": "last_updated_date",
     "Original Source Column S (Audit Copy - LP Circulation Start Date)": "source_col_s_audit_date",
 }
 
