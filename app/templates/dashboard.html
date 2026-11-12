@@ -35,7 +35,7 @@
 <article class="kpi-card"><span class="kpi-label">Total Requests</span><strong class="kpi-value" id="totalRequests">—</strong><small>Parent requests</small></article>
 <article class="kpi-card"><span class="kpi-label">Total KHS</span><strong class="kpi-value" id="totalKhs">—</strong><small>Contract records</small></article>
 <article class="kpi-card"><span class="kpi-label">Needs Attention</span><strong class="kpi-value" id="attentionCount">—</strong><small>Waiting / exception records</small></article>
-<article class="kpi-card"><span class="kpi-label">LP Completed</span><strong class="kpi-value" id="lpCompleted">—</strong><small><span id="completionRate">0%</span> completion</small></article>
+<article class="kpi-card"><span class="kpi-label">Fully Injected</span><strong class="kpi-value" id="injectCompleted">—</strong><small><span id="completionRate">0%</span> of all KHS records</small></article>
 </div>
 <div class="overview-grid">
 <article class="panel"><div class="panel-heading"><div><div class="eyebrow">LIFECYCLE</div><h2>LP Circulation Progress</h2></div><span class="subtle-tag" id="lpTotalTag">— KHS</span></div>
@@ -46,19 +46,19 @@
 <div class="workflow-list"><div class="workflow-item"><span>MI GM approved</span><b id="miGmCount">—</b><div class="mini-track"><i id="miGmBar"></i></div></div><div class="workflow-item"><span>Legal submitted</span><b id="legalCount">—</b><div class="mini-track"><i id="legalBar"></i></div></div><div class="workflow-item"><span>LP started</span><b id="lpStartedCount">—</b><div class="mini-track"><i id="lpStartedBar"></i></div></div></div></article>
 </div>
 <article class="panel attention-panel"><div class="panel-heading"><div><div class="eyebrow">ACTION REQUIRED</div><h2>Needs Attention</h2><p>Records with a waiting party, missing prerequisite, or unresolved next step.</p></div><button class="text-button" data-go="register">View all →</button></div>
-<div class="table-wrap"><table><thead><tr><th>KHS</th><th>VENDOR</th><th>NEXT WORKFLOW STAGE</th><th>WAITING FOR</th><th>LAST UPDATED</th><th></th></tr></thead><tbody id="attentionBody"><tr><td colspan="6" class="table-message">Loading…</td></tr></tbody></table></div></article>
+<div class="table-wrap"><table><thead><tr><th>REQUEST SUBJECT</th><th>VENDOR</th><th>NEXT WORKFLOW STAGE</th><th>WAITING FOR</th><th>LAST UPDATED</th><th></th></tr></thead><tbody id="attentionBody"><tr><td colspan="6" class="table-message">Loading…</td></tr></tbody></table></div></article>
 <article class="quality-alert" id="qualityAlert" hidden><strong>Data quality alert</strong><span id="qualityCount">0</span> record(s) show LP circulation without GM MI approval. <button class="text-button" data-go="register">Review records</button></article>
 </section>
 <section class="page-view" id="page-requests" data-title="Request Management">
 <div class="page-heading"><div><div class="eyebrow">WORKSPACE / INTAKE</div><h1>Request Management</h1><p>Create and manage parent requests. One request may contain multiple KHS items.</p></div><button class="primary-button" id="createRequestButton">+ New Request</button></div>
-<article class="panel"><div class="filter-toolbar"><input id="requestSearch" type="search" placeholder="Search request ID, subject, owner…"><button class="reset-button" id="requestSearchReset">Reset</button></div>
-<div class="table-wrap"><table><thead><tr><th>REQUEST ID</th><th>REQUEST DATE</th><th>SUBJECT</th><th>REQUESTER / OWNER</th><th>KHS ITEMS</th><th>COMPLETED</th><th></th></tr></thead><tbody id="requestBody"><tr><td colspan="7" class="table-message">Loading requests…</td></tr></tbody></table></div>
+<article class="panel"><div class="filter-toolbar"><input id="requestSearch" type="search" placeholder="Search subject, vendor, owner…"><button class="reset-button" id="requestSearchReset">Reset</button></div>
+<div class="table-wrap"><table><thead><tr><th>REQUEST SUBJECT</th><th>VENDORS</th><th>REQUEST DATE</th><th>REQUESTER / OWNER</th><th>KHS ITEMS</th><th>FULLY INJECTED</th><th></th></tr></thead><tbody id="requestBody"><tr><td colspan="7" class="table-message">Loading requests…</td></tr></tbody></table></div>
 <div class="register-footer"><span id="requestPagination">—</span><div class="pagination"><button id="requestPrevious" type="button">‹</button><button id="requestNext" type="button">›</button></div></div></article>
 </section>
 <section class="page-view" id="page-register" data-title="KHS Register">
 <div class="page-heading"><div><div class="eyebrow">WORKSPACE / RECORDS</div><h1>KHS Register</h1><p>Manage each contract record, assign ownership, and update its milestones.</p></div><button class="primary-button" id="createKhsButton">+ Add KHS</button></div>
-<article class="panel"><div class="filter-toolbar"><input id="searchInput" type="search" placeholder="Search KHS, request, vendor…"><select id="statusFilter"><option value="">All LP statuses</option><option value="completed">Completed</option><option value="in_progress">In progress</option><option value="not_started">Not started</option></select><select id="executorFilter"><option value="">All executors</option></select><select id="subtypeFilter"><option value="">All subtypes</option></select><select id="waitingFilter"><option value="">All waiting parties</option></select><select id="stageFilter"><option value="">All workflow stages</option></select><button class="reset-button" id="resetFilters">Reset</button></div>
-<div class="table-wrap"><table><thead><tr><th>KHS / REQUEST</th><th>VENDOR</th><th>EXECUTOR</th><th>NEXT WORKFLOW STAGE</th><th>WAITING FOR</th><th>LP STATUS</th><th>LP START</th><th>LP COMPLETE</th><th></th></tr></thead><tbody id="registerBody"><tr><td colspan="9" class="table-message">Loading…</td></tr></tbody></table></div>
+<article class="panel"><div class="filter-toolbar"><input id="searchInput" type="search" placeholder="Search request subject, vendor, KHS…"><select id="statusFilter"><option value="">All LP statuses</option><option value="completed">Completed</option><option value="in_progress">In progress</option><option value="not_started">Not started</option></select><select id="executorFilter"><option value="">All executors</option></select><select id="subtypeFilter"><option value="">All subtypes</option></select><select id="waitingFilter"><option value="">All waiting parties</option></select><select id="stageFilter"><option value="">All workflow stages</option></select><button class="reset-button" id="resetFilters">Reset</button></div>
+<div class="table-wrap"><table><thead><tr><th>REQUEST SUBJECT / VENDOR</th><th>EXECUTOR</th><th>WORKFLOW STAGE</th><th>WORKFLOW STATUS</th><th>LP STATUS</th><th>INJECT START</th><th>FULLY INJECTED</th><th>WAITING FOR</th><th></th></tr></thead><tbody id="registerBody"><tr><td colspan="9" class="table-message">Loading…</td></tr></tbody></table></div>
 <div class="register-footer"><span id="recordCount">—</span><div class="pagination"><span id="paginationText">—</span><button id="previousPage" type="button">‹</button><button id="nextPage" type="button">›</button></div></div></article>
 </section>
 <section class="page-view" id="page-workflow" data-title="Workflow Monitoring">
@@ -80,9 +80,28 @@
 <div class="page-heading"><div><div class="eyebrow">DATA MANAGEMENT / TRACEABILITY</div><h1>Activity & Audit Log</h1><p>Manual edits and Excel imports are recorded for traceability. Manual edits are labelled manual-entry until sign-in is introduced.</p></div><button class="secondary-button" id="activityRefresh">Refresh</button></div>
 <article class="panel"><div class="table-wrap"><table><thead><tr><th>WHEN</th><th>ENTITY</th><th>RECORD ID</th><th>ACTION</th><th>ACTOR</th><th>CHANGES</th></tr></thead><tbody id="activityBody"><tr><td colspan="6" class="table-message">Loading…</td></tr></tbody></table></div><div class="register-footer"><span id="activityPagination">—</span><div class="pagination"><button id="activityPrevious">‹</button><button id="activityNext">›</button></div></div></article>
 </section>
-<footer class="main-footer"><span>KHS Contract Creation Management</span><span>Operational workspace · v2.0</span></footer>
+<footer class="main-footer"><span>KHS Contract Creation Management</span><span>Operational workspace · v2.1</span></footer>
 </main></div>
 <dialog id="recordDialog" class="record-dialog"><form id="recordForm" method="dialog"><div class="dialog-header"><div><div class="eyebrow" id="dialogEyebrow">NEW RECORD</div><h2 id="dialogTitle">Create record</h2></div><button type="button" class="dialog-close" id="closeRecordDialog">×</button></div><div id="dialogFields" class="form-grid"></div><div id="dialogHint" class="form-hint"></div><div class="dialog-footer"><button type="button" class="secondary-button" id="cancelRecord">Cancel</button><button type="submit" class="primary-button" id="saveRecord">Save record</button></div></form></dialog>
-<dialog id="detailDialog" class="detail-dialog"><div class="dialog-header"><div><div class="eyebrow">KHS RECORD</div><h2 id="detailTitle">KHS Details</h2></div><button class="dialog-close" id="closeDialog">×</button></div><div id="detailStatus" class="dialog-status-row"></div><div id="detailGrid" class="detail-grid"></div><div class="dialog-footer"><button class="secondary-button" id="editDetailButton">Edit record</button><button class="primary-button" id="closeDialogBottom">Close</button></div></dialog>
+<dialog id="detailDialog" class="detail-dialog"><div class="dialog-header"><div><div class="eyebrow">KHS RECORD</div><h2 id="detailTitle">KHS Details</h2><p class="detail-subtitle" id="detailSubtitle"></p></div><button class="dialog-close" id="closeDialog">×</button></div><div id="detailStatus" class="dialog-status-row"></div><div id="detailGrid" class="detail-grid"></div>
+<section class="document-section">
+  <div class="document-section-heading"><div><h3>Evidence Documents</h3><p class="muted">Supporting files attached to this KHS record.</p></div></div>
+  <form id="documentUploadForm" class="document-upload-form" enctype="multipart/form-data">
+    <label>Document type
+      <select name="document_type">
+        <option value="KHS Evidence">KHS Evidence</option>
+        <option value="KHS Inject Evidence">KHS Inject Evidence</option>
+        <option value="LP Evidence">LP Evidence</option>
+        <option value="Supporting Document">Supporting Document</option>
+      </select>
+    </label>
+    <label>Choose file
+      <input id="documentFile" name="file" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg" required>
+    </label>
+    <button class="primary-button" id="uploadDocumentButton" type="submit">Upload evidence</button>
+  </form>
+  <div id="documentList" class="document-list"><p class="muted">Loading documents…</p></div>
+</section>
+<div class="dialog-footer"><button class="secondary-button" id="editDetailButton">Edit record</button><button class="primary-button" id="closeDialogBottom">Close</button></div></dialog>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 </body></html>
