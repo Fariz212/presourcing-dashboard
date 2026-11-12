@@ -86,7 +86,7 @@ def test_excel_upsert_persists_khs_inject_milestones():
     update_query, update_params = next(
         (query, params)
         for query, params in connection.queries
-        if "UPDATE khs_items SET" in query
+        if " ".join(query.split()).startswith("UPDATE khs_items SET")
     )
     assert "khs_inject_start_date = %s" in update_query
     assert "khs_inject_completion_date = %s" in update_query
@@ -135,7 +135,7 @@ def test_blank_excel_fields_are_not_added_to_update_payload():
     update_query, _ = next(
         (query, params)
         for query, params in connection.queries
-        if "UPDATE khs_items SET" in query
+        if " ".join(query.split()).startswith("UPDATE khs_items SET")
     )
     assert "khs_inject_start_date = %s" in update_query
     assert "dispatch_date" not in update_query
