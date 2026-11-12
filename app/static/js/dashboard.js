@@ -26,7 +26,7 @@ const dateFields = [
   "boq_confirmation_date", "negotiation_date", "final_negotiation_date",
   "mi_head_approval_date", "mi_sm_approval_date", "mi_gm_approval_date",
   "legal_submission_date", "lp_circulation_start_date", "lp_completion_date",
-  "last_updated_date"
+  "khs_inject_start_date", "khs_inject_completion_date", "last_updated_date"
 ];
 
 const itemFields = [
@@ -46,6 +46,8 @@ const itemFields = [
   ["legal_submission_date", "Legal submission date", "date"],
   ["lp_circulation_start_date", "LP circulation start", "date"],
   ["lp_completion_date", "LP completion date", "date"],
+  ["khs_inject_start_date", "KHS injection start", "date"],
+  ["khs_inject_completion_date", "KHS fully injected date", "date"],
   ["waiting_for", "Currently waiting for", "text"],
   ["waiting_reason", "Waiting reason / next action", "textarea"],
   ["remarks", "Remarks", "textarea"]
@@ -169,8 +171,9 @@ async function loadOverview() {
     set("totalRequests", d.total_requests);
     set("totalKhs", d.total_khs);
     set("sidebarTotal", d.total_khs);
-    set("lpCompleted", p.completed);
-    set("completionRate", p.completion_rate_percent + "%");
+    const inject = d.khs_inject || { completed: 0, in_progress: 0, pending: 0, completion_rate_percent: 0 };
+    set("injectCompleted", inject.completed);
+    set("completionRate", inject.completion_rate_percent + "%");
     set("progressPrimary", p.completed + " / " + d.total_khs);
     set("progressRate", p.completion_rate_percent + "%");
     set("lpTotalTag", d.total_khs + " KHS");
@@ -208,12 +211,13 @@ function renderAttention(rows) {
     return;
   }
   body.innerHTML = rows.map((r) =>
-    "<tr><td><span class=\"cell-primary\">" + esc(r.khs_id) + "</span><span class=\"cell-secondary\">" + esc(r.request_id) + "</span></td>" +
+    "<tr><td><span class=\"cell-primary\">" + esc(r.request_subject || "Untitled request") +
+    "</span><span class=\"cell-secondary\">" + esc(r.khs_id) + " · " + esc(r.request_id) + "</span></td>" +
     "<td>" + esc(r.vendor_name) + "</td><td>" + esc(r.current_stage_name || r.current_stage_code) +
     (r.lp_started_without_mi_gm_approval ? '<span class="exception-label">MI GM prerequisite exception</span>' : "") +
     "</td><td>" + esc(r.waiting_for || (r.lp_started_without_mi_gm_approval ? "Review prerequisite" : "—")) +
     "</td><td>" + esc(fmt(r.last_updated_date || r.updated_at)) +
-    '</td><td><button class="view-button" data-view-khs="' + esc(r.khs_id) + '">Open</button></td></tr>'
+    "</td><td><button class=\"view-button\" data-view-khs=\"" + esc(r.khs_id) + "\">Open</button></td></tr>"
   ).join("");
 }
 
@@ -249,11 +253,13 @@ async function loadRequests() {
   if (!body) return;
   if (!state.requests.length) emptyRow("requestBody", 7, "No request records found.");
   else body.innerHTML = state.requests.map((r) =>
-    "<tr><td><span class=\"cell-primary\">" + esc(r.request_id) + "</span></td><td>" + esc(fmt(r.request_date)) +
-    "</td><td>" + esc(r.request_subject) + "</td><td>" + esc(r.requester_owner || "—") +
+    "<tr><td><span class=\"cell-primary\">" + esc(r.request_subject) + "</span>" +
+    "<span class=\"cell-secondary\">" + esc(r.request_id) + "</span></td>" +
+    "<td>" + esc(r.vendor_summary || "No KHS items yet") + "</td>" +
+    "<td>" + esc(fmt(r.request_date)) + "</td><td>" + esc(r.requester_owner || "—") +
     "</td><td>" + esc(r.total_khs) + "</td><td>" + esc(r.completed_khs) +
-    '</td><td><button class="view-button" data-edit-request="' + esc(r.request_id) + '">Edit</button> ' +
-    '<button class="view-button" data-add-child="' + esc(r.request_id) + '">+ KHS</button></td></tr>'
+    "</td><td><button class=\"view-button\" data-edit-request=\"" + esc(r.request_id) + "\">Edit</button> " +
+    "<button class=\"view-button\" data-add-child=\"" + esc(r.request_id) + "\">+ KHS</button></td></tr>"
   ).join("");
   const pg = result.pagination || {};
   set("requestPagination", "Page " + (pg.page || 1) + " · " + (pg.total_records || 0) + " requests");
@@ -279,14 +285,18 @@ async function loadRegister() {
   if (!body) return;
   if (!result.data.length) emptyRow("registerBody", 9, "No KHS records match the current filters.");
   else body.innerHTML = result.data.map((r) =>
-    "<tr><td><span class=\"cell-primary\">" + esc(r.khs_id) + "</span><span class=\"cell-secondary\">" + esc(r.request_id) + "</span></td>" +
-    "<td>" + esc(r.vendor_name) + "</td><td>" + esc(r.executor_name || r.executor_code || "Unassigned") + "</td>" +
+    "<tr><td><span class=\"cell-primary\">" + esc(r.request_subject || "Untitled request") + "</span>" +
+    "<span class=\"cell-secondary\">" + esc(r.vendor_name) + " · " + esc(r.khs_id) + "</span></td>" +
+    "<td>" + esc(r.executor_name || r.executor_code || "Unassigned") + "</td>" +
     "<td>" + esc(r.current_stage_name || r.current_stage_code) +
     (r.lp_started_without_mi_gm_approval ? '<span class="exception-label">Prerequisite exception</span>' : "") +
-    "</td><td>" + esc(r.waiting_for || "—") + "</td>" +
-    '<td><span class="status-badge status-' + esc(r.lp_status) + '">' + esc(r.lp_status.replace("_", " ")) + "</span></td>" +
-    "<td>" + esc(fmt(r.lp_circulation_start_date)) + "</td><td>" + esc(fmt(r.lp_completion_date)) +
-    '<td><button class="view-button" data-view-khs="' + esc(r.khs_id) + '">Details</button></td></tr>'
+    "</td><td><span class=\"status-badge status-" + esc(r.workflow_status || "not_started") + "\">" +
+    esc((r.workflow_status || "not_started").replace("_", " ")) + "</span></td>" +
+    "<td><span class=\"status-badge status-" + esc(r.lp_status) + "\">" +
+    esc(r.lp_status.replace("_", " ")) + "</span></td>" +
+    "<td>" + esc(fmt(r.khs_inject_start_date)) + "</td><td>" + esc(fmt(r.khs_inject_completion_date)) + "</td>" +
+    "<td>" + esc(r.waiting_for || "—") + "</td>" +
+    "<td><button class=\"view-button\" data-view-khs=\"" + esc(r.khs_id) + "\">Details</button></td></tr>"
   ).join("");
   set("sidebarTotal", result.pagination.total_records);
   set("recordCount", result.pagination.total_records + " records");
@@ -352,7 +362,7 @@ function fillDialogField(def, record, mode) {
     control = '<textarea name="' + name + '" rows="3">' + esc(record && record[name] || "") + "</textarea>";
   } else if (type === "request") {
     const opts = state.requests.map((r) => '<option value="' + esc(r.request_id) + '">' +
-      esc(r.request_id + " · " + r.request_subject) + "</option>").join("");
+      esc(r.request_subject + (r.vendor_summary ? " · " + r.vendor_summary : "")) + "</option>").join("");
     control = '<select name="request_id" required><option value="">Select request</option>' + opts + "</select>";
   } else if (type === "executor") {
     const opts = state.executors.map((r) => '<option value="' + esc(r.executor_code) + '">' +
@@ -386,7 +396,7 @@ async function openForm(kind, record, parentRequestId) {
   $("dialogEyebrow").textContent = editing ? "EDIT RECORD" : "NEW RECORD";
   $("dialogTitle").textContent = (editing ? "Edit " : "Create ") + (kind === "request" ? "Request" : "KHS item");
   $("dialogHint").textContent = kind === "khs"
-    ? "LP circulation start requires MI GM approval. Historical records already containing this exception remain editable."
+    ? "LP circulation requires MI GM approval. KHS Injection starts only after LP completion; the KHS is Completed only when fully injected."
     : "Request ID is generated automatically when the record is saved.";
   $("dialogFields").innerHTML = defs.map((def) => fillDialogField(def, record, kind)).join("");
   if (kind === "khs" && !editing && parentRequestId) {
@@ -455,19 +465,27 @@ async function openDetails(id) {
     const result = await api("/api/dashboard/khs/" + encodeURIComponent(id));
     state.detail = result.data;
     const r = result.data;
-    set("detailTitle", r.khs_id);
-    $("detailStatus").innerHTML = '<span class="status-badge status-' + esc(r.lp_status) + '">' +
-      esc(r.lp_status.replace("_", " ")) + "</span>" +
+    set("detailTitle", r.vendor_name || r.khs_id);
+    set("detailSubtitle", (r.request_subject || "No request subject") + " · " + r.khs_id);
+    $("detailStatus").innerHTML =
+      '<span class="status-badge status-' + esc(r.workflow_status || "not_started") + '">' +
+      "Workflow: " + esc((r.workflow_status || "not_started").replace("_", " ")) + "</span>" +
+      '<span class="status-badge status-' + esc(r.lp_status) + '">' +
+      "LP: " + esc(r.lp_status.replace("_", " ")) + "</span>" +
       (r.lp_started_without_mi_gm_approval ? '<span class="exception-label">LP start without MI GM approval</span>' : "");
     const fields = [
-      ["Request", r.request_id], ["Request subject", r.request_subject], ["Vendor", r.vendor_name],
-      ["Executor", r.executor_name || r.executor_code], ["Type", r.subtype], ["Current stage", r.current_stage_name || r.current_stage_code],
+      ["Request subject", r.request_subject], ["Request ID", r.request_id], ["Vendor", r.vendor_name],
+      ["Executor", r.executor_name || r.executor_code], ["Type", r.subtype],
+      ["Workflow stage", r.current_stage_name || r.current_stage_code],
+      ["Workflow status", r.workflow_status], ["LP status", r.lp_status],
       ["Dispatch", r.dispatch_date], ["Contract start", r.contract_start_date], ["Contract end", r.contract_end_date],
       ["BOQ confirmation", r.boq_confirmation_date], ["Negotiation", r.negotiation_date],
       ["Final negotiation", r.final_negotiation_date], ["MI Head approval", r.mi_head_approval_date],
       ["MI SM approval", r.mi_sm_approval_date], ["MI GM approval", r.mi_gm_approval_date],
       ["Legal submission", r.legal_submission_date], ["LP circulation start", r.lp_circulation_start_date],
-      ["LP completion", r.lp_completion_date], ["Waiting for", r.waiting_for], ["Waiting reason", r.waiting_reason],
+      ["LP completion", r.lp_completion_date], ["KHS injection start", r.khs_inject_start_date],
+      ["KHS fully injected", r.khs_inject_completion_date],
+      ["Waiting for", r.waiting_for], ["Waiting reason", r.waiting_reason],
       ["Remarks", r.remarks], ["Last updated", r.last_updated_date || r.updated_at]
     ];
     const history = result.history || [];
@@ -476,6 +494,16 @@ async function openDetails(id) {
       '</span><span class="detail-value">' + esc(fmt(f[1])) + "</span></div>"
     ).join("") + (history.length ? '<div class="detail-item full"><span class="detail-label">Recent activity</span><span class="detail-value">' +
       history.slice(0, 5).map((h) => esc(fmt(h.occurred_at) + " · " + h.action + " · " + h.actor)).join("<br>") + "</span></div>" : "");
+
+    const documents = result.documents || [];
+    const documentList = $("documentList");
+    if (documentList) {
+      documentList.innerHTML = documents.length ? documents.map((doc) =>
+        '<div class="document-row"><div class="document-meta"><strong>' + esc(doc.original_file_name) +
+        '</strong><small>' + esc(doc.document_type) + " · " + esc(fmt(doc.uploaded_at)) +
+        '</small></div><a class="view-button" href="' + esc(doc.download_url) + '">Download</a></div>'
+      ).join("") : '<p class="muted">No evidence documents uploaded yet.</p>';
+    }
     $("detailDialog").showModal();
   } catch (err) {
     toast(err.message);
@@ -557,6 +585,31 @@ async function confirmImport() {
   }
 }
 
+async function uploadEvidence(event) {
+  event.preventDefault();
+  const r = state.detail;
+  const file = $("documentFile").files[0];
+  if (!r || !file) {
+    toast("Choose a document first.");
+    return;
+  }
+  const form = new FormData($("documentUploadForm"));
+  const button = $("uploadDocumentButton");
+  button.disabled = true;
+  try {
+    await api("/api/dashboard/khs/" + encodeURIComponent(r.khs_id) + "/documents", {
+      method: "POST",
+      body: form
+    });
+    toast("Evidence document uploaded.", true);
+    await openDetails(r.khs_id);
+  } catch (err) {
+    toast(err.message);
+  } finally {
+    button.disabled = false;
+  }
+}
+
 function bind() {
   document.querySelectorAll(".nav-link[data-page]").forEach((el) => {
     el.addEventListener("click", (event) => { event.preventDefault(); go(el.dataset.page); });
@@ -571,6 +624,7 @@ function bind() {
   ["newRequestButton", "createRequestButton"].forEach((id) => $(id).addEventListener("click", () => openForm("request").catch((e) => toast(e.message))));
   ["quickAddKhs", "overviewAddKhs", "createKhsButton"].forEach((id) => $(id).addEventListener("click", () => openForm("khs").catch((e) => toast(e.message))));
   $("recordForm").addEventListener("submit", saveRecord);
+  $("documentUploadForm").addEventListener("submit", uploadEvidence);
   ["closeRecordDialog", "cancelRecord"].forEach((id) => $(id).addEventListener("click", () => $("recordDialog").close()));
   $("closeDialog").addEventListener("click", () => $("detailDialog").close());
   $("closeDialogBottom").addEventListener("click", () => $("detailDialog").close());
