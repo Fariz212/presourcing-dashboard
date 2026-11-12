@@ -215,6 +215,45 @@ def test_khs_only_partial_workbook_can_reference_existing_request():
     assert result["items"][0]["request_id"] == "REQ-2026-001"
 
 
+def test_minimal_khs_row_uses_existing_values_for_validation_and_matching():
+    workbook = build_current_khs_workbook(
+        requests=[],
+        items=[{
+            "khs_id": "KHS-2026-0001",
+            "request_id": None,
+            "request_date": None,
+            "request_subject": None,
+            "vendor_name": None,
+            "khs_inject_start_date": date(2026, 11, 13),
+        }],
+        executors=[],
+    )
+
+    result = parse_khs_workbook(
+        workbook,
+        known_executors={"ALW"},
+        known_requests={
+            "REQ-2026-001": {
+                "request_date": date(2026, 11, 1),
+                "request_subject": "Annual maintenance contract",
+            }
+        },
+        known_items={
+            "KHS-2026-0001": {
+                "khs_id": "KHS-2026-0001",
+                "request_id": "REQ-2026-001",
+                "vendor_name": "PT Test Vendor",
+                "lp_completion_date": date(2026, 11, 12),
+            }
+        },
+    )
+
+    assert result["summary"]["can_import"] is True
+    assert result["items"][0]["request_id"] == "REQ-2026-001"
+    assert result["items"][0]["vendor_name"] == "PT Test Vendor"
+    assert result["items"][0]["khs_inject_start_date"] == date(2026, 11, 13)
+
+
 def test_inject_completion_chronology_is_validated():
     result = parse_khs_workbook(
         build_workbook({
