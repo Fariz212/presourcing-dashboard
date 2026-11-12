@@ -517,7 +517,13 @@ function renderPreview(result) {
   state.importWarnings = Number(s.warning_rows || 0) > 0;
   $("importPreview").hidden = false;
   set("previewTitle", result.file_name || "Workbook preview");
-  set("previewDescription", result.message || "Validation finished. No database records have been changed.");
+  const detectedVersion = result.template_version || "unknown";
+  set(
+    "previewDescription",
+    (result.message || "Validation finished. No database records have been changed.") +
+      " Detected workbook: " + detectedVersion +
+      ". Blank cells preserve existing values."
+  );
   set("previewBadge", "PREVIEWED");
   set("previewTotal", s.total_rows || 0);
   set("previewValid", s.valid_rows || 0);
