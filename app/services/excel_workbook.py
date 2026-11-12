@@ -358,33 +358,25 @@ def build_current_khs_workbook(requests, items, executors, subtypes=None, waitin
         {"A": 18, "B": 34, "C": 20, "D": 28},
     )
 
-    executor_end = max(master_header_row + len(executors), master_header_row + 1)
-    subtype_end = max(master_header_row + len(subtypes or []), master_header_row + 1)
-    waiting_end = max(master_header_row + len(waiting_for or []), master_header_row + 1)
-    if executors:
+    # Inline-list validations are safe for the short master lists used here.
+    executor_values = [str(row.get("executor_code", "")).replace('"', '""') for row in executors if row.get("executor_code")]
+    subtype_values = [str(value).replace('"', '""') for value in (subtypes or [])]
+    if executor_values and len(",".join(executor_values)) <= 240:
         validation = DataValidation(
             type="list",
-            formula1=f"'03 - Master Data'!$A${master_header_row + 1}:$A${executor_end}",
+            formula1='"' + ",".join(executor_values) + '"',
             allow_blank=True,
         )
         khs_ws.add_data_validation(validation)
         validation.add(f"H{khs_header_row + 1}:H1048576")
-    if subtypes:
+    if subtype_values and len(",".join(subtype_values)) <= 240:
         validation = DataValidation(
             type="list",
-            formula1=f"'03 - Master Data'!$C${master_header_row + 1}:$C${subtype_end}",
+            formula1='"' + ",".join(subtype_values) + '"',
             allow_blank=True,
         )
         khs_ws.add_data_validation(validation)
         validation.add(f"I{khs_header_row + 1}:I1048576")
-    if waiting_for:
-        validation = DataValidation(
-            type="list",
-            formula1=f"'03 - Master Data'!$D${master_header_row + 1}:$D${waiting_end}",
-            allow_blank=True,
-        )
-        khs_ws.add_data_validation(validation)
-        validation.add(f"AA{khs_header_row + 1}:AA1048576")
 
     output = BytesIO()
     wb.save(output)
