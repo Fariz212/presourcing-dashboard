@@ -636,6 +636,7 @@ function bind() {
     openForm("khs", r).catch((e) => toast(e.message));
   });
   $("exportKhsButton").addEventListener("click", () => { window.location.href = "/api/dashboard/export"; });
+  $("downloadCurrentWorkbookButton").addEventListener("click", () => { window.location.href = "/api/imports/workbook.xlsx"; });
   $("requestSearch").addEventListener("input", () => {
     state.requestQuery = $("requestSearch").value.trim();
     window.clearTimeout(state.searchTimer);
