@@ -281,6 +281,8 @@ def _upsert_entity(conn, entity_type, record, batch_id):
 
     params = list(update_values.values())
     assignments.append("updated_at = NOW()")
+    if entity_type == "KHS_ITEM":
+        assignments.append("last_updated_date = CURRENT_DATE")
     params.append(entity_id)
 
     conn.execute(
