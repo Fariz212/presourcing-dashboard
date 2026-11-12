@@ -386,21 +386,6 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None, k
 
         has_inject_start = _header_index(khs_map, "KHS Inject Start Date") is not None
         has_inject_completion = _header_index(khs_map, "KHS Inject Completion Date") is not None
-        if has_inject_start != has_inject_completion:
-            missing_header = (
-                "KHS Inject Completion Date"
-                if has_inject_start
-                else "KHS Inject Start Date"
-            )
-            _add_issue(
-                issues,
-                "WARNING",
-                "INCOMPLETE_V23_INJECT_COLUMNS",
-                "WORKBOOK",
-                None,
-                missing_header,
-                "This workbook has only one KHS Inject milestone column. Download the current v2.3 workbook to maintain both Inject dates.",
-            )
 
         requests = []
         items = []
@@ -944,7 +929,7 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None, k
         return {
             "template_version": (
                 "2.3"
-                if has_inject_start and has_inject_completion
+                if has_inject_start or has_inject_completion
                 else "2.2-compatible"
             ),
             "requests": requests,
