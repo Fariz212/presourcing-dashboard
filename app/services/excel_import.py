@@ -71,6 +71,8 @@ ITEM_DATE_FIELDS = {
     "Legal Submission Date": "legal_submission_date",
     "LP Circulation Start Date": "lp_circulation_start_date",
     "LP Completion Date (Director Signed)": "lp_completion_date",
+    "KHS Inject Start Date": "khs_inject_start_date",
+    "KHS Inject Completion Date": "khs_inject_completion_date",
     "Last Updated": "last_updated_date",
     "Original Source Column S (Audit Copy - LP Circulation Start Date)": "source_col_s_audit_date",
 }
@@ -82,7 +84,27 @@ SUBTYPE_MAP = {
 
 
 class WorkbookImportError(ValueError):
-    """Raised when an uploaded workbook is not compatible with KHS v2.2."""
+    """Raised when an uploaded workbook is not compatible with KHS v2.3."""
+
+    
+HEADER_ALIASES = {
+    "Request / Subject": ("Request / Subject", "Request Subject"),
+    "LP Completion Date (Director Signed)": (
+        "LP Completion Date (Director Signed)",
+        "LP Completion Date",
+    ),
+    "KHS Inject Start Date": (
+        "KHS Inject Start Date",
+        "KHS Injection Start Date",
+    ),
+    "KHS Inject Completion Date": (
+        "KHS Inject Completion Date",
+        "KHS Fully Injected Date",
+    ),
+}
+
+REQUEST_REQUIRED_HEADERS = {"Request ID"}
+KHS_REQUIRED_HEADERS = {"KHS ID", "Request ID", "Vendor Name"}
 
 
 def _text(value):
@@ -143,13 +165,21 @@ def _find_header_row(ws, required_headers, label):
     missing = sorted(required_headers - discovered_headers)
 
     raise WorkbookImportError(
-        f"Sheet '{label}' does not contain the required v2.2 headers. "
+        f"Sheet '{label}' does not contain the required workbook headers. "
         f"Missing: {', '.join(missing)}"
     )
 
 
+def _header_index(header_map, field):
+    for candidate in HEADER_ALIASES.get(field, (field,)):
+        index = header_map.get(candidate)
+        if index is not None:
+            return index
+    return None
+
+
 def _value(cells, header_map, field):
-    index = header_map.get(field)
+    index = _header_index(header_map, field)
 
     if index is None or index >= len(cells):
         return None
@@ -300,14 +330,19 @@ def _read_template_executors(workbook, issues):
     return codes
 
 
-def parse_khs_workbook(file_object, known_executors=None):
+def parse_khs_workbook(file_object, known_executors=None, known_requests=None):
     """
-    Parse and validate the final KHS v2.2 workbook.
+    Parse and validate a KHS workbook for safe insert/update.
 
-    This function is read-only. It does not write to PostgreSQL.
+    Current v2.3 workbooks include KHS Inject milestones. Legacy v2.2
+    headers remain accepted. Request and KHS IDs are matching keys; rows
+    can be partial, provided their parent Request already exists.
 
     known_executors:
         Optional set of active executor codes obtained from khs_executors.
+    known_requests:
+        Optional mapping of existing Request IDs to parent metadata
+        (request_date and request_subject), obtained from khs_requests.
     """
 
     issues = []
@@ -341,11 +376,15 @@ def parse_khs_workbook(file_object, known_executors=None):
         khs_ws = workbook[KHS_SHEET]
 
         request_header_row, request_map = _find_header_row(
-            request_ws, REQUEST_HEADERS, REQUEST_SHEET
+            request_ws, REQUEST_REQUIRED_HEADERS, REQUEST_SHEET
         )
+        if _header_index(request_map, "Request / Subject") is None:
+            raise WorkbookImportError(
+                "Sheet '01 - Request Register' is missing Request Subject."
+            )
 
         khs_header_row, khs_map = _find_header_row(
-            khs_ws, KHS_HEADERS, KHS_SHEET
+            khs_ws, KHS_REQUIRED_HEADERS, KHS_SHEET
         )
 
         requests = []
@@ -421,17 +460,6 @@ def parse_khs_workbook(file_object, known_executors=None):
 
             requests.append(record)
             request_lookup[request_id] = record
-
-        if not requests:
-            _add_issue(
-                issues,
-                "ERROR",
-                "NO_REQUESTS",
-                "WORKBOOK",
-                None,
-                REQUEST_SHEET,
-                "No valid request records were found.",
-            )
 
         # -------------------------------------------------
         # EXECUTOR MASTER CONSISTENCY
@@ -525,18 +553,6 @@ def parse_khs_workbook(file_object, known_executors=None):
 
             item_ids.add(khs_id)
 
-            if request_id not in request_lookup:
-                _add_issue(
-                    issues,
-                    "ERROR",
-                    "UNKNOWN_REQUEST_ID",
-                    "KHS_ITEM",
-                    row_number,
-                    "Request ID",
-                    f"Request ID {request_id} is not present "
-                    "in Request Register.",
-                )
-
             executor = _text(
                 _value(cells, khs_map, "Executor")
             )
@@ -606,10 +622,31 @@ def parse_khs_workbook(file_object, known_executors=None):
                     str(exc),
                 )
 
-            parent = request_lookup.get(request_id)
+            existing_parent = (
+                known_requests.get(request_id)
+                if isinstance(known_requests, dict)
+                else None
+            )
+            parent = request_lookup.get(request_id) or existing_parent
+
+            known_request_ids = (
+                set(known_requests)
+                if isinstance(known_requests, dict)
+                else set(known_requests or ())
+            )
+            if parent is None and request_id not in known_request_ids:
+                _add_issue(
+                    issues,
+                    "ERROR",
+                    "UNKNOWN_REQUEST_ID",
+                    "KHS_ITEM",
+                    row_number,
+                    "Request ID",
+                    f"Request ID {request_id} does not exist in this workbook or the database.",
+                )
 
             if parent:
-                parent_date = parent["request_date"]
+                parent_date = parent.get("request_date")
 
                 if (
                     item_request_date
@@ -700,6 +737,8 @@ def parse_khs_workbook(file_object, known_executors=None):
 
             lp_start = dates["lp_circulation_start_date"]
             lp_completion = dates["lp_completion_date"]
+            inject_start = dates["khs_inject_start_date"]
+            inject_completion = dates["khs_inject_completion_date"]
             mi_gm = dates["mi_gm_approval_date"]
 
             if lp_start and not mi_gm:
@@ -745,6 +784,50 @@ def parse_khs_workbook(file_object, known_executors=None):
                     row_number,
                     "LP Completion Date (Director Signed)",
                     "LP completion date cannot precede LP start date.",
+                )
+
+            if inject_start and not lp_completion:
+                _add_issue(
+                    issues,
+                    "ERROR",
+                    "INJECT_START_WITHOUT_LP_COMPLETION",
+                    "KHS_ITEM",
+                    row_number,
+                    "KHS Inject Start Date",
+                    "KHS Inject can only start after LP completion.",
+                )
+
+            elif inject_start and lp_completion and inject_start < lp_completion:
+                _add_issue(
+                    issues,
+                    "ERROR",
+                    "INJECT_START_BEFORE_LP_COMPLETION",
+                    "KHS_ITEM",
+                    row_number,
+                    "KHS Inject Start Date",
+                    "KHS Inject start date cannot precede LP completion.",
+                )
+
+            if inject_completion and not inject_start:
+                _add_issue(
+                    issues,
+                    "ERROR",
+                    "INJECT_COMPLETION_WITHOUT_START",
+                    "KHS_ITEM",
+                    row_number,
+                    "KHS Inject Completion Date",
+                    "KHS Inject completion requires an Inject start date.",
+                )
+
+            elif inject_completion and inject_start and inject_completion < inject_start:
+                _add_issue(
+                    issues,
+                    "ERROR",
+                    "INJECT_COMPLETION_BEFORE_START",
+                    "KHS_ITEM",
+                    row_number,
+                    "KHS Inject Completion Date",
+                    "KHS Inject completion date cannot precede Inject start date.",
                 )
 
             audit_date = dates["source_col_s_audit_date"]
@@ -795,15 +878,15 @@ def parse_khs_workbook(file_object, known_executors=None):
 
             items.append(record)
 
-        if not items:
+        if not requests and not items:
             _add_issue(
                 issues,
                 "ERROR",
-                "NO_KHS_ITEMS",
+                "NO_RECORDS",
                 "WORKBOOK",
                 None,
-                KHS_SHEET,
-                "No individual KHS records were found.",
+                None,
+                "No Request or KHS records were found in the workbook.",
             )
 
         # -------------------------------------------------
@@ -821,7 +904,12 @@ def parse_khs_workbook(file_object, known_executors=None):
         )
 
         return {
-            "template_version": "2.2",
+            "template_version": (
+                "2.3"
+                if _header_index(khs_map, "KHS Inject Start Date") is not None
+                or _header_index(khs_map, "KHS Inject Completion Date") is not None
+                else "2.2-compatible"
+            ),
             "requests": requests,
             "items": items,
             "issues": issues,
