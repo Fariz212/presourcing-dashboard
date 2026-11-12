@@ -72,6 +72,19 @@ def test_json_safe_conversion_handles_nested_dates():
     }
 
 
+def test_khs_injection_dates_are_parsed_as_iso_dates():
+    payload = _validate_payload(
+        {
+            "khs_inject_start_date": "2026-11-20",
+            "khs_inject_completion_date": "2026-11-22",
+        },
+        ITEM_FIELDS | {"khs_id"},
+        set(),
+    )
+    assert payload["khs_inject_start_date"] == date(2026, 11, 20)
+    assert payload["khs_inject_completion_date"] == date(2026, 11, 22)
+
+
 class IdCursor:
     def __init__(self, row=None):
         self.row = row
