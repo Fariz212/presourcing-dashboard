@@ -192,6 +192,7 @@ def test_khs_only_partial_workbook_can_reference_existing_request():
             "vendor_name": "PT Test Vendor",
             "executor_code": "ALW",
             "subtype": "Renewal",
+            "lp_circulation_start_date": date(2026, 11, 10),
             "lp_completion_date": date(2026, 11, 12),
             "khs_inject_start_date": date(2026, 11, 13),
         }],
@@ -243,6 +244,7 @@ def test_minimal_khs_row_uses_existing_values_for_validation_and_matching():
                 "khs_id": "KHS-2026-0001",
                 "request_id": "REQ-2026-001",
                 "vendor_name": "PT Test Vendor",
+                "lp_circulation_start_date": date(2026, 11, 10),
                 "lp_completion_date": date(2026, 11, 12),
             }
         },
