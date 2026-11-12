@@ -306,6 +306,20 @@ def preview_import():
                 for row in request_rows
             }
 
+            with conn.cursor(row_factory=dict_row) as cursor:
+                cursor.execute(
+                    """
+                    SELECT i.*, r.request_date
+                    FROM khs_items i
+                    JOIN khs_requests r ON r.request_id = i.request_id
+                    """
+                )
+                item_rows = cursor.fetchall()
+            known_items = {
+                row["khs_id"]: dict(row)
+                for row in item_rows
+            }
+
             existing = conn.execute(
                 """
                 SELECT id, status
@@ -328,6 +342,7 @@ def preview_import():
             BytesIO(payload),
             known_executors=known_executors,
             known_requests=known_requests,
+            known_items=known_items,
         )
 
         issues = parsed["issues"]
