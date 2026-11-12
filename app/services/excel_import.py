@@ -657,7 +657,12 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None, k
                     f"Request ID {request_id} does not exist in this workbook or the database.",
                 )
 
-            if parent:
+            # If the Request row is included in this workbook, it is the
+            # canonical parent update. Its duplicated Request Date/Subject
+            # columns in KHS are snapshot context and may legitimately be stale.
+            compare_khs_parent_snapshot = request_id not in request_lookup
+
+            if parent and compare_khs_parent_snapshot:
                 parent_date = parent.get("request_date")
 
                 if (
