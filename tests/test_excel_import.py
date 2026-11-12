@@ -3,12 +3,13 @@ from io import BytesIO
 import re
 from zipfile import ZIP_DEFLATED, ZipFile
 
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 
 from app.services.excel_import import (
     KHS_HEADERS,
     parse_khs_workbook,
 )
+from app.services.excel_workbook import build_current_khs_workbook
 
 
 REQUEST_HEADERS = [
@@ -65,6 +66,7 @@ def build_workbook(item_overrides=None, extra_items=None):
         "Vendor Name": "PT Test Vendor",
         "Contract Start Date": datetime(2027, 1, 1),
         "Contract End Date": datetime(2027, 12, 31),
+        "Last Updated": datetime(2026, 11, 10),
         "MI Status": "Not Completed",
         "LP Status": "Not Completed",
         "Current Stage": "Dispatch",
@@ -115,7 +117,222 @@ def test_valid_template_parses_successfully():
     assert item["executor_code"] == "ALW"
     assert item["subtype"] == "Renewal"
     assert item["dispatch_date"] == date(2026, 11, 1)
+    assert "last_updated_date" not in item
 
+
+
+def test_legacy_v22_workbook_remains_supported():
+    result = parse_khs_workbook(
+        build_workbook(),
+        known_executors={"ALW", "AME"},
+        known_requests={},
+    )
+    assert result["summary"]["can_import"] is True
+    assert result["template_version"] == "2.2-compatible"
+
+
+def test_current_v23_workbook_round_trips_khs_inject_dates():
+    workbook = build_current_khs_workbook(
+        requests=[{
+            "request_id": "REQ-2026-001",
+            "request_date": date(2026, 11, 1),
+            "request_subject": "Annual maintenance contract",
+            "requester_owner": "Procurement",
+            "vendor_summary": "PT Test Vendor",
+            "total_khs": 1,
+            "completed_khs": 0,
+            "open_khs": 1,
+            "request_status": "In Progress",
+        }],
+        items=[{
+            "khs_id": "KHS-2026-0001",
+            "request_id": "REQ-2026-001",
+            "request_date": date(2026, 11, 1),
+            "request_subject": "Annual maintenance contract",
+            "vendor_name": "PT Test Vendor",
+            "executor_code": "ALW",
+            "subtype": "Renewal",
+            "dispatch_date": date(2026, 11, 2),
+            "lp_circulation_start_date": date(2026, 11, 10),
+            "lp_completion_date": date(2026, 11, 12),
+            "khs_inject_start_date": date(2026, 11, 13),
+            "khs_inject_completion_date": date(2026, 11, 14),
+        }],
+        executors=[{"executor_code": "ALW", "display_name": "Executor A"}],
+        subtypes=["Renewal", "Kontrak Baru"],
+        waiting_for=["Executor", "Requester / User"],
+    )
+
+    result = parse_khs_workbook(
+        workbook,
+        known_executors={"ALW"},
+        known_requests={
+            "REQ-2026-001": {
+                "request_date": date(2026, 11, 1),
+                "request_subject": "Annual maintenance contract",
+            }
+        },
+    )
+
+    assert result["template_version"] == "2.3"
+    assert result["summary"]["can_import"] is True
+    item = result["items"][0]
+    assert item["khs_inject_start_date"] == date(2026, 11, 13)
+    assert item["khs_inject_completion_date"] == date(2026, 11, 14)
+
+
+def test_khs_only_partial_workbook_can_reference_existing_request():
+    workbook = build_current_khs_workbook(
+        requests=[],
+        items=[{
+            "khs_id": "KHS-2026-0001",
+            "request_id": "REQ-2026-001",
+            "request_date": date(2026, 11, 1),
+            "request_subject": "Annual maintenance contract",
+            "vendor_name": "PT Test Vendor",
+            "executor_code": "ALW",
+            "subtype": "Renewal",
+            "lp_circulation_start_date": date(2026, 11, 10),
+            "lp_completion_date": date(2026, 11, 12),
+            "khs_inject_start_date": date(2026, 11, 13),
+        }],
+        executors=[{"executor_code": "ALW", "display_name": "Executor A"}],
+        subtypes=["Renewal", "Kontrak Baru"],
+    )
+
+    result = parse_khs_workbook(
+        workbook,
+        known_executors={"ALW"},
+        known_requests={
+            "REQ-2026-001": {
+                "request_date": date(2026, 11, 1),
+                "request_subject": "Annual maintenance contract",
+            }
+        },
+    )
+
+    assert result["summary"]["can_import"] is True
+    assert result["requests"] == []
+    assert result["items"][0]["request_id"] == "REQ-2026-001"
+
+
+def test_request_register_edit_does_not_flag_its_own_khs_snapshot_as_stale():
+    workbook = build_current_khs_workbook(
+        requests=[{
+            "request_id": "REQ-2026-001",
+            "request_date": date(2026, 11, 2),
+            "request_subject": "Updated request subject",
+        }],
+        items=[{
+            "khs_id": "KHS-2026-0001",
+            "request_id": "REQ-2026-001",
+            "request_date": date(2026, 11, 1),
+            "request_subject": "Original request subject",
+            "vendor_name": "PT Test Vendor",
+            "dispatch_date": date(2026, 11, 3),
+        }],
+        executors=[],
+    )
+    result = parse_khs_workbook(
+        workbook,
+        known_executors=set(),
+        known_requests={
+            "REQ-2026-001": {
+                "request_date": date(2026, 11, 1),
+                "request_subject": "Original request subject",
+            }
+        },
+        known_items={
+            "KHS-2026-0001": {
+                "khs_id": "KHS-2026-0001",
+                "request_id": "REQ-2026-001",
+                "vendor_name": "PT Test Vendor",
+            }
+        },
+    )
+
+    codes = {issue["code"] for issue in result["issues"]}
+    assert result["summary"]["can_import"] is True
+    assert "REQUEST_DATE_MISMATCH" not in codes
+    assert "REQUEST_SUBJECT_MISMATCH" not in codes
+
+
+def test_minimal_khs_row_uses_existing_values_for_validation_and_matching():
+    workbook = build_current_khs_workbook(
+        requests=[],
+        items=[{
+            "khs_id": "KHS-2026-0001",
+            "request_id": None,
+            "request_date": None,
+            "request_subject": None,
+            "vendor_name": None,
+            "khs_inject_start_date": date(2026, 11, 13),
+        }],
+        executors=[],
+    )
+
+    result = parse_khs_workbook(
+        workbook,
+        known_executors={"ALW"},
+        known_requests={
+            "REQ-2026-001": {
+                "request_date": date(2026, 11, 1),
+                "request_subject": "Annual maintenance contract",
+            }
+        },
+        known_items={
+            "KHS-2026-0001": {
+                "khs_id": "KHS-2026-0001",
+                "request_id": "REQ-2026-001",
+                "vendor_name": "PT Test Vendor",
+                "lp_circulation_start_date": date(2026, 11, 10),
+                "lp_completion_date": date(2026, 11, 12),
+            }
+        },
+    )
+
+    assert result["summary"]["can_import"] is True
+    assert result["items"][0]["request_id"] == "REQ-2026-001"
+    assert result["items"][0]["vendor_name"] == "PT Test Vendor"
+    assert result["items"][0]["khs_inject_start_date"] == date(2026, 11, 13)
+
+
+def test_inject_completion_chronology_is_validated():
+    workbook = build_current_khs_workbook(
+        requests=[{
+            "request_id": "REQ-2026-001",
+            "request_date": date(2026, 11, 1),
+            "request_subject": "Annual maintenance contract",
+        }],
+        items=[{
+            "khs_id": "KHS-2026-0001",
+            "request_id": "REQ-2026-001",
+            "request_date": date(2026, 11, 1),
+            "request_subject": "Annual maintenance contract",
+            "vendor_name": "PT Test Vendor",
+            "executor_code": "ALW",
+            "subtype": "Renewal",
+            "lp_circulation_start_date": date(2026, 11, 10),
+            "lp_completion_date": date(2026, 11, 12),
+            "khs_inject_start_date": date(2026, 11, 13),
+            "khs_inject_completion_date": date(2026, 11, 12),
+        }],
+        executors=[{"executor_code": "ALW", "display_name": "Executor A"}],
+        subtypes=["Renewal", "Kontrak Baru"],
+    )
+    result = parse_khs_workbook(
+        workbook,
+        known_executors={"ALW"},
+        known_requests={
+            "REQ-2026-001": {
+                "request_date": date(2026, 11, 1),
+                "request_subject": "Annual maintenance contract",
+            }
+        },
+    )
+    codes = {issue["code"] for issue in result["issues"]}
+    assert result["summary"]["can_import"] is False
+    assert "INJECT_COMPLETION_BEFORE_START" in codes
 
 def test_lp_start_without_mi_gm_generates_warning():
     result = parse_khs_workbook(
@@ -220,3 +437,29 @@ def test_parser_supports_missing_worksheet_dimensions():
     assert result["summary"]["total_requests"] == 1
     assert result["summary"]["total_khs_items"] == 1
     assert result["items"][0]["executor_code"] == "ALW"
+
+
+def test_generated_workbook_stores_untrusted_text_as_plain_excel_text():
+    workbook = build_current_khs_workbook(
+        requests=[{
+            "request_id": "REQ-2026-001",
+            "request_subject": "=HYPERLINK(\"https://invalid.example\",\"click\")",
+        }],
+        items=[{
+            "khs_id": "KHS-2026-0001",
+            "request_id": "REQ-2026-001",
+            "request_subject": "Safe subject",
+            "vendor_name": "=HYPERLINK(\"https://invalid.example\",\"click\")",
+        }],
+        executors=[],
+    )
+    output = load_workbook(workbook, data_only=False)
+    try:
+        vendor_cell = output["02 - KHS Tracking"]["E6"]
+        assert vendor_cell.value.startswith("=")
+        assert vendor_cell.data_type == "s"
+        subject_cell = output["01 - Request Register"]["C6"]
+        assert subject_cell.value.startswith("=")
+        assert subject_cell.data_type == "s"
+    finally:
+        output.close()

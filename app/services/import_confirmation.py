@@ -35,6 +35,8 @@ ITEM_FIELDS = (
     "legal_submission_date",
     "lp_circulation_start_date",
     "lp_completion_date",
+    "khs_inject_start_date",
+    "khs_inject_completion_date",
     "waiting_for",
     "waiting_reason",
     "last_updated_date",
@@ -59,6 +61,8 @@ DATE_FIELDS = {
     "legal_submission_date",
     "lp_circulation_start_date",
     "lp_completion_date",
+    "khs_inject_start_date",
+    "khs_inject_completion_date",
     "last_updated_date",
     "source_col_s_audit_date",
 }
@@ -277,6 +281,8 @@ def _upsert_entity(conn, entity_type, record, batch_id):
 
     params = list(update_values.values())
     assignments.append("updated_at = NOW()")
+    if entity_type == "KHS_ITEM":
+        assignments.append("last_updated_date = CURRENT_DATE")
     params.append(entity_id)
 
     conn.execute(
@@ -432,13 +438,6 @@ def confirm_import(pool, batch_id, accept_warnings=False):
                 if entity_type == "REQUEST":
                     request_ids.add(external_id)
 
-            if not request_ids:
-                raise ImportConfirmationError(
-                    "No request records found in staging.",
-                    422,
-                    "NO_REQUEST_RECORDS",
-                )
-
             # -------------------------------------------------
             # Parent records first.
             # -------------------------------------------------
@@ -485,11 +484,16 @@ def confirm_import(pool, batch_id, accept_warnings=False):
                     continue
 
                 if data.get("request_id") not in request_ids:
-                    raise ImportConfirmationError(
-                        f"KHS {data.get('khs_id')} has no request in this batch.",
-                        422,
-                        "MISSING_PARENT_REQUEST",
-                    )
+                    parent = conn.execute(
+                        "SELECT 1 FROM khs_requests WHERE request_id = %s",
+                        (data.get("request_id"),),
+                    ).fetchone()
+                    if parent is None:
+                        raise ImportConfirmationError(
+                            f"KHS {data.get('khs_id')} references a Request that is neither in this batch nor in the database.",
+                            422,
+                            "MISSING_PARENT_REQUEST",
+                        )
 
                 change_type = _upsert_entity(
                     conn,

@@ -20,3 +20,8 @@
 .status-badge.status-in_progress{background:var(--blue-soft);color:var(--blue)}
 .status-badge.status-completed{background:var(--green-soft);color:var(--green)}
 @media(max-width:760px){.document-upload-form{grid-template-columns:1fr}.document-upload-form button{width:100%}.document-row{align-items:flex-start}}
+
+
+/* Current Excel workbook export actions */
+.heading-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+@media(max-width:760px){.heading-actions{width:100%;justify-content:flex-start}.heading-actions button{flex:1}}
