@@ -386,10 +386,17 @@ def preview_import():
             if issue.get("row") is None
         ]
 
-        has_global_error = any(
-            issue["severity"] == "ERROR"
-            for issue in workbook_issues
+        global_error_count = sum(
+            1 for issue in workbook_issues
+            if issue["severity"] == "ERROR"
         )
+        global_warning_count = sum(
+            1 for issue in workbook_issues
+            if issue["severity"] == "WARNING"
+        )
+        error_count += global_error_count
+        warning_count += global_warning_count
+        has_global_error = global_error_count > 0
 
         total_rows = (
             len(staged_records) + len(missing_staged_keys)
