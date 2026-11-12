@@ -1,0 +1,39 @@
+from app import create_app
+
+
+class DummyPool:
+    def close(self):
+        pass
+
+
+def test_root_serves_dashboard_and_static_assets(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        "app.init_db_pool",
+        lambda _app: DummyPool(),
+    )
+
+    flask_app = create_app({
+        "TESTING": True,
+        "SECRET_KEY": "dashboard-ui-test-secret",
+        "DATABASE_URL": "postgresql://test:test@localhost/test",
+        "UPLOAD_DIR": tmp_path / "uploads",
+    })
+
+    client = flask_app.test_client()
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert response.content_type.startswith("text/html")
+    assert b"KHS Creation Overview" in response.data
+    assert b"dashboard.css" in response.data
+    assert b"dashboard.js" in response.data
+
+    css = client.get("/static/css/dashboard.css")
+    assert css.status_code == 200
+    assert b".kpi-grid" in css.data
+
+    javascript = client.get("/static/js/dashboard.js")
+    assert javascript.status_code == 200
+    assert b"/api/dashboard/summary" in javascript.data
+    assert b"/api/dashboard/khs" in javascript.data

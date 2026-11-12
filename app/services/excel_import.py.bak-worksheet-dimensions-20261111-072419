@@ -1,0 +1,816 @@
+from datetime import date, datetime
+from io import BytesIO
+from pathlib import Path
+import re
+
+from openpyxl import load_workbook
+from openpyxl.utils.datetime import from_excel
+
+
+REQUEST_SHEET = "01 - Request Register"
+KHS_SHEET = "02 - KHS Tracking"
+MASTER_SHEET = "03 - Master Data"
+
+REQUEST_HEADERS = {
+    "Request ID",
+    "Request Date",
+    "Request / Subject",
+    "Requester / Owner",
+}
+
+KHS_HEADERS = {
+    "KHS ID",
+    "Request ID",
+    "Source Row No.",
+    "Request Date",
+    "Dispatch Date",
+    "Executor",
+    "Request / Subject",
+    "Subtype",
+    "Vendor Name",
+    "Contract Start Date",
+    "Contract End Date",
+    "BOQ Confirmation Date",
+    "Negotiation Date",
+    "Final Negotiation Date",
+    "MI Head Approval Date",
+    "MI SM Approval Date",
+    "MI GM Approval Date",
+    "MI Status",
+    "Legal Submission Date",
+    "LP Circulation Start Date",
+    "LP Completion Date (Director Signed)",
+    "LP Status",
+    "Current Stage",
+    "Overall Status",
+    "Processing Days",
+    "Waiting For",
+    "Waiting Reason",
+    "Last Updated",
+    "Remarks",
+    "Legacy Overall Status",
+    "Legacy Detailed Status",
+    "Original Source Column S (Audit Copy - LP Circulation Start Date)",
+    "Migration Review",
+}
+
+REQUEST_DATE_FIELDS = {
+    "Request Date": "request_date",
+}
+
+ITEM_DATE_FIELDS = {
+    "Dispatch Date": "dispatch_date",
+    "Contract Start Date": "contract_start_date",
+    "Contract End Date": "contract_end_date",
+    "BOQ Confirmation Date": "boq_confirmation_date",
+    "Negotiation Date": "negotiation_date",
+    "Final Negotiation Date": "final_negotiation_date",
+    "MI Head Approval Date": "mi_head_approval_date",
+    "MI SM Approval Date": "mi_sm_approval_date",
+    "MI GM Approval Date": "mi_gm_approval_date",
+    "Legal Submission Date": "legal_submission_date",
+    "LP Circulation Start Date": "lp_circulation_start_date",
+    "LP Completion Date (Director Signed)": "lp_completion_date",
+    "Last Updated": "last_updated_date",
+    "Original Source Column S (Audit Copy - LP Circulation Start Date)": "source_col_s_audit_date",
+}
+
+SUBTYPE_MAP = {
+    "renewal": "Renewal",
+    "kontrak baru": "Kontrak Baru",
+}
+
+
+class WorkbookImportError(ValueError):
+    """Raised when an uploaded workbook is not compatible with KHS v2.2."""
+
+
+def _text(value):
+    if value is None:
+        return None
+
+    result = str(value).strip()
+    return result or None
+
+
+def _normalized_subject(value):
+    text = _text(value)
+    return re.sub(r"\s+", " ", text).casefold() if text else None
+
+
+def _find_header_row(ws, required_headers, label):
+    scan_limit = min(ws.max_row or 1, 15)
+
+    for row_number in range(1, scan_limit + 1):
+        values = next(
+            ws.iter_rows(
+                min_row=row_number,
+                max_row=row_number,
+                values_only=True,
+            )
+        )
+
+        mapping = {
+            str(value).strip(): index
+            for index, value in enumerate(values)
+            if value is not None and str(value).strip()
+        }
+
+        if required_headers.issubset(mapping):
+            return row_number, mapping
+
+    missing = sorted(required_headers)
+
+    raise WorkbookImportError(
+        f"Sheet '{label}' does not contain the required v2.2 headers."
+    )
+
+
+def _value(cells, header_map, field):
+    index = header_map.get(field)
+
+    if index is None or index >= len(cells):
+        return None
+
+    return cells[index].value
+
+
+def _parse_date(value, epoch):
+    if value is None or value == "":
+        return None
+
+    if isinstance(value, datetime):
+        return value.date()
+
+    if isinstance(value, date):
+        return value
+
+    if isinstance(value, bool):
+        raise ValueError("Boolean is not a valid date.")
+
+    if isinstance(value, (int, float)):
+        converted = from_excel(value, epoch)
+
+        if isinstance(converted, datetime):
+            return converted.date()
+
+        if isinstance(converted, date):
+            return converted
+
+        raise ValueError("Excel value does not represent a date.")
+
+    if isinstance(value, str):
+        raw = value.strip()
+
+        formats = (
+            "%Y-%m-%d",
+            "%d/%m/%Y",
+            "%d-%m-%Y",
+            "%Y/%m/%d",
+            "%d %B %Y",
+            "%d %b %Y",
+        )
+
+        for fmt in formats:
+            try:
+                return datetime.strptime(raw, fmt).date()
+            except ValueError:
+                continue
+
+    raise ValueError(f"Unsupported date value: {value!r}")
+
+
+def _add_issue(issues, severity, code, entity, row, field, message):
+    issues.append({
+        "severity": severity,
+        "code": code,
+        "entity": entity,
+        "row": row,
+        "field": field,
+        "message": message,
+    })
+
+
+def _date_fields(cells, header_map, field_map, epoch,
+                 issues, entity, row_number):
+    result = {}
+
+    for header, target in field_map.items():
+        raw = _value(cells, header_map, header)
+
+        try:
+            result[target] = _parse_date(raw, epoch)
+        except (ValueError, OverflowError, TypeError) as exc:
+            result[target] = None
+            _add_issue(
+                issues,
+                "ERROR",
+                "INVALID_DATE",
+                entity,
+                row_number,
+                header,
+                str(exc),
+            )
+
+    return result
+
+
+def _source_row_number(value, issues, row_number):
+    if value in (None, ""):
+        return None
+
+    try:
+        number = int(value)
+
+        if float(value) != number or number < 1:
+            raise ValueError
+
+        return number
+
+    except (TypeError, ValueError, OverflowError):
+        _add_issue(
+            issues,
+            "ERROR",
+            "INVALID_SOURCE_ROW",
+            "KHS_ITEM",
+            row_number,
+            "Source Row No.",
+            "Source Row No. must be a positive integer.",
+        )
+        return None
+
+
+def _read_template_executors(workbook, issues):
+    if MASTER_SHEET not in workbook.sheetnames:
+        _add_issue(
+            issues,
+            "WARNING",
+            "MASTER_SHEET_MISSING",
+            "WORKBOOK",
+            None,
+            MASTER_SHEET,
+            "Master Data sheet is missing.",
+        )
+        return set()
+
+    ws = workbook[MASTER_SHEET]
+
+    try:
+        header_row, mapping = _find_header_row(
+            ws, {"Executor"}, MASTER_SHEET
+        )
+    except WorkbookImportError:
+        return set()
+
+    index = mapping["Executor"]
+    codes = set()
+
+    for row in ws.iter_rows(
+        min_row=header_row + 1,
+        values_only=True,
+    ):
+        if index < len(row):
+            code = _text(row[index])
+
+            if code:
+                codes.add(code.upper())
+
+    return codes
+
+
+def parse_khs_workbook(file_object, known_executors=None):
+    """
+    Parse and validate the final KHS v2.2 workbook.
+
+    This function is read-only. It does not write to PostgreSQL.
+
+    known_executors:
+        Optional set of active executor codes obtained from khs_executors.
+    """
+
+    issues = []
+
+    try:
+        if hasattr(file_object, "seek"):
+            file_object.seek(0)
+
+        workbook = load_workbook(
+            file_object,
+            read_only=True,
+            data_only=True,
+        )
+
+    except Exception as exc:
+        raise WorkbookImportError(
+            f"Unable to read Excel workbook: {exc}"
+        ) from exc
+
+    try:
+        required_sheets = {REQUEST_SHEET, KHS_SHEET}
+        missing_sheets = required_sheets - set(workbook.sheetnames)
+
+        if missing_sheets:
+            raise WorkbookImportError(
+                "Missing required sheets: "
+                + ", ".join(sorted(missing_sheets))
+            )
+
+        request_ws = workbook[REQUEST_SHEET]
+        khs_ws = workbook[KHS_SHEET]
+
+        request_header_row, request_map = _find_header_row(
+            request_ws, REQUEST_HEADERS, REQUEST_SHEET
+        )
+
+        khs_header_row, khs_map = _find_header_row(
+            khs_ws, KHS_HEADERS, KHS_SHEET
+        )
+
+        requests = []
+        items = []
+        request_lookup = {}
+        item_ids = set()
+
+        # -------------------------------------------------
+        # REQUEST REGISTER
+        # -------------------------------------------------
+
+        for row_number, cells in enumerate(
+            request_ws.iter_rows(
+                min_row=request_header_row + 1,
+                values_only=False,
+            ),
+            start=request_header_row + 1,
+        ):
+            request_id = _text(
+                _value(cells, request_map, "Request ID")
+            )
+
+            subject = _text(
+                _value(cells, request_map, "Request / Subject")
+            )
+
+            if not request_id and not subject:
+                continue
+
+            if not request_id:
+                _add_issue(
+                    issues, "ERROR", "MISSING_REQUEST_ID",
+                    "REQUEST", row_number, "Request ID",
+                    "Request ID is required.",
+                )
+                continue
+
+            if request_id in request_lookup:
+                _add_issue(
+                    issues, "ERROR", "DUPLICATE_REQUEST_ID",
+                    "REQUEST", row_number, "Request ID",
+                    f"Duplicate Request ID: {request_id}.",
+                )
+                continue
+
+            if not subject:
+                _add_issue(
+                    issues, "ERROR", "MISSING_REQUEST_SUBJECT",
+                    "REQUEST", row_number, "Request / Subject",
+                    "Request / Subject is required.",
+                )
+                continue
+
+            dates = _date_fields(
+                cells,
+                request_map,
+                REQUEST_DATE_FIELDS,
+                workbook.epoch,
+                issues,
+                "REQUEST",
+                row_number,
+            )
+
+            record = {
+                "source_excel_row": row_number,
+                "request_id": request_id,
+                "request_date": dates["request_date"],
+                "request_subject": subject,
+                "requester_owner": _text(
+                    _value(cells, request_map, "Requester / Owner")
+                ),
+            }
+
+            requests.append(record)
+            request_lookup[request_id] = record
+
+        if not requests:
+            _add_issue(
+                issues,
+                "ERROR",
+                "NO_REQUESTS",
+                "WORKBOOK",
+                None,
+                REQUEST_SHEET,
+                "No valid request records were found.",
+            )
+
+        # -------------------------------------------------
+        # EXECUTOR MASTER CONSISTENCY
+        # -------------------------------------------------
+
+        template_executors = _read_template_executors(
+            workbook, issues
+        )
+
+        if known_executors is not None:
+            db_executors = {
+                str(code).strip().upper()
+                for code in known_executors
+            }
+
+            missing_from_template = sorted(
+                db_executors - template_executors
+            )
+
+            if missing_from_template:
+                _add_issue(
+                    issues,
+                    "WARNING",
+                    "EXECUTOR_MASTER_MISMATCH",
+                    "WORKBOOK",
+                    None,
+                    "03 - Master Data",
+                    "Database executor codes missing from the "
+                    "template dropdown: "
+                    + ", ".join(missing_from_template),
+                )
+
+        # -------------------------------------------------
+        # INDIVIDUAL KHS
+        # -------------------------------------------------
+
+        for row_number, cells in enumerate(
+            khs_ws.iter_rows(
+                min_row=khs_header_row + 1,
+                values_only=False,
+            ),
+            start=khs_header_row + 1,
+        ):
+            khs_id = _text(_value(cells, khs_map, "KHS ID"))
+            request_id = _text(
+                _value(cells, khs_map, "Request ID")
+            )
+            vendor = _text(
+                _value(cells, khs_map, "Vendor Name")
+            )
+            subject = _text(
+                _value(cells, khs_map, "Request / Subject")
+            )
+
+            if not any((khs_id, request_id, vendor, subject)):
+                continue
+
+            row_has_error = False
+
+            for field, value, code in (
+                ("KHS ID", khs_id, "MISSING_KHS_ID"),
+                ("Request ID", request_id, "MISSING_REQUEST_ID"),
+                ("Vendor Name", vendor, "MISSING_VENDOR"),
+            ):
+                if not value:
+                    row_has_error = True
+                    _add_issue(
+                        issues,
+                        "ERROR",
+                        code,
+                        "KHS_ITEM",
+                        row_number,
+                        field,
+                        f"{field} is required.",
+                    )
+
+            if row_has_error:
+                continue
+
+            if khs_id in item_ids:
+                _add_issue(
+                    issues,
+                    "ERROR",
+                    "DUPLICATE_KHS_ID",
+                    "KHS_ITEM",
+                    row_number,
+                    "KHS ID",
+                    f"Duplicate KHS ID: {khs_id}.",
+                )
+                continue
+
+            item_ids.add(khs_id)
+
+            if request_id not in request_lookup:
+                _add_issue(
+                    issues,
+                    "ERROR",
+                    "UNKNOWN_REQUEST_ID",
+                    "KHS_ITEM",
+                    row_number,
+                    "Request ID",
+                    f"Request ID {request_id} is not present "
+                    "in Request Register.",
+                )
+
+            executor = _text(
+                _value(cells, khs_map, "Executor")
+            )
+            executor = executor.upper() if executor else None
+
+            if executor and known_executors is not None:
+                allowed = {
+                    str(code).strip().upper()
+                    for code in known_executors
+                }
+
+                if executor not in allowed:
+                    _add_issue(
+                        issues,
+                        "ERROR",
+                        "UNKNOWN_EXECUTOR",
+                        "KHS_ITEM",
+                        row_number,
+                        "Executor",
+                        f"Executor {executor} is not active "
+                        "in the database master.",
+                    )
+
+            subtype_raw = _text(
+                _value(cells, khs_map, "Subtype")
+            )
+            subtype = (
+                SUBTYPE_MAP.get(subtype_raw.casefold())
+                if subtype_raw else None
+            )
+
+            if subtype_raw and subtype is None:
+                _add_issue(
+                    issues,
+                    "ERROR",
+                    "INVALID_SUBTYPE",
+                    "KHS_ITEM",
+                    row_number,
+                    "Subtype",
+                    f"Unsupported subtype: {subtype_raw}.",
+                )
+
+            dates = _date_fields(
+                cells,
+                khs_map,
+                ITEM_DATE_FIELDS,
+                workbook.epoch,
+                issues,
+                "KHS_ITEM",
+                row_number,
+            )
+
+            try:
+                item_request_date = _parse_date(
+                    _value(cells, khs_map, "Request Date"),
+                    workbook.epoch,
+                )
+            except (ValueError, OverflowError, TypeError) as exc:
+                item_request_date = None
+                _add_issue(
+                    issues,
+                    "ERROR",
+                    "INVALID_REQUEST_DATE",
+                    "KHS_ITEM",
+                    row_number,
+                    "Request Date",
+                    str(exc),
+                )
+
+            parent = request_lookup.get(request_id)
+
+            if parent:
+                parent_date = parent["request_date"]
+
+                if (
+                    item_request_date
+                    and parent_date
+                    and item_request_date != parent_date
+                ):
+                    _add_issue(
+                        issues,
+                        "WARNING",
+                        "REQUEST_DATE_MISMATCH",
+                        "KHS_ITEM",
+                        row_number,
+                        "Request Date",
+                        "Request Date differs from Request Register.",
+                    )
+
+                if (
+                    subject
+                    and _normalized_subject(subject)
+                    != _normalized_subject(parent["request_subject"])
+                ):
+                    _add_issue(
+                        issues,
+                        "WARNING",
+                        "REQUEST_SUBJECT_MISMATCH",
+                        "KHS_ITEM",
+                        row_number,
+                        "Request / Subject",
+                        "Subject differs from Request Register.",
+                    )
+
+            # ---------------------------------------------
+            # BUSINESS CHRONOLOGY VALIDATION
+            # ---------------------------------------------
+
+            request_date = parent["request_date"] if parent else None
+            dispatch_date = dates["dispatch_date"]
+
+            if (
+                request_date
+                and dispatch_date
+                and dispatch_date < request_date
+            ):
+                _add_issue(
+                    issues,
+                    "ERROR",
+                    "DISPATCH_BEFORE_REQUEST",
+                    "KHS_ITEM",
+                    row_number,
+                    "Dispatch Date",
+                    "Dispatch Date cannot precede Request Date.",
+                )
+
+            start_date = dates["contract_start_date"]
+            end_date = dates["contract_end_date"]
+
+            if start_date and end_date and end_date < start_date:
+                _add_issue(
+                    issues,
+                    "ERROR",
+                    "INVALID_CONTRACT_DATE_RANGE",
+                    "KHS_ITEM",
+                    row_number,
+                    "Contract End Date",
+                    "Contract End Date precedes Contract Start Date.",
+                )
+
+            mi_dates = [
+                dates["mi_head_approval_date"],
+                dates["mi_sm_approval_date"],
+                dates["mi_gm_approval_date"],
+            ]
+
+            populated_mi_dates = [
+                value for value in mi_dates if value is not None
+            ]
+
+            if populated_mi_dates != sorted(populated_mi_dates):
+                _add_issue(
+                    issues,
+                    "WARNING",
+                    "MI_APPROVAL_CHRONOLOGY",
+                    "KHS_ITEM",
+                    row_number,
+                    "MI Approval Dates",
+                    "MI approval dates are not in chronological order.",
+                )
+
+            lp_start = dates["lp_circulation_start_date"]
+            lp_completion = dates["lp_completion_date"]
+            mi_gm = dates["mi_gm_approval_date"]
+
+            if lp_start and not mi_gm:
+                _add_issue(
+                    issues,
+                    "WARNING",
+                    "LP_START_WITHOUT_MI_GM_DATE",
+                    "KHS_ITEM",
+                    row_number,
+                    "LP Circulation Start Date",
+                    "LP circulation is recorded but MI GM Approval "
+                    "Date is missing. Verify the source data.",
+                )
+
+            elif lp_start and mi_gm and lp_start < mi_gm:
+                _add_issue(
+                    issues,
+                    "WARNING",
+                    "LP_START_BEFORE_MI_GM",
+                    "KHS_ITEM",
+                    row_number,
+                    "LP Circulation Start Date",
+                    "LP circulation date precedes MI GM approval.",
+                )
+
+            if lp_completion and not lp_start:
+                _add_issue(
+                    issues,
+                    "ERROR",
+                    "LP_COMPLETION_WITHOUT_START",
+                    "KHS_ITEM",
+                    row_number,
+                    "LP Completion Date (Director Signed)",
+                    "LP completion requires a circulation start date.",
+                )
+
+            elif lp_completion and lp_start and lp_completion < lp_start:
+                _add_issue(
+                    issues,
+                    "ERROR",
+                    "LP_COMPLETION_BEFORE_START",
+                    "KHS_ITEM",
+                    row_number,
+                    "LP Completion Date (Director Signed)",
+                    "LP completion date cannot precede LP start date.",
+                )
+
+            audit_date = dates["source_col_s_audit_date"]
+
+            if audit_date and lp_start and audit_date != lp_start:
+                _add_issue(
+                    issues,
+                    "WARNING",
+                    "LP_AUDIT_DATE_MISMATCH",
+                    "KHS_ITEM",
+                    row_number,
+                    "Original Source Column S (Audit Copy - LP Circulation Start Date)",
+                    "Audit copy differs from LP Circulation Start Date.",
+                )
+
+            record = {
+                "source_excel_row": row_number,
+                "khs_id": khs_id,
+                "request_id": request_id,
+                "source_row_no": _source_row_number(
+                    _value(cells, khs_map, "Source Row No."),
+                    issues,
+                    row_number,
+                ),
+                "executor_code": executor,
+                "subtype": subtype,
+                "vendor_name": vendor,
+                "waiting_for": _text(
+                    _value(cells, khs_map, "Waiting For")
+                ),
+                "waiting_reason": _text(
+                    _value(cells, khs_map, "Waiting Reason")
+                ),
+                "remarks": _text(
+                    _value(cells, khs_map, "Remarks")
+                ),
+                "legacy_overall_status": _text(
+                    _value(cells, khs_map, "Legacy Overall Status")
+                ),
+                "legacy_detailed_status": _text(
+                    _value(cells, khs_map, "Legacy Detailed Status")
+                ),
+                "migration_review": _text(
+                    _value(cells, khs_map, "Migration Review")
+                ),
+                **dates,
+            }
+
+            items.append(record)
+
+        if not items:
+            _add_issue(
+                issues,
+                "ERROR",
+                "NO_KHS_ITEMS",
+                "WORKBOOK",
+                None,
+                KHS_SHEET,
+                "No individual KHS records were found.",
+            )
+
+        # -------------------------------------------------
+        # SUMMARY
+        # -------------------------------------------------
+
+        error_count = sum(
+            1 for issue in issues
+            if issue["severity"] == "ERROR"
+        )
+
+        warning_count = sum(
+            1 for issue in issues
+            if issue["severity"] == "WARNING"
+        )
+
+        return {
+            "template_version": "2.2",
+            "requests": requests,
+            "items": items,
+            "issues": issues,
+            "summary": {
+                "total_requests": len(requests),
+                "total_khs_items": len(items),
+                "error_count": error_count,
+                "warning_count": warning_count,
+                "can_import": error_count == 0,
+            },
+        }
+
+    finally:
+        workbook.close()

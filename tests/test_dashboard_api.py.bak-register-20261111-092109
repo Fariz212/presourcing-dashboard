@@ -1,0 +1,121 @@
+from contextlib import contextmanager
+
+import pytest
+from flask import Flask
+
+from app.routes.dashboard import dashboard_bp
+
+
+class FakeCursor:
+    def __init__(self, row):
+        self.row = row
+
+    def fetchone(self):
+        return self.row
+
+
+class FakeConnection:
+    def __init__(self, row):
+        self.row = row
+        self.executed_query = None
+
+    def execute(self, query):
+        self.executed_query = query
+        return FakeCursor(self.row)
+
+
+class FakePool:
+    def __init__(self, row=None, error=None):
+        self.row = row
+        self.error = error
+        self.connection_object = FakeConnection(row)
+
+    @contextmanager
+    def connection(self):
+        if self.error:
+            raise self.error
+        yield self.connection_object
+
+
+@pytest.fixture
+def make_client(monkeypatch):
+    def _make(pool):
+        monkeypatch.setattr(
+            "app.routes.dashboard.get_db_pool",
+            lambda: pool,
+        )
+
+        app = Flask(__name__)
+        app.register_blueprint(
+            dashboard_bp,
+            url_prefix="/api/dashboard",
+        )
+        app.config["TESTING"] = True
+        return app.test_client()
+
+    return _make
+
+
+def test_dashboard_summary_returns_expected_kpis(make_client):
+    # total_requests, total_khs, LP completed, in progress,
+    # not started, MI GM approved, MI GM pending,
+    # legal submitted, LP without MI GM, awaiting LP.
+    row = (9, 64, 0, 34, 30, 27, 37, 34, 7, 0)
+    pool = FakePool(row=row)
+
+    response = make_client(pool).get("/api/dashboard/summary")
+
+    assert response.status_code == 200
+    payload = response.get_json()
+
+    assert payload["success"] is True
+    assert payload["data"]["total_requests"] == 9
+    assert payload["data"]["total_khs"] == 64
+
+    assert payload["data"]["lp"] == {
+        "completed": 0,
+        "in_progress": 34,
+        "not_started": 30,
+        "completion_rate_percent": 0.0,
+    }
+
+    assert payload["data"]["workflow"] == {
+        "mi_gm_approved": 27,
+        "mi_gm_pending": 37,
+        "legal_submitted": 34,
+        "awaiting_lp_circulation": 0,
+    }
+
+    assert (
+        payload["data"]["data_quality"][
+            "lp_started_without_mi_gm_approval"
+        ]
+        == 7
+    )
+
+    assert "FROM khs_items" in pool.connection_object.executed_query
+
+
+def test_dashboard_summary_handles_empty_database(make_client):
+    pool = FakePool(row=(0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
+
+    response = make_client(pool).get("/api/dashboard/summary")
+
+    assert response.status_code == 200
+    payload = response.get_json()
+
+    assert payload["data"]["total_requests"] == 0
+    assert payload["data"]["total_khs"] == 0
+    assert payload["data"]["lp"]["completion_rate_percent"] == 0.0
+
+
+def test_dashboard_summary_returns_json_when_database_fails(make_client):
+    pool = FakePool(error=RuntimeError("simulated database failure"))
+
+    response = make_client(pool).get("/api/dashboard/summary")
+
+    assert response.status_code == 503
+    payload = response.get_json()
+
+    assert payload["success"] is False
+    assert payload["code"] == "DASHBOARD_SUMMARY_UNAVAILABLE"

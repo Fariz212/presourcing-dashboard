@@ -1,0 +1,114 @@
+from flask import Blueprint, current_app, jsonify
+
+from app.db import get_db_pool
+
+
+dashboard_bp = Blueprint("dashboard", __name__)
+
+
+SUMMARY_QUERY = """
+SELECT
+    (SELECT COUNT(*) FROM khs_requests) AS total_requests,
+    COUNT(*) AS total_khs,
+
+    COUNT(*) FILTER (
+        WHERE lp_completion_date IS NOT NULL
+    ) AS lp_completed,
+
+    COUNT(*) FILTER (
+        WHERE lp_circulation_start_date IS NOT NULL
+          AND lp_completion_date IS NULL
+    ) AS lp_in_progress,
+
+    COUNT(*) FILTER (
+        WHERE lp_circulation_start_date IS NULL
+    ) AS lp_not_started,
+
+    COUNT(*) FILTER (
+        WHERE mi_gm_approval_date IS NOT NULL
+    ) AS mi_gm_approved,
+
+    COUNT(*) FILTER (
+        WHERE mi_gm_approval_date IS NULL
+    ) AS mi_gm_pending,
+
+    COUNT(*) FILTER (
+        WHERE legal_submission_date IS NOT NULL
+    ) AS legal_submitted,
+
+    COUNT(*) FILTER (
+        WHERE lp_circulation_start_date IS NOT NULL
+          AND mi_gm_approval_date IS NULL
+    ) AS lp_started_without_mi_gm,
+
+    COUNT(*) FILTER (
+        WHERE mi_gm_approval_date IS NOT NULL
+          AND lp_circulation_start_date IS NULL
+    ) AS awaiting_lp_circulation
+
+FROM khs_items;
+"""
+
+
+@dashboard_bp.get("/summary")
+def dashboard_summary():
+    try:
+        with get_db_pool().connection() as conn:
+            row = conn.execute(SUMMARY_QUERY).fetchone()
+
+        if row is None:
+            raise RuntimeError("Dashboard aggregate query returned no row.")
+
+    except Exception:
+        current_app.logger.exception(
+            "Dashboard summary query failed."
+        )
+        return jsonify({
+            "success": False,
+            "code": "DASHBOARD_SUMMARY_UNAVAILABLE",
+            "message": "Dashboard summary is temporarily unavailable.",
+        }), 503
+
+    (
+        total_requests,
+        total_khs,
+        lp_completed,
+        lp_in_progress,
+        lp_not_started,
+        mi_gm_approved,
+        mi_gm_pending,
+        legal_submitted,
+        lp_started_without_mi_gm,
+        awaiting_lp_circulation,
+    ) = row
+
+    completion_rate = (
+        round((lp_completed / total_khs) * 100, 2)
+        if total_khs
+        else 0.0
+    )
+
+    return jsonify({
+        "success": True,
+        "data": {
+            "total_requests": total_requests,
+            "total_khs": total_khs,
+            "lp": {
+                "completed": lp_completed,
+                "in_progress": lp_in_progress,
+                "not_started": lp_not_started,
+                "completion_rate_percent": completion_rate,
+            },
+            "workflow": {
+                "mi_gm_approved": mi_gm_approved,
+                "mi_gm_pending": mi_gm_pending,
+                "legal_submitted": legal_submitted,
+                "awaiting_lp_circulation": awaiting_lp_circulation,
+            },
+            "data_quality": {
+                "lp_started_without_mi_gm_approval": (
+                    lp_started_without_mi_gm
+                ),
+            },
+        },
+    }), 200

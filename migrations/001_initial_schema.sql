@@ -1,0 +1,511 @@
+BEGIN;
+
+-- =========================================================
+-- 1. MIGRATION TRACKING
+-- =========================================================
+
+CREATE TABLE schema_migrations (
+    version TEXT PRIMARY KEY,
+    applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- =========================================================
+-- 2. EXECUTOR MASTER
+-- =========================================================
+
+CREATE TABLE khs_executors (
+    executor_code TEXT PRIMARY KEY,
+    display_name TEXT NOT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT chk_executor_code
+        CHECK (BTRIM(executor_code) <> '')
+);
+
+INSERT INTO khs_executors (executor_code, display_name)
+VALUES
+    ('ALW', 'Adila Darmawan'),
+    ('AME', 'Adistia Marshalidia'),
+    ('AMM', 'Armandio Muhammad'),
+    ('AYE', 'Amelya Husen'),
+    ('CMZ', 'Camelia Zah'),
+    ('ULM', 'Muhammad Ilham Firdaus'),
+    ('FZK', 'Farizky Ramadhan')
+ON CONFLICT (executor_code) DO NOTHING;
+
+-- =========================================================
+-- 3. REQUEST REGISTER (PARENT)
+-- =========================================================
+
+CREATE TABLE khs_requests (
+    request_id TEXT PRIMARY KEY,
+    request_date DATE,
+    request_subject TEXT NOT NULL,
+    requester_owner TEXT,
+
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT chk_request_id
+        CHECK (BTRIM(request_id) <> ''),
+
+    CONSTRAINT chk_request_subject
+        CHECK (BTRIM(request_subject) <> '')
+);
+
+-- =========================================================
+-- 4. INDIVIDUAL KHS (CHILD)
+-- =========================================================
+
+CREATE TABLE khs_items (
+    khs_id TEXT PRIMARY KEY,
+
+    request_id TEXT NOT NULL
+        REFERENCES khs_requests(request_id)
+        ON UPDATE CASCADE
+        ON DELETE RESTRICT,
+
+    source_row_no INTEGER,
+
+    dispatch_date DATE,
+
+    executor_code TEXT
+        REFERENCES khs_executors(executor_code)
+        ON UPDATE CASCADE
+        ON DELETE RESTRICT,
+
+    subtype TEXT,
+    vendor_name TEXT NOT NULL,
+
+    contract_start_date DATE,
+    contract_end_date DATE,
+
+    boq_confirmation_date DATE,
+    negotiation_date DATE,
+    final_negotiation_date DATE,
+
+    mi_head_approval_date DATE,
+    mi_sm_approval_date DATE,
+    mi_gm_approval_date DATE,
+
+    legal_submission_date DATE,
+
+    lp_circulation_start_date DATE,
+    lp_completion_date DATE,
+
+    waiting_for TEXT,
+    waiting_reason TEXT,
+
+    last_updated_date DATE,
+    remarks TEXT,
+
+    -- Preserve legacy fields for migration and audit.
+    legacy_overall_status TEXT,
+    legacy_detailed_status TEXT,
+    source_col_s_audit_date DATE,
+    migration_review TEXT,
+
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT chk_khs_id
+        CHECK (BTRIM(khs_id) <> ''),
+
+    CONSTRAINT chk_vendor_name
+        CHECK (BTRIM(vendor_name) <> ''),
+
+    CONSTRAINT chk_subtype
+        CHECK (
+            subtype IS NULL
+            OR subtype IN ('Renewal', 'Kontrak Baru')
+        ),
+
+    CONSTRAINT chk_lp_completion_requires_start
+        CHECK (
+            lp_completion_date IS NULL
+            OR (
+                lp_circulation_start_date IS NOT NULL
+                AND lp_completion_date >= lp_circulation_start_date
+            )
+        )
+);
+
+CREATE INDEX idx_khs_items_request
+    ON khs_items(request_id);
+
+CREATE INDEX idx_khs_items_executor
+    ON khs_items(executor_code);
+
+CREATE INDEX idx_khs_items_lp_start
+    ON khs_items(lp_circulation_start_date);
+
+CREATE INDEX idx_khs_items_lp_completion
+    ON khs_items(lp_completion_date);
+
+CREATE INDEX idx_khs_items_dispatch
+    ON khs_items(dispatch_date);
+
+-- =========================================================
+-- 5. WORKFLOW STAGE CONFIGURATION
+-- =========================================================
+
+CREATE TABLE khs_stage_config (
+    stage_code TEXT PRIMARY KEY,
+    stage_name TEXT NOT NULL,
+    sequence_number INTEGER NOT NULL UNIQUE,
+    default_sla_days INTEGER,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+
+    CONSTRAINT chk_stage_sla
+        CHECK (default_sla_days IS NULL OR default_sla_days >= 0)
+);
+
+INSERT INTO khs_stage_config
+    (stage_code, stage_name, sequence_number)
+VALUES
+    ('REQUEST_RECEIVED', 'Request Received', 1),
+    ('DISPATCH', 'Dispatch', 2),
+    ('BOQ_CONFIRMATION', 'BOQ Confirmation', 3),
+    ('NEGOTIATION', 'Negotiation', 4),
+    ('FINAL_NEGOTIATION', 'Final Negotiation', 5),
+    ('MI_HEAD_APPROVAL', 'MI Approval - Head', 6),
+    ('MI_SM_APPROVAL', 'MI Approval - SM', 7),
+    ('MI_GM_APPROVAL', 'MI Approval - GM', 8),
+    ('LEGAL_SUBMISSION', 'Legal Submission', 9),
+    ('LEGAL_PROCESSING', 'Legal Processing', 10),
+    ('LP_CIRCULATION', 'LP Circulation', 11),
+    ('COMPLETED', 'Completed', 12)
+ON CONFLICT (stage_code) DO NOTHING;
+
+-- =========================================================
+-- 6. IMPORT BATCH HISTORY
+-- =========================================================
+
+CREATE TABLE khs_import_batches (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+
+    original_file_name TEXT NOT NULL,
+    file_sha256 CHAR(64) NOT NULL UNIQUE,
+
+    uploaded_by TEXT,
+    status TEXT NOT NULL DEFAULT 'UPLOADED',
+
+    total_rows INTEGER NOT NULL DEFAULT 0,
+    valid_rows INTEGER NOT NULL DEFAULT 0,
+    warning_rows INTEGER NOT NULL DEFAULT 0,
+    error_rows INTEGER NOT NULL DEFAULT 0,
+
+    inserted_requests INTEGER NOT NULL DEFAULT 0,
+    updated_requests INTEGER NOT NULL DEFAULT 0,
+    inserted_items INTEGER NOT NULL DEFAULT 0,
+    updated_items INTEGER NOT NULL DEFAULT 0,
+
+    error_summary JSONB NOT NULL DEFAULT '{}'::JSONB,
+
+    uploaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    completed_at TIMESTAMPTZ,
+
+    CONSTRAINT chk_import_status
+        CHECK (
+            status IN (
+                'UPLOADED',
+                'VALIDATING',
+                'PREVIEWED',
+                'IMPORTED',
+                'FAILED',
+                'REJECTED'
+            )
+        ),
+
+    CONSTRAINT chk_import_counts
+        CHECK (
+            total_rows >= 0
+            AND valid_rows >= 0
+            AND warning_rows >= 0
+            AND error_rows >= 0
+        )
+);
+
+-- =========================================================
+-- 7. IMPORT ROW STAGING
+-- =========================================================
+
+CREATE TABLE khs_import_rows (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+
+    batch_id BIGINT NOT NULL
+        REFERENCES khs_import_batches(id)
+        ON DELETE CASCADE,
+
+    sheet_name TEXT NOT NULL,
+    source_row_number INTEGER NOT NULL,
+
+    entity_type TEXT NOT NULL,
+    external_id TEXT,
+
+    validation_status TEXT NOT NULL DEFAULT 'PENDING',
+
+    raw_data JSONB NOT NULL DEFAULT '{}'::JSONB,
+    normalized_data JSONB NOT NULL DEFAULT '{}'::JSONB,
+
+    errors JSONB NOT NULL DEFAULT '[]'::JSONB,
+    warnings JSONB NOT NULL DEFAULT '[]'::JSONB,
+
+    processed_at TIMESTAMPTZ,
+
+    CONSTRAINT chk_import_entity
+        CHECK (entity_type IN ('REQUEST', 'KHS_ITEM')),
+
+    CONSTRAINT chk_row_validation
+        CHECK (
+            validation_status IN (
+                'PENDING',
+                'VALID',
+                'WARNING',
+                'ERROR',
+                'IMPORTED',
+                'SKIPPED'
+            )
+        ),
+
+    UNIQUE(batch_id, sheet_name, source_row_number)
+);
+
+CREATE INDEX idx_import_rows_batch
+    ON khs_import_rows(batch_id);
+
+-- =========================================================
+-- 8. ACTIVITY / CHANGE HISTORY
+-- =========================================================
+
+CREATE TABLE khs_activity_logs (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+
+    entity_type TEXT NOT NULL,
+    entity_id TEXT NOT NULL,
+    action TEXT NOT NULL,
+
+    actor TEXT,
+
+    changes JSONB NOT NULL DEFAULT '{}'::JSONB,
+
+    import_batch_id BIGINT
+        REFERENCES khs_import_batches(id)
+        ON DELETE SET NULL,
+
+    occurred_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_khs_activity_entity
+    ON khs_activity_logs(entity_type, entity_id);
+
+CREATE INDEX idx_khs_activity_time
+    ON khs_activity_logs(occurred_at DESC);
+
+-- =========================================================
+-- 9. DOCUMENT REFERENCES
+-- =========================================================
+
+CREATE TABLE khs_documents (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+
+    khs_id TEXT NOT NULL
+        REFERENCES khs_items(khs_id)
+        ON DELETE RESTRICT,
+
+    document_type TEXT NOT NULL,
+    original_file_name TEXT NOT NULL,
+    storage_key TEXT NOT NULL,
+
+    mime_type TEXT,
+    file_sha256 CHAR(64),
+
+    uploaded_by TEXT,
+    uploaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_khs_documents_item
+    ON khs_documents(khs_id);
+
+-- =========================================================
+-- 10. KHS MONITORING VIEW
+-- =========================================================
+
+CREATE OR REPLACE VIEW v_khs_monitoring AS
+SELECT
+    i.khs_id,
+    i.request_id,
+    r.request_date,
+    r.request_subject,
+    r.requester_owner,
+
+    i.source_row_no,
+    i.dispatch_date,
+    i.executor_code,
+    i.subtype,
+    i.vendor_name,
+
+    i.contract_start_date,
+    i.contract_end_date,
+
+    i.boq_confirmation_date,
+    i.negotiation_date,
+    i.final_negotiation_date,
+
+    i.mi_head_approval_date,
+    i.mi_sm_approval_date,
+    i.mi_gm_approval_date,
+
+    CASE
+        WHEN i.mi_gm_approval_date IS NOT NULL
+            THEN 'Completed'
+        ELSE 'Not Completed'
+    END AS mi_status,
+
+    i.legal_submission_date,
+    i.lp_circulation_start_date,
+    i.lp_completion_date,
+
+    CASE
+        WHEN i.lp_completion_date IS NOT NULL
+            THEN 'Completed'
+        ELSE 'Not Completed'
+    END AS lp_status,
+
+    CASE
+        WHEN i.lp_completion_date IS NOT NULL
+            THEN 'Completed'
+
+        WHEN i.mi_gm_approval_date IS NULL
+             AND (
+                 i.legal_submission_date IS NOT NULL
+                 OR i.lp_circulation_start_date IS NOT NULL
+             )
+            THEN 'Data Review - MI GM approval missing'
+
+        WHEN i.lp_circulation_start_date IS NOT NULL
+            THEN 'LP Circulation'
+
+        WHEN i.legal_submission_date IS NOT NULL
+            THEN 'Legal Processing'
+
+        WHEN i.mi_gm_approval_date IS NOT NULL
+            THEN 'Legal Submission'
+
+        WHEN i.mi_sm_approval_date IS NOT NULL
+            THEN 'MI Approval - GM'
+
+        WHEN i.mi_head_approval_date IS NOT NULL
+            THEN 'MI Approval - SM'
+
+        WHEN i.final_negotiation_date IS NOT NULL
+            THEN 'MI Approval - Head'
+
+        WHEN i.negotiation_date IS NOT NULL
+            THEN 'Final Negotiation'
+
+        WHEN i.boq_confirmation_date IS NOT NULL
+            THEN 'Negotiation'
+
+        WHEN i.dispatch_date IS NOT NULL
+            THEN 'BOQ Confirmation'
+
+        WHEN r.request_date IS NOT NULL
+            THEN 'Dispatch'
+
+        ELSE 'Request Received'
+    END AS current_stage,
+
+    CASE
+        WHEN i.lp_completion_date IS NOT NULL
+            THEN 'Completed'
+        ELSE 'In Progress'
+    END AS overall_status,
+
+    CASE
+        WHEN r.request_date IS NULL THEN NULL
+        ELSE
+            COALESCE(i.lp_completion_date, CURRENT_DATE)
+            - r.request_date
+    END AS processing_days,
+
+    i.waiting_for,
+    i.waiting_reason,
+    i.last_updated_date,
+    i.remarks,
+
+    i.legacy_overall_status,
+    i.legacy_detailed_status,
+    i.source_col_s_audit_date,
+    i.migration_review,
+
+    i.created_at,
+    i.updated_at
+
+FROM khs_items i
+JOIN khs_requests r
+    ON r.request_id = i.request_id;
+
+-- =========================================================
+-- 11. REQUEST REGISTER VIEW
+-- =========================================================
+
+CREATE OR REPLACE VIEW v_khs_request_monitoring AS
+SELECT
+    r.request_id,
+    r.request_date,
+    r.request_subject,
+    r.requester_owner,
+
+    COUNT(i.khs_id) AS total_khs,
+
+    COUNT(i.khs_id) FILTER (
+        WHERE i.lp_completion_date IS NOT NULL
+    ) AS completed_khs,
+
+    COUNT(i.khs_id) FILTER (
+        WHERE i.lp_completion_date IS NULL
+    ) AS in_progress_khs,
+
+    CASE
+        WHEN COUNT(i.khs_id) = 0
+            THEN 'Not Started'
+
+        WHEN COUNT(i.khs_id) FILTER (
+            WHERE i.lp_completion_date IS NOT NULL
+        ) = COUNT(i.khs_id)
+            THEN 'Completed'
+
+        WHEN COUNT(i.khs_id) FILTER (
+            WHERE i.lp_completion_date IS NOT NULL
+        ) > 0
+            THEN 'Partially Completed'
+
+        ELSE 'In Progress'
+    END AS request_status,
+
+    r.created_at,
+    r.updated_at
+
+FROM khs_requests r
+LEFT JOIN khs_items i
+    ON i.request_id = r.request_id
+
+GROUP BY
+    r.request_id,
+    r.request_date,
+    r.request_subject,
+    r.requester_owner,
+    r.created_at,
+    r.updated_at;
+
+-- =========================================================
+-- 12. RECORD MIGRATION VERSION
+-- =========================================================
+
+INSERT INTO schema_migrations (version)
+VALUES ('001_initial_schema')
+ON CONFLICT (version) DO NOTHING;
+
+COMMIT;

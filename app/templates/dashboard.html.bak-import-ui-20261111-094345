@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#101d35">
+    <meta name="description" content="KHS Creation Monitoring Dashboard">
+    <title>KHS Creation Monitoring</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}" defer></script>
+</head>
+<body>
+<div class="app-shell">
+
+    <aside class="sidebar">
+        <a class="brand" href="#overview" aria-label="KHS Monitoring home">
+            <span class="brand-mark">K</span>
+            <span class="brand-copy">
+                <strong>KHS</strong>
+                <small>MONITORING</small>
+            </span>
+        </a>
+
+        <div class="sidebar-caption">WORKSPACE</div>
+
+        <nav class="side-nav" aria-label="Main navigation">
+            <a class="nav-link active" href="#overview">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <rect x="3" y="3" width="8" height="8" rx="2"/>
+                    <rect x="13" y="3" width="8" height="5" rx="2"/>
+                    <rect x="13" y="10" width="8" height="11" rx="2"/>
+                    <rect x="3" y="13" width="8" height="8" rx="2"/>
+                </svg>
+                Overview
+            </a>
+            <a class="nav-link" href="#register">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <rect x="3" y="4" width="18" height="16" rx="2"/>
+                    <path d="M8 4v16M12 9h5M12 13h5M12 17h3"/>
+                </svg>
+                KHS Register
+                <span class="nav-count" id="sidebarTotal">—</span>
+            </a>
+        </nav>
+
+        <div class="sidebar-bottom">
+            <div class="sidebar-note">
+                <span class="note-icon">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M12 3 4 6v5c0 5 3.4 8.5 8 10 4.6-1.5 8-5 8-10V6l-8-3Z"/>
+                        <path d="m9 12 2 2 4-4"/>
+                    </svg>
+                </span>
+                <strong>Monitoring workspace</strong>
+                <p>Read-only operational visibility for KHS creation.</p>
+            </div>
+            <div class="sidebar-footer">
+                <span class="online-dot"></span>
+                Internal operations
+                <span class="version-label">v1.0</span>
+            </div>
+        </div>
+    </aside>
+
+    <main class="main-content" id="overview">
+        <header class="topbar">
+            <div class="breadcrumbs">
+                <span>Operations</span>
+                <span class="breadcrumb-divider">/</span>
+                <strong>Overview</strong>
+            </div>
+
+            <div class="topbar-actions">
+                <div class="system-status" id="systemStatus">
+                    <span class="online-dot"></span>
+                    <span id="systemStatusText">Connecting</span>
+                </div>
+                <button class="refresh-button" id="refreshButton" type="button">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M20 7v5h-5M4 17v-5h5"/>
+                        <path d="M5.6 9a7 7 0 0 1 11.8-2L20 12M4 12l2.6 5a7 7 0 0 0 11.8-2"/>
+                    </svg>
+                    <span>Refresh</span>
+                </button>
+            </div>
+        </header>
+
+        <section class="page-heading">
+            <div>
+                <div class="eyebrow">KHS OPERATIONS</div>
+                <h1>KHS Creation Overview</h1>
+                <p>Track processing progress, approval milestones, and LP circulation.</p>
+            </div>
+            <div class="heading-meta">
+                <span class="meta-label">LAST UPDATED</span>
+                <strong id="lastUpdated">Not loaded yet</strong>
+            </div>
+        </section>
+
+        <section class="kpi-grid" aria-label="Key performance indicators">
+            <article class="kpi-card">
+                <div class="kpi-top">
+                    <span class="kpi-label">Total Requests</span>
+                    <span class="kpi-icon icon-blue">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M7 3h7l5 5v13H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/>
+                            <path d="M14 3v6h5M9 14h6M9 17h6"/>
+                        </svg>
+                    </span>
+                </div>
+                <div class="kpi-value" id="totalRequests">—</div>
+                <div class="kpi-foot">Registered parent requests</div>
+            </article>
+
+            <article class="kpi-card">
+                <div class="kpi-top">
+                    <span class="kpi-label">Total KHS</span>
+                    <span class="kpi-icon icon-violet">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <rect x="4" y="3" width="16" height="18" rx="2"/>
+                            <path d="M8 8h8M8 12h8M8 16h5"/>
+                        </svg>
+                    </span>
+                </div>
+                <div class="kpi-value" id="totalKhs">—</div>
+                <div class="kpi-foot">Individual KHS records</div>
+            </article>
+
+            <article class="kpi-card">
+                <div class="kpi-top">
+                    <span class="kpi-label">LP In Progress</span>
+                    <span class="kpi-icon icon-amber">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <circle cx="12" cy="12" r="9"/>
+                            <path d="M12 7v5l3 2"/>
+                        </svg>
+                    </span>
+                </div>
+                <div class="kpi-value" id="lpInProgress">—</div>
+                <div class="kpi-foot">LP circulation has started</div>
+            </article>
+
+            <article class="kpi-card">
+                <div class="kpi-top">
+                    <span class="kpi-label">LP Completed</span>
+                    <span class="kpi-icon icon-green">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <circle cx="12" cy="12" r="9"/>
+                            <path d="m8 12 2.5 2.5L16 9"/>
+                        </svg>
+                    </span>
+                </div>
+                <div class="kpi-value" id="lpCompleted">—</div>
+                <div class="kpi-foot">
+                    <span id="completionRate">0%</span> completion rate
+                </div>
+            </article>
+        </section>
+
+        <section class="overview-grid">
+            <article class="panel lp-panel">
+                <div class="panel-heading">
+                    <div>
+                        <div class="eyebrow">FINAL APPROVAL DOCUMENT</div>
+                        <h2>LP Circulation Progress</h2>
+                    </div>
+                    <span class="subtle-tag" id="lpTotalTag">— KHS tracked</span>
+                </div>
+
+                <div class="progress-summary">
+                    <div>
+                        <div class="progress-primary" id="progressPrimary">—</div>
+                        <div class="progress-caption">LP circulation completed</div>
+                    </div>
+                    <div class="progress-rate" id="progressRate">0%</div>
+                </div>
+
+                <div class="stacked-progress" role="img" aria-label="LP circulation progress">
+                    <span class="segment segment-completed" id="barCompleted"></span>
+                    <span class="segment segment-progress" id="barInProgress"></span>
+                    <span class="segment segment-not-started" id="barNotStarted"></span>
+                </div>
+
+                <div class="progress-legend">
+                    <div class="legend-item">
+                        <span class="legend-dot dot-completed"></span>
+                        <span>Completed</span>
+                        <strong id="legendCompleted">—</strong>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-dot dot-progress"></span>
+                        <span>In progress</span>
+                        <strong id="legendInProgress">—</strong>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-dot dot-not-started"></span>
+                        <span>Not started</span>
+                        <strong id="legendNotStarted">—</strong>
+                    </div>
+                </div>
+
+                <div class="panel-footnote">
+                    Completion is based on the LP completion date recorded in the register.
+                </div>
+            </article>
+
+            <article class="panel workflow-panel">
+                <div class="panel-heading">
+                    <div>
+                        <div class="eyebrow">PROCESS CHECKPOINTS</div>
+                        <h2>Workflow Overview</h2>
+                    </div>
+                    <span class="subtle-tag">Of total KHS</span>
+                </div>
+
+                <div class="workflow-list">
+                    <div class="workflow-item">
+                        <div class="workflow-row">
+                            <div class="workflow-name">
+                                <span class="workflow-number">01</span>
+                                <span>MI approved by GM</span>
+                            </div>
+                            <strong id="miGmCount">—</strong>
+                        </div>
+                        <div class="mini-track">
+                            <span class="mini-fill fill-blue" id="miGmBar"></span>
+                        </div>
+                        <div class="workflow-meta">
+                            <span id="miGmPercent">—</span>
+                            <span id="miGmPending">— pending</span>
+                        </div>
+                    </div>
+
+                    <div class="workflow-item">
+                        <div class="workflow-row">
+                            <div class="workflow-name">
+                                <span class="workflow-number">02</span>
+                                <span>Legal submission</span>
+                            </div>
+                            <strong id="legalCount">—</strong>
+                        </div>
+                        <div class="mini-track">
+                            <span class="mini-fill fill-violet" id="legalBar"></span>
+                        </div>
+                        <div class="workflow-meta">
+                            <span id="legalPercent">—</span>
+                            <span>of total KHS</span>
+                        </div>
+                    </div>
+
+                    <div class="workflow-item">
+                        <div class="workflow-row">
+                            <div class="workflow-name">
+                                <span class="workflow-number">03</span>
+                                <span>LP circulation started</span>
+                            </div>
+                            <strong id="lpStartedCount">—</strong>
+                        </div>
+                        <div class="mini-track">
+                            <span class="mini-fill fill-teal" id="lpStartedBar"></span>
+                        </div>
+                        <div class="workflow-meta">
+                            <span id="lpStartedPercent">—</span>
+                            <span>of total KHS</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="workflow-footnote">
+                    Milestone counts are based on recorded approval and submission dates.
+                </div>
+            </article>
+        </section>
+
+        <section class="quality-alert" id="qualityAlert" hidden>
+            <span class="alert-icon">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M12 3 2.8 19h18.4L12 3Z"/>
+                    <path d="M12 9v4M12 16.5v.1"/>
+                </svg>
+            </span>
+            <div class="alert-copy">
+                <strong>Data quality requires attention</strong>
+                <p><strong id="qualityCount">0</strong> KHS record(s) have LP circulation dates but no recorded MI GM approval date. These records are flagged in the register.</p>
+            </div>
+            <a href="#register" class="alert-link">Review register <span>→</span></a>
+        </section>
+
+        <section class="panel register-panel" id="register">
+            <div class="register-heading">
+                <div>
+                    <div class="eyebrow">RECORD MANAGEMENT</div>
+                    <h2>KHS Register</h2>
+                    <p>Search, filter, and inspect individual KHS records.</p>
+                </div>
+                <span class="record-count" id="recordCount">Loading records…</span>
+            </div>
+
+            <div class="filter-toolbar">
+                <label class="search-control">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <circle cx="10.8" cy="10.8" r="6.8"/>
+                        <path d="m16 16 5 5"/>
+                    </svg>
+                    <input id="searchInput" type="search"
+                           placeholder="Search KHS, request, vendor…"
+                           autocomplete="off">
+                </label>
+
+                <select id="statusFilter" aria-label="Filter LP status">
+                    <option value="">All LP statuses</option>
+                    <option value="completed">Completed</option>
+                    <option value="in_progress">In progress</option>
+                    <option value="not_started">Not started</option>
+                </select>
+
+                <input id="executorFilter" type="text"
+                       placeholder="Executor code"
+                       aria-label="Filter executor code"
+                       maxlength="32">
+
+                <select id="subtypeFilter" aria-label="Filter subtype">
+                    <option value="">All subtypes</option>
+                    <option value="Renewal">Renewal</option>
+                    <option value="Kontrak Baru">Kontrak Baru</option>
+                </select>
+
+                <select id="stageFilter" aria-label="Filter current stage">
+                    <option value="">All workflow stages</option>
+                    <option value="REQUEST_RECEIVED">Request Received</option>
+                    <option value="DISPATCH">Dispatch</option>
+                    <option value="BOQ_CONFIRMATION">BOQ Confirmation</option>
+                    <option value="NEGOTIATION">Negotiation</option>
+                    <option value="FINAL_NEGOTIATION">Final Negotiation</option>
+                    <option value="MI_HEAD_APPROVAL">MI Approval - Head</option>
+                    <option value="MI_SM_APPROVAL">MI Approval - SM</option>
+                    <option value="MI_GM_APPROVAL">MI Approval - GM</option>
+                    <option value="LEGAL_SUBMISSION">Legal Submission</option>
+                    <option value="LEGAL_PROCESSING">Legal Processing</option>
+                    <option value="LP_CIRCULATION">LP Circulation</option>
+                    <option value="COMPLETED">Completed</option>
+                </select>
+
+                <button class="reset-button" id="resetFilters" type="button">
+                    Reset
+                </button>
+            </div>
+
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>KHS / REQUEST</th>
+                            <th>VENDOR</th>
+                            <th>EXECUTOR</th>
+                            <th>CURRENT STAGE</th>
+                            <th>LP STATUS</th>
+                            <th>LP START</th>
+                            <th>LP COMPLETED</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="registerBody">
+                        <tr>
+                            <td colspan="8" class="table-message">Loading KHS records…</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="register-footer">
+                <div class="page-size-control">
+                    <label for="pageSize">Rows per page</label>
+                    <select id="pageSize">
+                        <option value="10" selected>10</option>
+                        <option value="25">25</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                    </select>
+                </div>
+                <div class="pagination">
+                    <span id="paginationText">—</span>
+                    <button id="previousPage" type="button" aria-label="Previous page" disabled>‹</button>
+                    <button id="nextPage" type="button" aria-label="Next page" disabled>›</button>
+                </div>
+            </div>
+        </section>
+
+        <footer class="main-footer">
+            <span>KHS Creation Monitoring</span>
+            <span>Operational monitoring · Read-only dashboard</span>
+        </footer>
+    </main>
+</div>
+
+<dialog id="detailDialog" class="detail-dialog">
+    <div class="dialog-header">
+        <div>
+            <div class="eyebrow">KHS RECORD DETAILS</div>
+            <h2 id="detailTitle">KHS Details</h2>
+        </div>
+        <button class="dialog-close" id="closeDialog" type="button" aria-label="Close details">×</button>
+    </div>
+    <div class="dialog-status-row" id="detailStatus"></div>
+    <div class="detail-grid" id="detailGrid"></div>
+    <div class="dialog-footer">
+        <span>Read-only record view</span>
+        <button class="primary-button" id="closeDialogBottom" type="button">Close</button>
+    </div>
+</dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

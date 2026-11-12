@@ -1,0 +1,534 @@
+from datetime import date, datetime
+
+from flask import Blueprint, current_app, jsonify, request
+from psycopg.rows import dict_row
+
+from app.db import get_db_pool
+
+
+dashboard_bp = Blueprint("dashboard", __name__)
+
+
+SUMMARY_QUERY = """
+SELECT
+    (SELECT COUNT(*) FROM khs_requests) AS total_requests,
+    COUNT(*) AS total_khs,
+
+    COUNT(*) FILTER (
+        WHERE lp_completion_date IS NOT NULL
+    ) AS lp_completed,
+
+    COUNT(*) FILTER (
+        WHERE lp_circulation_start_date IS NOT NULL
+          AND lp_completion_date IS NULL
+    ) AS lp_in_progress,
+
+    COUNT(*) FILTER (
+        WHERE lp_circulation_start_date IS NULL
+    ) AS lp_not_started,
+
+    COUNT(*) FILTER (
+        WHERE mi_gm_approval_date IS NOT NULL
+    ) AS mi_gm_approved,
+
+    COUNT(*) FILTER (
+        WHERE mi_gm_approval_date IS NULL
+    ) AS mi_gm_pending,
+
+    COUNT(*) FILTER (
+        WHERE legal_submission_date IS NOT NULL
+    ) AS legal_submitted,
+
+    COUNT(*) FILTER (
+        WHERE lp_circulation_start_date IS NOT NULL
+          AND mi_gm_approval_date IS NULL
+    ) AS lp_started_without_mi_gm,
+
+    COUNT(*) FILTER (
+        WHERE mi_gm_approval_date IS NOT NULL
+          AND lp_circulation_start_date IS NULL
+    ) AS awaiting_lp_circulation
+
+FROM khs_items;
+"""
+
+
+@dashboard_bp.get("/summary")
+def dashboard_summary():
+    try:
+        with get_db_pool().connection() as conn:
+            row = conn.execute(SUMMARY_QUERY).fetchone()
+
+        if row is None:
+            raise RuntimeError("Dashboard aggregate query returned no row.")
+
+    except Exception:
+        current_app.logger.exception(
+            "Dashboard summary query failed."
+        )
+        return jsonify({
+            "success": False,
+            "code": "DASHBOARD_SUMMARY_UNAVAILABLE",
+            "message": "Dashboard summary is temporarily unavailable.",
+        }), 503
+
+    (
+        total_requests,
+        total_khs,
+        lp_completed,
+        lp_in_progress,
+        lp_not_started,
+        mi_gm_approved,
+        mi_gm_pending,
+        legal_submitted,
+        lp_started_without_mi_gm,
+        awaiting_lp_circulation,
+    ) = row
+
+    completion_rate = (
+        round((lp_completed / total_khs) * 100, 2)
+        if total_khs
+        else 0.0
+    )
+
+    return jsonify({
+        "success": True,
+        "data": {
+            "total_requests": total_requests,
+            "total_khs": total_khs,
+            "lp": {
+                "completed": lp_completed,
+                "in_progress": lp_in_progress,
+                "not_started": lp_not_started,
+                "completion_rate_percent": completion_rate,
+            },
+            "workflow": {
+                "mi_gm_approved": mi_gm_approved,
+                "mi_gm_pending": mi_gm_pending,
+                "legal_submitted": legal_submitted,
+                "awaiting_lp_circulation": awaiting_lp_circulation,
+            },
+            "data_quality": {
+                "lp_started_without_mi_gm_approval": (
+                    lp_started_without_mi_gm
+                ),
+            },
+        },
+    }), 200
+
+
+@dashboard_bp.get("/filters")
+def dashboard_filters():
+    """Return active filter options from the current master data."""
+
+    query = """
+    SELECT
+        COALESCE(
+            (
+                SELECT jsonb_agg(
+                    jsonb_build_object(
+                        'executor_code', executor_code,
+                        'display_name', display_name
+                    )
+                    ORDER BY display_name
+                )
+                FROM khs_executors
+                WHERE is_active = TRUE
+            ),
+            '[]'::jsonb
+        ) AS executors,
+
+        COALESCE(
+            (
+                SELECT jsonb_agg(DISTINCT subtype ORDER BY subtype)
+                FROM khs_items
+                WHERE subtype IS NOT NULL
+                  AND btrim(subtype) <> ''
+            ),
+            '[]'::jsonb
+        ) AS subtypes,
+
+        COALESCE(
+            (
+                SELECT jsonb_agg(DISTINCT waiting_for ORDER BY waiting_for)
+                FROM khs_items
+                WHERE waiting_for IS NOT NULL
+                  AND btrim(waiting_for) <> ''
+            ),
+            '[]'::jsonb
+        ) AS waiting_for,
+
+        COALESCE(
+            (
+                SELECT jsonb_agg(
+                    jsonb_build_object(
+                        'stage_code', stage_code,
+                        'stage_name', stage_name,
+                        'sequence_number', sequence_number
+                    )
+                    ORDER BY sequence_number
+                )
+                FROM khs_stage_config
+                WHERE is_active = TRUE
+            ),
+            '[]'::jsonb
+        ) AS stages
+    """
+
+    try:
+        with get_db_pool().connection() as conn:
+            row = conn.execute(query).fetchone()
+
+        if row is None:
+            raise RuntimeError("Dashboard filter query returned no row.")
+
+        executors, subtypes, waiting_for, stages = row
+
+    except Exception:
+        current_app.logger.exception(
+            "Dashboard filter options query failed."
+        )
+        return jsonify({
+            "success": False,
+            "code": "DASHBOARD_FILTERS_UNAVAILABLE",
+            "message": "Dashboard filter options are temporarily unavailable.",
+        }), 503
+
+    return jsonify({
+        "success": True,
+        "data": {
+            "executors": executors or [],
+            "subtypes": subtypes or [],
+            "waiting_for": waiting_for or [],
+            "stages": stages or [],
+        },
+    }), 200
+
+
+REGISTER_BASE_QUERY = """
+SELECT
+    k.khs_id,
+    k.request_id,
+    r.request_date,
+    r.request_subject,
+    r.requester_owner,
+
+    k.vendor_name,
+    k.executor_code,
+    e.display_name AS executor_name,
+    k.subtype,
+
+    k.dispatch_date,
+    k.contract_start_date,
+    k.contract_end_date,
+    k.boq_confirmation_date,
+    k.negotiation_date,
+    k.final_negotiation_date,
+    k.mi_head_approval_date,
+    k.mi_sm_approval_date,
+    k.mi_gm_approval_date,
+    k.legal_submission_date,
+    k.lp_circulation_start_date,
+    k.lp_completion_date,
+
+    k.waiting_for,
+    k.waiting_reason,
+    k.last_updated_date,
+    k.remarks,
+    k.updated_at,
+
+    derived.lp_status,
+    derived.current_stage_code,
+    stage.stage_name AS current_stage_name,
+
+    (
+        k.lp_circulation_start_date IS NOT NULL
+        AND k.mi_gm_approval_date IS NULL
+    ) AS lp_started_without_mi_gm_approval
+
+FROM khs_items k
+
+JOIN khs_requests r
+    ON r.request_id = k.request_id
+
+JOIN khs_executors e
+    ON e.executor_code = k.executor_code
+
+CROSS JOIN LATERAL (
+    SELECT
+        CASE
+            WHEN k.lp_completion_date IS NOT NULL
+                THEN 'completed'
+            WHEN k.lp_circulation_start_date IS NOT NULL
+                THEN 'in_progress'
+            ELSE 'not_started'
+        END AS lp_status,
+
+        CASE
+            WHEN k.lp_completion_date IS NOT NULL
+                THEN 'COMPLETED'
+            WHEN k.lp_circulation_start_date IS NOT NULL
+                THEN 'LP_CIRCULATION'
+            WHEN k.legal_submission_date IS NOT NULL
+                THEN 'LEGAL_PROCESSING'
+            WHEN k.mi_gm_approval_date IS NOT NULL
+                THEN 'LEGAL_SUBMISSION'
+            WHEN k.mi_sm_approval_date IS NOT NULL
+                THEN 'MI_GM_APPROVAL'
+            WHEN k.mi_head_approval_date IS NOT NULL
+                THEN 'MI_SM_APPROVAL'
+            WHEN k.final_negotiation_date IS NOT NULL
+                THEN 'MI_HEAD_APPROVAL'
+            WHEN k.negotiation_date IS NOT NULL
+                THEN 'FINAL_NEGOTIATION'
+            WHEN k.boq_confirmation_date IS NOT NULL
+                THEN 'NEGOTIATION'
+            WHEN k.dispatch_date IS NOT NULL
+                THEN 'BOQ_CONFIRMATION'
+            WHEN r.request_date IS NOT NULL
+                THEN 'DISPATCH'
+            ELSE 'REQUEST_RECEIVED'
+        END AS current_stage_code
+) AS derived
+
+LEFT JOIN khs_stage_config stage
+    ON stage.stage_code = derived.current_stage_code
+"""
+
+
+ALLOWED_LP_STATUSES = {
+    "completed",
+    "in_progress",
+    "not_started",
+}
+
+ALLOWED_SUBTYPES = {
+    "Renewal",
+    "Kontrak Baru",
+}
+
+ALLOWED_STAGES = {
+    "REQUEST_RECEIVED",
+    "DISPATCH",
+    "BOQ_CONFIRMATION",
+    "NEGOTIATION",
+    "FINAL_NEGOTIATION",
+    "MI_HEAD_APPROVAL",
+    "MI_SM_APPROVAL",
+    "MI_GM_APPROVAL",
+    "LEGAL_SUBMISSION",
+    "LEGAL_PROCESSING",
+    "LP_CIRCULATION",
+    "COMPLETED",
+}
+
+
+def _register_positive_int(name, default, maximum=None):
+    raw = request.args.get(name)
+
+    if raw is None:
+        return default
+
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        raise ValueError(f"'{name}' must be a positive integer.")
+
+    if value < 1:
+        raise ValueError(f"'{name}' must be greater than zero.")
+
+    if maximum is not None and value > maximum:
+        raise ValueError(f"'{name}' must not exceed {maximum}.")
+
+    return value
+
+
+def _register_json_safe(row):
+    return {
+        key: (
+            value.isoformat()
+            if isinstance(value, (date, datetime))
+            else value
+        )
+        for key, value in row.items()
+    }
+
+
+@dashboard_bp.get("/khs")
+def khs_register():
+    # Pagination validation.
+    try:
+        page = _register_positive_int("page", 1)
+        per_page = _register_positive_int(
+            "per_page",
+            25,
+            maximum=100,
+        )
+    except ValueError as exc:
+        return jsonify({
+            "success": False,
+            "code": "INVALID_PAGINATION",
+            "message": str(exc),
+        }), 400
+
+    # Filter validation.
+    search = request.args.get("q", "").strip()
+    if len(search) > 100:
+        return jsonify({
+            "success": False,
+            "code": "INVALID_SEARCH",
+            "message": "Search query must not exceed 100 characters.",
+        }), 400
+
+    lp_status = request.args.get("lp_status", "").strip()
+    if lp_status and lp_status not in ALLOWED_LP_STATUSES:
+        return jsonify({
+            "success": False,
+            "code": "INVALID_LP_STATUS",
+            "message": "Unsupported LP status filter.",
+        }), 400
+
+    executor_code = request.args.get(
+        "executor_code",
+        "",
+    ).strip().upper()
+
+    if len(executor_code) > 32:
+        return jsonify({
+            "success": False,
+            "code": "INVALID_EXECUTOR",
+            "message": "Executor code is too long.",
+        }), 400
+
+    subtype = request.args.get("subtype", "").strip()
+    if subtype and subtype not in ALLOWED_SUBTYPES:
+        return jsonify({
+            "success": False,
+            "code": "INVALID_SUBTYPE",
+            "message": "Unsupported subtype filter.",
+        }), 400
+
+    stage = request.args.get("stage", "").strip().upper()
+    if stage and stage not in ALLOWED_STAGES:
+        return jsonify({
+            "success": False,
+            "code": "INVALID_STAGE",
+            "message": "Unsupported workflow stage filter.",
+        }), 400
+
+    waiting_for = request.args.get("waiting_for", "").strip()
+    if len(waiting_for) > 100:
+        return jsonify({
+            "success": False,
+            "code": "INVALID_WAITING_FOR",
+            "message": "Waiting-for filter is too long.",
+        }), 400
+
+    # Construct parameterized filters.
+    filters = []
+    params = []
+
+    if search:
+        filters.append("""
+            (
+                register.khs_id ILIKE %s
+                OR register.request_id ILIKE %s
+                OR register.vendor_name ILIKE %s
+                OR COALESCE(register.request_subject, '') ILIKE %s
+                OR COALESCE(register.requester_owner, '') ILIKE %s
+            )
+        """)
+        pattern = f"%{search}%"
+        params.extend([pattern] * 5)
+
+    if lp_status:
+        filters.append("register.lp_status = %s")
+        params.append(lp_status)
+
+    if executor_code:
+        filters.append("register.executor_code = %s")
+        params.append(executor_code)
+
+    if subtype:
+        filters.append("register.subtype = %s")
+        params.append(subtype)
+
+    if stage:
+        filters.append("register.current_stage_code = %s")
+        params.append(stage)
+
+    if waiting_for:
+        filters.append("register.waiting_for = %s")
+        params.append(waiting_for)
+
+    where_sql = (
+        "WHERE " + " AND ".join(filters)
+        if filters
+        else ""
+    )
+
+    offset = (page - 1) * per_page
+
+    count_query = f"""
+        SELECT COUNT(*) AS total
+        FROM ({REGISTER_BASE_QUERY}) AS register
+        {where_sql}
+    """
+
+    data_query = f"""
+        SELECT *
+        FROM ({REGISTER_BASE_QUERY}) AS register
+        {where_sql}
+        ORDER BY register.dispatch_date DESC NULLS LAST,
+                 register.khs_id ASC
+        LIMIT %s OFFSET %s
+    """
+
+    try:
+        with get_db_pool().connection() as conn:
+            with conn.cursor(row_factory=dict_row) as cursor:
+                cursor.execute(count_query, params)
+                total = cursor.fetchone()["total"]
+
+                cursor.execute(
+                    data_query,
+                    [*params, per_page, offset],
+                )
+                rows = cursor.fetchall()
+
+    except Exception:
+        current_app.logger.exception(
+            "KHS register query failed."
+        )
+        return jsonify({
+            "success": False,
+            "code": "KHS_REGISTER_UNAVAILABLE",
+            "message": "KHS register is temporarily unavailable.",
+        }), 503
+
+    total_pages = (
+        (total + per_page - 1) // per_page
+        if total
+        else 0
+    )
+
+    return jsonify({
+        "success": True,
+        "data": [_register_json_safe(row) for row in rows],
+        "pagination": {
+            "page": page,
+            "per_page": per_page,
+            "total_records": total,
+            "total_pages": total_pages,
+            "has_previous": page > 1,
+            "has_next": page < total_pages,
+        },
+        "filters": {
+            "q": search or None,
+            "lp_status": lp_status or None,
+            "executor_code": executor_code or None,
+            "subtype": subtype or None,
+            "stage": stage or None,
+            "waiting_for": waiting_for or None,
+        },
+    }), 200

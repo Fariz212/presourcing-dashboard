@@ -1,0 +1,1022 @@
+"use strict";
+
+const $ = (id) => document.getElementById(id);
+
+const state = {
+    page: 1,
+    perPage: 10,
+    totalPages: 0,
+    totalRecords: 0,
+    debounce: null,
+};
+
+const stageLabels = {
+    REQUEST_RECEIVED: "Request Received",
+    DISPATCH: "Dispatch",
+    BOQ_CONFIRMATION: "BOQ Confirmation",
+    NEGOTIATION: "Negotiation",
+    FINAL_NEGOTIATION: "Final Negotiation",
+    MI_HEAD_APPROVAL: "MI Approval - Head",
+    MI_SM_APPROVAL: "MI Approval - SM",
+    MI_GM_APPROVAL: "MI Approval - GM",
+    LEGAL_SUBMISSION: "Legal Submission",
+    LEGAL_PROCESSING: "Legal Processing",
+    LP_CIRCULATION: "LP Circulation",
+    COMPLETED: "Completed",
+};
+
+function number(value) {
+    return Number(value || 0).toLocaleString("en-US");
+}
+
+function percent(value, total) {
+    if (!total) return 0;
+    return Math.round((value / total) * 1000) / 10;
+}
+
+function formatDate(value) {
+    if (!value) return "—";
+    const parsed = new Date(`${value}T00:00:00`);
+    if (Number.isNaN(parsed.getTime())) return value;
+    return new Intl.DateTimeFormat("en-GB", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+    }).format(parsed);
+}
+
+function setText(id, value) {
+    $(id).textContent = value;
+}
+
+async function fetchJSON(path) {
+    const response = await fetch(path, {
+        headers: { Accept: "application/json" },
+        cache: "no-store",
+    });
+
+    let payload;
+    try {
+        payload = await response.json();
+    } catch {
+        throw new Error(`Invalid response from server (${response.status}).`);
+    }
+
+    if (!response.ok || payload.success === false) {
+        throw new Error(payload.message || `Request failed (${response.status}).`);
+    }
+
+    return payload;
+}
+
+function showToast(message) {
+    const toast = $("toast");
+    toast.textContent = message;
+    toast.classList.add("visible");
+    window.clearTimeout(showToast.timer);
+    showToast.timer = window.setTimeout(
+        () => toast.classList.remove("visible"),
+        4200,
+    );
+}
+
+function setSystemStatus(online) {
+    $("systemStatus").classList.toggle("offline", !online);
+    setText("systemStatusText", online ? "System operational" : "Connection issue");
+}
+
+function setProgressBar(id, value) {
+    $(id).style.width = `${Math.max(0, Math.min(100, value))}%`;
+}
+
+function renderSummary(data) {
+    const total = data.total_khs || 0;
+    const lp = data.lp || {};
+    const workflow = data.workflow || {};
+    const quality = data.data_quality || {};
+
+    setText("totalRequests", number(data.total_requests));
+    setText("totalKhs", number(total));
+    setText("sidebarTotal", number(total));
+    setText("lpInProgress", number(lp.in_progress));
+    setText("lpCompleted", number(lp.completed));
+    setText("completionRate", `${lp.completion_rate_percent || 0}%`);
+    setText("progressPrimary", `${number(lp.completed)} / ${number(total)}`);
+    setText("progressRate", `${lp.completion_rate_percent || 0}%`);
+    setText("lpTotalTag", `${number(total)} KHS tracked`);
+
+    setText("legendCompleted", number(lp.completed));
+    setText("legendInProgress", number(lp.in_progress));
+    setText("legendNotStarted", number(lp.not_started));
+
+    const completedPct = percent(lp.completed, total);
+    const inProgressPct = percent(lp.in_progress, total);
+    const notStartedPct = Math.max(0, 100 - completedPct - inProgressPct);
+
+    setProgressBar("barCompleted", completedPct);
+    setProgressBar("barInProgress", inProgressPct);
+    setProgressBar("barNotStarted", notStartedPct);
+
+    const approved = workflow.mi_gm_approved || 0;
+    const pending = workflow.mi_gm_pending || 0;
+    const legal = workflow.legal_submitted || 0;
+    const started = total - (lp.not_started || 0);
+
+    setText("miGmCount", number(approved));
+    setText("miGmPercent", `${percent(approved, total)}% approved`);
+    setText("miGmPending", `${number(pending)} pending`);
+    setProgressBar("miGmBar", percent(approved, total));
+
+    setText("legalCount", number(legal));
+    setText("legalPercent", `${percent(legal, total)}%`);
+    setProgressBar("legalBar", percent(legal, total));
+
+    setText("lpStartedCount", number(started));
+    setText("lpStartedPercent", `${percent(started, total)}%`);
+    setProgressBar("lpStartedBar", percent(started, total));
+
+    const exceptions = quality.lp_started_without_mi_gm_approval || 0;
+    $("qualityAlert").hidden = exceptions < 1;
+    setText("qualityCount", number(exceptions));
+
+    setText(
+        "lastUpdated",
+        new Intl.DateTimeFormat("en-GB", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+        }).format(new Date()),
+    );
+}
+
+function createCell(primary, secondary = null, className = "") {
+    const td = document.createElement("td");
+
+    if (className) td.className = className;
+
+    const main = document.createElement("span");
+    main.className = "cell-primary";
+    main.textContent = primary || "—";
+    td.appendChild(main);
+
+    if (secondary) {
+        const sub = document.createElement("span");
+        sub.className = "cell-secondary";
+        sub.textContent = secondary;
+        td.appendChild(sub);
+    }
+
+    return td;
+}
+
+function renderStatus(status) {
+    const labels = {
+        completed: "Completed",
+        in_progress: "In progress",
+        not_started: "Not started",
+    };
+
+    const badge = document.createElement("span");
+    badge.className = `status-badge status-${status || "not_started"}`;
+    badge.textContent = labels[status] || "Not started";
+    return badge;
+}
+
+function openDetails(row) {
+    setText("detailTitle", row.khs_id || "KHS Details");
+
+    const statusArea = $("detailStatus");
+    statusArea.replaceChildren();
+    statusArea.appendChild(renderStatus(row.lp_status));
+
+    if (row.lp_started_without_mi_gm_approval) {
+        const exception = document.createElement("span");
+        exception.className = "status-badge";
+        exception.style.background = "#fff3df";
+        exception.style.color = "#a66b18";
+        exception.textContent = "MI GM approval missing";
+        statusArea.appendChild(exception);
+    }
+
+    const fields = [
+        ["KHS ID", row.khs_id],
+        ["Request ID", row.request_id],
+        ["Request subject", row.request_subject],
+        ["Requester / owner", row.requester_owner],
+        ["Vendor", row.vendor_name],
+        ["Subtype", row.subtype],
+        ["Executor", row.executor_name ? `${row.executor_name} (${row.executor_code || "—"})` : row.executor_code],
+        ["Current stage", row.current_stage_name || stageLabels[row.current_stage_code]],
+        ["Dispatch date", formatDate(row.dispatch_date)],
+        ["Contract start", formatDate(row.contract_start_date)],
+        ["Contract end", formatDate(row.contract_end_date)],
+        ["BOQ confirmation", formatDate(row.boq_confirmation_date)],
+        ["Negotiation", formatDate(row.negotiation_date)],
+        ["Final negotiation", formatDate(row.final_negotiation_date)],
+        ["MI approval - Head", formatDate(row.mi_head_approval_date)],
+        ["MI approval - SM", formatDate(row.mi_sm_approval_date)],
+        ["MI approval - GM", formatDate(row.mi_gm_approval_date)],
+        ["Legal submission", formatDate(row.legal_submission_date)],
+        ["LP circulation start", formatDate(row.lp_circulation_start_date)],
+        ["LP completion", formatDate(row.lp_completion_date)],
+        ["Waiting for", row.waiting_for],
+        ["Waiting reason", row.waiting_reason],
+        ["Last updated", formatDate(row.last_updated_date)],
+        ["Remarks", row.remarks],
+    ];
+
+    const grid = $("detailGrid");
+    grid.replaceChildren();
+
+    for (const [label, value] of fields) {
+        const item = document.createElement("div");
+        item.className = "detail-item";
+
+        const heading = document.createElement("span");
+        heading.className = "detail-label";
+        heading.textContent = label;
+
+        const content = document.createElement("span");
+        content.className = "detail-value";
+        content.textContent = value === null || value === undefined || value === ""
+            ? "—"
+            : String(value);
+
+        item.append(heading, content);
+        grid.appendChild(item);
+    }
+
+    $("detailDialog").showModal();
+}
+
+function renderRegister(rows) {
+    const body = $("registerBody");
+    body.replaceChildren();
+
+    if (!rows.length) {
+        const tr = document.createElement("tr");
+        const td = document.createElement("td");
+        td.colSpan = 8;
+        td.className = "table-message";
+        td.textContent = "No KHS records match the selected filters.";
+        tr.appendChild(td);
+        body.appendChild(tr);
+        return;
+    }
+
+    for (const row of rows) {
+        const tr = document.createElement("tr");
+
+        tr.appendChild(createCell(
+            row.khs_id,
+            row.request_id,
+        ));
+
+        const vendorCell = createCell(row.vendor_name, row.subtype || "—");
+        vendorCell.querySelector(".cell-primary").classList.add("vendor-name");
+        tr.appendChild(vendorCell);
+
+        const executorCell = document.createElement("td");
+        const executor = document.createElement("span");
+        executor.className = "executor-chip";
+
+        const avatar = document.createElement("span");
+        avatar.className = "executor-avatar";
+        avatar.textContent = (row.executor_code || "?").slice(0, 3);
+
+        const name = document.createElement("span");
+        name.textContent = row.executor_code || "—";
+
+        executor.append(avatar, name);
+        executorCell.appendChild(executor);
+        tr.appendChild(executorCell);
+
+        const stageCell = document.createElement("td");
+        const stage = document.createElement("span");
+        stage.className = "stage-text";
+        stage.textContent = row.current_stage_name ||
+            stageLabels[row.current_stage_code] ||
+            row.current_stage_code ||
+            "—";
+        stageCell.appendChild(stage);
+
+        if (row.lp_started_without_mi_gm_approval) {
+            const warning = document.createElement("span");
+            warning.className = "exception-label";
+            warning.textContent = "MI GM approval missing";
+            stageCell.appendChild(warning);
+        }
+        tr.appendChild(stageCell);
+
+        const statusCell = document.createElement("td");
+        statusCell.appendChild(renderStatus(row.lp_status));
+        tr.appendChild(statusCell);
+
+        const startCell = document.createElement("td");
+        startCell.className = "date-cell";
+        startCell.textContent = formatDate(row.lp_circulation_start_date);
+        tr.appendChild(startCell);
+
+        const completeCell = document.createElement("td");
+        completeCell.className = "date-cell";
+        completeCell.textContent = formatDate(row.lp_completion_date);
+        tr.appendChild(completeCell);
+
+        const actionCell = document.createElement("td");
+        const view = document.createElement("button");
+        view.type = "button";
+        view.className = "view-button";
+        view.textContent = "Details";
+        view.addEventListener("click", () => openDetails(row));
+        actionCell.appendChild(view);
+        tr.appendChild(actionCell);
+
+        body.appendChild(tr);
+    }
+}
+
+function updatePagination(pagination) {
+    state.totalPages = pagination.total_pages || 0;
+    state.totalRecords = pagination.total_records || 0;
+
+    const start = state.totalRecords
+        ? ((pagination.page - 1) * pagination.per_page) + 1
+        : 0;
+    const end = Math.min(
+        pagination.page * pagination.per_page,
+        state.totalRecords,
+    );
+
+    setText("recordCount", `${number(state.totalRecords)} records`);
+    setText(
+        "paginationText",
+        state.totalRecords
+            ? `Showing ${number(start)}–${number(end)} of ${number(state.totalRecords)}`
+            : "No records",
+    );
+
+    $("previousPage").disabled = !pagination.has_previous;
+    $("nextPage").disabled = !pagination.has_next;
+}
+
+function currentFilters() {
+    return {
+        q: $("searchInput").value.trim(),
+        lp_status: $("statusFilter").value,
+        executor_code: $("executorFilter").value,
+        subtype: $("subtypeFilter").value,
+        stage: $("stageFilter").value,
+        waiting_for: $("waitingFilter").value,
+    };
+}
+
+async function loadRegister() {
+    const params = new URLSearchParams({
+        page: String(state.page),
+        per_page: String(state.perPage),
+    });
+
+    for (const [key, value] of Object.entries(currentFilters())) {
+        if (value) params.set(key, value);
+    }
+
+    const body = $("registerBody");
+    body.replaceChildren();
+
+    const loadingRow = document.createElement("tr");
+    const loadingCell = document.createElement("td");
+    loadingCell.colSpan = 8;
+    loadingCell.className = "table-message";
+    loadingCell.textContent = "Loading KHS records…";
+    loadingRow.appendChild(loadingCell);
+    body.appendChild(loadingRow);
+
+    try {
+        const payload = await fetchJSON(`/api/dashboard/khs?${params}`);
+        renderRegister(payload.data || []);
+        updatePagination(payload.pagination);
+    } catch (error) {
+        body.replaceChildren();
+        const row = document.createElement("tr");
+        const cell = document.createElement("td");
+        cell.colSpan = 8;
+        cell.className = "table-message error";
+        cell.textContent = error.message || "Unable to load KHS register.";
+        row.appendChild(cell);
+        body.appendChild(row);
+        setText("recordCount", "Register unavailable");
+        setText("paginationText", "—");
+        $("previousPage").disabled = true;
+        $("nextPage").disabled = true;
+        showToast(error.message || "Unable to load KHS register.");
+    }
+}
+
+function populateFilter(id, placeholder, values, getValue, getLabel) {
+    const select = $(id);
+    const previousValue = select.value;
+    select.replaceChildren();
+
+    const defaultOption = document.createElement("option");
+    defaultOption.value = "";
+    defaultOption.textContent = placeholder;
+    select.appendChild(defaultOption);
+
+    for (const item of values || []) {
+        const option = document.createElement("option");
+        option.value = getValue(item);
+        option.textContent = getLabel(item);
+        select.appendChild(option);
+    }
+
+    if ([...select.options].some((option) => option.value === previousValue)) {
+        select.value = previousValue;
+    }
+}
+
+async function loadDashboardFilters() {
+    try {
+        const payload = await fetchJSON("/api/dashboard/filters");
+        const data = payload.data || {};
+
+        populateFilter(
+            "executorFilter",
+            "All executors",
+            data.executors,
+            (item) => item.executor_code,
+            (item) => `${item.display_name} (${item.executor_code})`,
+        );
+
+        populateFilter(
+            "subtypeFilter",
+            "All subtypes",
+            data.subtypes,
+            (item) => item,
+            (item) => item,
+        );
+
+        populateFilter(
+            "waitingFilter",
+            "All waiting states",
+            data.waiting_for,
+            (item) => item,
+            (item) => item,
+        );
+
+        populateFilter(
+            "stageFilter",
+            "All workflow stages",
+            data.stages,
+            (item) => item.stage_code,
+            (item) => item.stage_name,
+        );
+
+    } catch (error) {
+        showToast(error.message || "Unable to load dashboard filter options.");
+    }
+}
+
+async function loadSummary() {
+    try {
+        const payload = await fetchJSON("/api/dashboard/summary");
+        renderSummary(payload.data);
+        setSystemStatus(true);
+    } catch (error) {
+        setSystemStatus(false);
+        showToast(error.message || "Unable to load dashboard summary.");
+        throw error;
+    }
+}
+
+async function loadReadiness() {
+    try {
+        const payload = await fetchJSON("/health/ready");
+        setSystemStatus(payload.status === "ready");
+    } catch {
+        setSystemStatus(false);
+    }
+}
+
+async function refreshDashboard() {
+    const button = $("refreshButton");
+    button.disabled = true;
+    button.classList.add("loading");
+
+    await Promise.allSettled([
+        loadSummary(),
+        loadRegister(),
+        loadReadiness(),
+        loadImportHistory(),
+    ]);
+
+    button.disabled = false;
+    button.classList.remove("loading");
+}
+
+function scheduleRegisterReload() {
+    window.clearTimeout(state.debounce);
+    state.debounce = window.setTimeout(() => {
+        state.page = 1;
+        loadRegister();
+    }, 350);
+}
+
+function resetFilters() {
+    $("searchInput").value = "";
+    $("statusFilter").value = "";
+    $("executorFilter").value = "";
+    $("subtypeFilter").value = "";
+    $("stageFilter").value = "";
+    $("waitingFilter").value = "";
+    state.page = 1;
+    loadRegister();
+}
+
+function closeDialog() {
+    $("detailDialog").close();
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+    $("refreshButton").addEventListener("click", refreshDashboard);
+
+    $("searchInput").addEventListener("input", scheduleRegisterReload);
+
+    for (const id of [
+        "statusFilter",
+        "executorFilter",
+        "subtypeFilter",
+        "stageFilter",
+        "waitingFilter",
+    ]) {
+        $(id).addEventListener("change", () => {
+            state.page = 1;
+            loadRegister();
+        });
+    }
+
+    $("resetFilters").addEventListener("click", resetFilters);
+
+    $("pageSize").addEventListener("change", () => {
+        state.perPage = Number($("pageSize").value);
+        state.page = 1;
+        loadRegister();
+    });
+
+    $("previousPage").addEventListener("click", () => {
+        if (state.page > 1) {
+            state.page -= 1;
+            loadRegister();
+        }
+    });
+
+    $("nextPage").addEventListener("click", () => {
+        if (state.page < state.totalPages) {
+            state.page += 1;
+            loadRegister();
+        }
+    });
+
+    $("closeDialog").addEventListener("click", closeDialog);
+    $("closeDialogBottom").addEventListener("click", closeDialog);
+
+    $("detailDialog").addEventListener("click", (event) => {
+        if (event.target === $("detailDialog")) closeDialog();
+    });
+
+    refreshDashboard();
+    loadDashboardFilters();
+});
+
+
+/* Excel import management */
+const importState = {
+    batchId: null,
+    canImport: false,
+    warningRows: 0,
+    historyPage: 1,
+    historyPerPage: 10,
+    historyTotalPages: 0,
+};
+
+function showImportFeedback(message, type = "info") {
+    const box = $("importFeedback");
+    box.hidden = false;
+    box.className = `import-feedback ${type === "error" ? "feedback-error" : type === "success" ? "feedback-success" : ""}`;
+    box.textContent = message;
+}
+
+function clearImportPreview() {
+    importState.batchId = null;
+    importState.canImport = false;
+    importState.warningRows = 0;
+    $("importPreview").hidden = true;
+    $("confirmImportButton").disabled = true;
+    $("acceptWarnings").checked = false;
+}
+
+function appendTextCell(row, value) {
+    const cell = document.createElement("td");
+    cell.textContent = value === null || value === undefined || value === ""
+        ? "—"
+        : String(value);
+    row.appendChild(cell);
+}
+
+function renderImportIssues(issues, truncated) {
+    const section = $("issuesSection");
+    const body = $("issuesBody");
+    body.replaceChildren();
+
+    if (!issues || !issues.length) {
+        section.hidden = true;
+        return;
+    }
+
+    section.hidden = false;
+    setText("issuesCount", `${number(issues.length)} displayed`);
+    $("issuesTruncated").hidden = !truncated;
+
+    for (const issue of issues) {
+        const row = document.createElement("tr");
+
+        const severityCell = document.createElement("td");
+        const severity = String(issue.severity || "INFO").toUpperCase();
+        const severityTag = document.createElement("span");
+        severityTag.className =
+            `severity-tag severity-${severity.toLowerCase()}`;
+        severityTag.textContent = severity;
+        severityCell.appendChild(severityTag);
+        row.appendChild(severityCell);
+
+        appendTextCell(row, issue.entity || "Workbook");
+
+        const location = [
+            issue.sheet,
+            issue.row !== null && issue.row !== undefined
+                ? `Row ${issue.row}`
+                : null,
+        ].filter(Boolean).join(" · ");
+        appendTextCell(row, location || "Workbook-level");
+
+        appendTextCell(
+            row,
+            issue.message || issue.description || issue.code || "Validation issue",
+        );
+
+        body.appendChild(row);
+    }
+}
+
+function updateConfirmAvailability() {
+    const checkboxRequired = importState.warningRows > 0;
+    const acknowledged = $("acceptWarnings").checked;
+
+    $("warningAckWrap").hidden = !checkboxRequired;
+
+    const enabled =
+        importState.canImport &&
+        Boolean(importState.batchId) &&
+        (!checkboxRequired || acknowledged);
+
+    $("confirmImportButton").disabled = !enabled;
+
+    if (!importState.canImport) {
+        setText("confirmationHint", "Import cannot proceed because validation errors were found.");
+    } else if (checkboxRequired && !acknowledged) {
+        setText("confirmationHint", "Review and acknowledge all warnings before importing.");
+    } else {
+        setText("confirmationHint", "Ready for explicit import confirmation.");
+    }
+}
+
+function renderImportPreview(payload) {
+    const summary = payload.summary || {};
+    importState.batchId = payload.batch_id;
+    importState.canImport = Boolean(summary.can_import);
+    importState.warningRows = Number(summary.warning_rows || 0);
+
+    setText("previewTitle", payload.file_name || "Workbook preview");
+    setText(
+        "previewDescription",
+        `Batch #${payload.batch_id} · Template ${payload.template_version || "version not specified"}`,
+    );
+    setText("previewBadge", "PREVIEWED");
+
+    setText("previewTotal", number(summary.total_rows));
+    setText("previewValid", number(summary.valid_rows));
+    setText("previewWarnings", number(summary.warning_rows));
+    setText("previewErrors", number(summary.error_rows));
+
+    const eligibility = $("previewEligibility");
+    eligibility.className = `preview-eligibility ${importState.canImport ? "eligible" : "ineligible"}`;
+    eligibility.textContent = importState.canImport
+        ? "Validation passed. No master records have been changed. Explicit confirmation is required to import."
+        : "Validation failed. Correct the workbook errors and upload a revised file.";
+
+    $("acceptWarnings").checked = false;
+    renderImportIssues(payload.issues || [], payload.issues_truncated);
+    $("importPreview").hidden = false;
+
+    updateConfirmAvailability();
+}
+
+async function previewWorkbook() {
+    const file = $("importFile").files[0];
+
+    if (!file) {
+        showImportFeedback("Select an Excel workbook first.", "error");
+        return;
+    }
+
+    if (!file.name.toLowerCase().endsWith(".xlsx")) {
+        showImportFeedback("Only .xlsx workbooks are supported.", "error");
+        return;
+    }
+
+    clearImportPreview();
+    $("previewImportButton").disabled = true;
+    setText("previewImportButton", "Validating…");
+    showImportFeedback("Uploading workbook and validating its contents…");
+
+    try {
+        const form = new FormData();
+        form.append("file", file);
+
+        const response = await fetch("/api/imports/preview", {
+            method: "POST",
+            body: form,
+            cache: "no-store",
+        });
+
+        const payload = await response.json();
+
+        if (!response.ok || !payload.success) {
+            if (payload.code === "DUPLICATE_UPLOAD") {
+                showImportFeedback(
+                    `${payload.message} Existing batch: #${payload.existing_batch_id} (${payload.existing_status}).`,
+                    "error",
+                );
+                await loadImportHistory();
+                return;
+            }
+            throw new Error(payload.message || `Preview failed (${response.status}).`);
+        }
+
+        renderImportPreview(payload);
+
+        const summary = payload.summary || {};
+        showImportFeedback(
+            `Preview completed: ${number(summary.total_rows)} rows, ${number(summary.warning_rows)} warnings, ${number(summary.error_rows)} errors. Master data remains unchanged.`,
+            importState.canImport ? "success" : "error",
+        );
+
+    } catch (error) {
+        showImportFeedback(
+            error.message || "Unable to validate workbook.",
+            "error",
+        );
+    } finally {
+        $("previewImportButton").disabled = false;
+        setText("previewImportButton", "Validate workbook");
+    }
+}
+
+async function confirmWorkbookImport() {
+    if (!importState.batchId || !importState.canImport) return;
+
+    if (
+        importState.warningRows > 0 &&
+        !$("acceptWarnings").checked
+    ) {
+        showImportFeedback(
+            "Please acknowledge the warnings before confirming.",
+            "error",
+        );
+        return;
+    }
+
+    const button = $("confirmImportButton");
+    button.disabled = true;
+    setText("confirmImportButton", "Importing…");
+
+    try {
+        const response = await fetch(
+            `/api/imports/${importState.batchId}/confirm`,
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                },
+                body: JSON.stringify({
+                    accept_warnings: $("acceptWarnings").checked,
+                }),
+                cache: "no-store",
+            },
+        );
+
+        const payload = await response.json();
+
+        if (!response.ok || !payload.success) {
+            throw new Error(payload.message || `Import failed (${response.status}).`);
+        }
+
+        const result = payload.result || {};
+        const message =
+            `Import completed. Requests: +${number(result.inserted_requests)}, ` +
+            `KHS: +${number(result.inserted_items)}, ` +
+            `updated requests: ${number(result.updated_requests)}, ` +
+            `updated KHS: ${number(result.updated_items)}.`;
+
+        showImportFeedback(message, "success");
+
+        clearImportPreview();
+        $("importFile").value = "";
+        setText("importFileName", "No file selected");
+
+        await Promise.allSettled([
+            loadImportHistory(),
+            loadSummary(),
+            loadRegister(),
+        ]);
+
+    } catch (error) {
+        showImportFeedback(
+            error.message || "Import confirmation failed.",
+            "error",
+        );
+    } finally {
+        button.disabled = false;
+        setText("confirmImportButton", "Confirm import");
+        updateConfirmAvailability();
+    }
+}
+
+function formatTimestamp(value) {
+    if (!value) return "—";
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return "—";
+
+    return new Intl.DateTimeFormat("en-GB", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+    }).format(parsed);
+}
+
+function appendHistoryValue(row, value, className = "") {
+    const cell = document.createElement("td");
+    if (className) cell.className = className;
+    cell.textContent = value === null || value === undefined
+        ? "—"
+        : String(value);
+    row.appendChild(cell);
+}
+
+function renderImportHistory(records) {
+    const body = $("importHistoryBody");
+    body.replaceChildren();
+
+    if (!records.length) {
+        const row = document.createElement("tr");
+        const cell = document.createElement("td");
+        cell.colSpan = 8;
+        cell.className = "table-message";
+        cell.textContent = "No import batches found.";
+        row.appendChild(cell);
+        body.appendChild(row);
+        return;
+    }
+
+    for (const batch of records) {
+        const row = document.createElement("tr");
+
+        appendHistoryValue(row, `#${batch.id}`, "batch-id");
+
+        const fileCell = document.createElement("td");
+        const fileName = document.createElement("span");
+        fileName.className = "history-file";
+        fileName.title = batch.original_file_name || "";
+        fileName.textContent = batch.original_file_name || "Unnamed workbook";
+        fileCell.appendChild(fileName);
+        row.appendChild(fileCell);
+
+        const statusCell = document.createElement("td");
+        const badge = document.createElement("span");
+        badge.className = "import-status";
+        badge.textContent = batch.status || "UNKNOWN";
+        statusCell.appendChild(badge);
+        row.appendChild(statusCell);
+
+        appendHistoryValue(
+            row,
+            `${number(batch.total_rows)} total · ${number(batch.warning_rows)} warn · ${number(batch.error_rows)} err`,
+        );
+
+        appendHistoryValue(
+            row,
+            `Req ${number(batch.inserted_requests)} · KHS ${number(batch.inserted_items)}`,
+        );
+
+        appendHistoryValue(
+            row,
+            `Req ${number(batch.updated_requests)} · KHS ${number(batch.updated_items)}`,
+        );
+
+        appendHistoryValue(
+            row,
+            `Req ${number(batch.unchanged_requests)} · KHS ${number(batch.unchanged_items)}`,
+        );
+
+        appendHistoryValue(
+            row,
+            formatTimestamp(batch.uploaded_at),
+            "history-date",
+        );
+
+        body.appendChild(row);
+    }
+}
+
+async function loadImportHistory() {
+    const body = $("importHistoryBody");
+    if (!body) return;
+
+    const params = new URLSearchParams({
+        page: String(importState.historyPage),
+        per_page: String(importState.historyPerPage),
+    });
+
+    try {
+        const payload = await fetchJSON(`/api/imports/history?${params}`);
+
+        renderImportHistory(payload.data || []);
+
+        const pagination = payload.pagination || {};
+        importState.historyTotalPages = pagination.total_pages || 0;
+
+        setText(
+            "historyPagination",
+            `${number(pagination.total_records)} import batches · Page ${pagination.page} of ${pagination.total_pages}`,
+        );
+
+        $("historyPrevious").disabled = !pagination.has_previous;
+        $("historyNext").disabled = !pagination.has_next;
+
+    } catch (error) {
+        body.replaceChildren();
+        const row = document.createElement("tr");
+        const cell = document.createElement("td");
+        cell.colSpan = 8;
+        cell.className = "table-message error";
+        cell.textContent = error.message || "Unable to load import history.";
+        row.appendChild(cell);
+        body.appendChild(row);
+
+        setText("historyPagination", "History unavailable");
+        $("historyPrevious").disabled = true;
+        $("historyNext").disabled = true;
+    }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+    $("importFile").addEventListener("change", () => {
+        const file = $("importFile").files[0];
+        setText(
+            "importFileName",
+            file ? file.name : "No file selected",
+        );
+        clearImportPreview();
+        $("previewImportButton").disabled = !file;
+        $("importFeedback").hidden = true;
+    });
+
+    $("previewImportButton").addEventListener("click", previewWorkbook);
+    $("confirmImportButton").addEventListener("click", confirmWorkbookImport);
+    $("acceptWarnings").addEventListener("change", updateConfirmAvailability);
+
+    $("refreshHistoryButton").addEventListener("click", () => {
+        importState.historyPage = 1;
+        loadImportHistory();
+    });
+
+    $("historyPrevious").addEventListener("click", () => {
+        if (importState.historyPage > 1) {
+            importState.historyPage -= 1;
+            loadImportHistory();
+        }
+    });
+
+    $("historyNext").addEventListener("click", () => {
+        if (importState.historyPage < importState.historyTotalPages) {
+            importState.historyPage += 1;
+            loadImportHistory();
+        }
+    });
+
+    loadImportHistory();
+});
