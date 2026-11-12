@@ -378,6 +378,20 @@ def build_current_khs_workbook(requests, items, executors, subtypes=None, waitin
         khs_ws.add_data_validation(validation)
         validation.add(f"I{khs_header_row + 1}:I1048576")
 
+    waiting_values = [
+        str(value).replace('"', '""')
+        for value in (waiting_for or [])
+        if value and "," not in str(value)
+    ]
+    if waiting_values and len(",".join(waiting_values)) <= 240:
+        validation = DataValidation(
+            type="list",
+            formula1='"' + ",".join(waiting_values) + '"',
+            allow_blank=True,
+        )
+        khs_ws.add_data_validation(validation)
+        validation.add(f"AA{khs_header_row + 1}:AA1048576")
+
     output = BytesIO()
     wb.save(output)
     output.seek(0)
