@@ -9,6 +9,7 @@ from app.services.excel_import import (
     KHS_HEADERS,
     parse_khs_workbook,
 )
+from app.services.excel_workbook import build_current_khs_workbook
 
 
 REQUEST_HEADERS = [
