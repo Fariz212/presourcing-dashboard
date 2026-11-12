@@ -78,6 +78,7 @@ def test_dashboard_contains_separate_operational_modules(monkeypatch, tmp_path):
     assert "New Request" in body
     assert "Add KHS" in body
     assert "Export KHS CSV" in body
+    assert "Download current Excel" in body
     assert "Fully Injected" in body
     assert "REQUEST SUBJECT / VENDOR" in body
     assert "Evidence Documents" in body
