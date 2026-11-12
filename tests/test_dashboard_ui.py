@@ -50,3 +50,32 @@ def test_root_serves_dashboard_and_static_assets(monkeypatch, tmp_path):
     assert javascript.status_code == 200
     assert b"/api/dashboard/summary" in javascript.data
     assert b"/api/dashboard/khs" in javascript.data
+
+def test_dashboard_contains_separate_operational_modules(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        "app.init_db_pool",
+        lambda _app: DummyPool(),
+    )
+    flask_app = create_app({
+        "TESTING": True,
+        "SECRET_KEY": "dashboard-ui-test-secret",
+        "DATABASE_URL": "postgresql://test:test@localhost/test",
+        "UPLOAD_DIR": tmp_path / "uploads",
+    })
+    response = flask_app.test_client().get("/dashboard")
+    assert response.status_code == 200
+    body = response.data.decode("utf-8")
+    for module in (
+        'data-page="overview"',
+        'data-page="requests"',
+        'data-page="register"',
+        'data-page="workflow"',
+        'data-page="imports"',
+        'data-page="activity"',
+    ):
+        assert module in body
+    assert "KHS Creation Overview" in body
+    assert "New Request" in body
+    assert "Add KHS" in body
+    assert "Export KHS CSV" in body
+

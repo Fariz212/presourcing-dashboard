@@ -297,3 +297,65 @@ def test_khs_register_returns_service_unavailable_on_db_error(make_client):
         response.get_json()["code"]
         == "KHS_REGISTER_UNAVAILABLE"
     )
+
+def test_khs_register_attention_filter_is_parameterized_and_applied(make_client):
+    pool = RegisterFakePool(rows=[], total=0)
+    response = make_client(pool).get("/api/dashboard/khs?attention=true")
+    assert response.status_code == 200
+    count_query, _ = pool.queries[0]
+    data_query, _ = pool.queries[1]
+    expected = "(register.waiting_for IS NOT NULL OR register.lp_started_without_mi_gm_approval IS TRUE)"
+    assert expected in count_query
+    assert expected in data_query
+    assert "LEFT JOIN khs_executors" in data_query
+
+class ExportCursor:
+    def __init__(self):
+        self.rows = [{
+            "khs_id": "=HYPERLINK(\"https://bad.example\")",
+            "request_id": "REQ-2026-001",
+            "vendor_name": "Vendor A",
+        }]
+        self.started = False
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        return False
+
+    def execute(self, query):
+        self.query = query
+
+    def fetchmany(self, size):
+        if self.started:
+            return []
+        self.started = True
+        return self.rows
+
+
+class ExportConnection:
+    @contextmanager
+    def transaction(self):
+        yield self
+
+    def cursor(self, name=None, row_factory=None):
+        return ExportCursor()
+
+
+class ExportPool:
+    @contextmanager
+    def connection(self):
+        yield ExportConnection()
+
+
+def test_export_csv_streams_and_guards_spreadsheet_formulas(make_client):
+    response = make_client(ExportPool()).get("/api/dashboard/export")
+    assert response.status_code == 200
+    assert response.content_type.startswith("text/csv")
+    assert "attachment;" in response.headers["Content-Disposition"]
+    content = response.get_data(as_text=True)
+    assert content.startswith("\ufeffKHS ID,")
+    assert "'=HYPERLINK(" in content
+    assert "Vendor A" in content
+    assert response.headers["Cache-Control"] == "no-store"
