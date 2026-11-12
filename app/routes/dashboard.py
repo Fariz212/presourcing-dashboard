@@ -1148,7 +1148,7 @@ def workflow_monitoring():
                )::int AS completed
         FROM khs_stage_config stage
         LEFT JOIN (
-            SELECT khs_id, current_stage_code, lp_status
+            SELECT khs_id, current_stage_code, lp_status, workflow_status
             FROM (""" + REGISTER_BASE_QUERY + """) AS derived_register
         ) AS register
           ON register.current_stage_code = stage.stage_code
