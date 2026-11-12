@@ -255,14 +255,37 @@ def test_minimal_khs_row_uses_existing_values_for_validation_and_matching():
 
 
 def test_inject_completion_chronology_is_validated():
+    workbook = build_current_khs_workbook(
+        requests=[{
+            "request_id": "REQ-2026-001",
+            "request_date": date(2026, 11, 1),
+            "request_subject": "Annual maintenance contract",
+        }],
+        items=[{
+            "khs_id": "KHS-2026-0001",
+            "request_id": "REQ-2026-001",
+            "request_date": date(2026, 11, 1),
+            "request_subject": "Annual maintenance contract",
+            "vendor_name": "PT Test Vendor",
+            "executor_code": "ALW",
+            "subtype": "Renewal",
+            "lp_circulation_start_date": date(2026, 11, 10),
+            "lp_completion_date": date(2026, 11, 12),
+            "khs_inject_start_date": date(2026, 11, 13),
+            "khs_inject_completion_date": date(2026, 11, 12),
+        }],
+        executors=[{"executor_code": "ALW", "display_name": "Executor A"}],
+        subtypes=["Renewal", "Kontrak Baru"],
+    )
     result = parse_khs_workbook(
-        build_workbook({
-            "LP Circulation Start Date": datetime(2026, 11, 10),
-            "LP Completion Date (Director Signed)": datetime(2026, 11, 12),
-            "KHS Inject Start Date": datetime(2026, 11, 13),
-            "KHS Inject Completion Date": datetime(2026, 11, 12),
-        }),
+        workbook,
         known_executors={"ALW"},
+        known_requests={
+            "REQ-2026-001": {
+                "request_date": date(2026, 11, 1),
+                "request_subject": "Annual maintenance contract",
+            }
+        },
     )
     codes = {issue["code"] for issue in result["issues"]}
     assert result["summary"]["can_import"] is False
