@@ -103,7 +103,7 @@ HEADER_ALIASES = {
 }
 
 REQUEST_REQUIRED_HEADERS = {"Request ID"}
-KHS_REQUIRED_HEADERS = {"KHS ID", "Request ID", "Vendor Name"}
+KHS_REQUIRED_HEADERS = {"KHS ID"}
 
 
 def _text(value):
@@ -329,7 +329,7 @@ def _read_template_executors(workbook, issues):
     return codes
 
 
-def parse_khs_workbook(file_object, known_executors=None, known_requests=None):
+def parse_khs_workbook(file_object, known_executors=None, known_requests=None, known_items=None):
     """
     Parse and validate a KHS workbook for safe insert/update.
 
@@ -342,6 +342,9 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None):
     known_requests:
         Optional mapping of existing Request IDs to parent metadata
         (request_date and request_subject), obtained from khs_requests.
+    known_items:
+        Optional mapping of existing KHS IDs to parent/vendor/date metadata,
+        obtained from khs_items. Used to validate partial column updates.
     """
 
     issues = []
@@ -377,11 +380,6 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None):
         request_header_row, request_map = _find_header_row(
             request_ws, REQUEST_REQUIRED_HEADERS, REQUEST_SHEET
         )
-        if _header_index(request_map, "Request / Subject") is None:
-            raise WorkbookImportError(
-                "Sheet '01 - Request Register' is missing Request Subject."
-            )
-
         khs_header_row, khs_map = _find_header_row(
             khs_ws, KHS_REQUIRED_HEADERS, KHS_SHEET
         )
@@ -427,6 +425,13 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None):
             subject = _text(
                 _value(cells, request_map, "Request / Subject")
             )
+            existing_request = (
+                known_requests.get(request_id)
+                if request_id and isinstance(known_requests, dict)
+                else None
+            )
+            if not subject and existing_request:
+                subject = existing_request.get("request_subject")
 
             if not request_id and not subject:
                 continue
@@ -521,12 +526,17 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None):
             start=khs_header_row + 1,
         ):
             khs_id = _text(_value(cells, khs_map, "KHS ID"))
+            existing_item = (
+                known_items.get(khs_id)
+                if khs_id and isinstance(known_items, dict)
+                else None
+            )
             request_id = _text(
                 _value(cells, khs_map, "Request ID")
-            )
+            ) or (existing_item or {}).get("request_id")
             vendor = _text(
                 _value(cells, khs_map, "Vendor Name")
-            )
+            ) or (existing_item or {}).get("vendor_name")
             subject = _text(
                 _value(cells, khs_map, "Request / Subject")
             )
@@ -699,8 +709,19 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None):
             # BUSINESS CHRONOLOGY VALIDATION
             # ---------------------------------------------
 
-            request_date = parent["request_date"] if parent else None
-            dispatch_date = dates["dispatch_date"]
+            request_date = (
+                parent.get("request_date")
+                if parent else (existing_item or {}).get("request_date")
+            )
+            effective_dates = {
+                target: (
+                    dates.get(target)
+                    if dates.get(target) is not None
+                    else (existing_item or {}).get(target)
+                )
+                for target in set(ITEM_DATE_FIELDS.values())
+            }
+            dispatch_date = effective_dates["dispatch_date"]
 
             if (
                 request_date
@@ -717,8 +738,8 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None):
                     "Dispatch Date cannot precede Request Date.",
                 )
 
-            start_date = dates["contract_start_date"]
-            end_date = dates["contract_end_date"]
+            start_date = effective_dates["contract_start_date"]
+            end_date = effective_dates["contract_end_date"]
 
             if start_date and end_date and end_date < start_date:
                 _add_issue(
@@ -732,9 +753,9 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None):
                 )
 
             mi_dates = [
-                dates["mi_head_approval_date"],
-                dates["mi_sm_approval_date"],
-                dates["mi_gm_approval_date"],
+                effective_dates["mi_head_approval_date"],
+                effective_dates["mi_sm_approval_date"],
+                effective_dates["mi_gm_approval_date"],
             ]
 
             populated_mi_dates = [
@@ -752,11 +773,11 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None):
                     "MI approval dates are not in chronological order.",
                 )
 
-            lp_start = dates["lp_circulation_start_date"]
-            lp_completion = dates["lp_completion_date"]
-            inject_start = dates["khs_inject_start_date"]
-            inject_completion = dates["khs_inject_completion_date"]
-            mi_gm = dates["mi_gm_approval_date"]
+            lp_start = effective_dates["lp_circulation_start_date"]
+            lp_completion = effective_dates["lp_completion_date"]
+            inject_start = effective_dates["khs_inject_start_date"]
+            inject_completion = effective_dates["khs_inject_completion_date"]
+            mi_gm = effective_dates["mi_gm_approval_date"]
 
             if lp_start and not mi_gm:
                 _add_issue(
