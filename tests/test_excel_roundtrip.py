@@ -63,6 +63,7 @@ def _existing_item_tuple():
     existing.update({
         "request_id": "REQ-2026-001",
         "vendor_name": "PT Existing Vendor",
+        "lp_completion_date": date(2026, 11, 12),
         "khs_inject_start_date": None,
         "khs_inject_completion_date": None,
     })
