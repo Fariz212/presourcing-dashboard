@@ -4,8 +4,10 @@ from io import BytesIO
 from pathlib import PurePosixPath
 from zipfile import BadZipFile, ZipFile, is_zipfile
 
-from flask import Blueprint, current_app, jsonify, request
+from flask import Blueprint, current_app, jsonify, request, send_file
 from psycopg.errors import UniqueViolation
+from psycopg.rows import dict_row
+from zoneinfo import ZoneInfo
 from psycopg.types.json import Jsonb
 from werkzeug.utils import secure_filename
 
@@ -19,6 +21,7 @@ from app.services.excel_import import (
     WorkbookImportError,
     parse_khs_workbook,
 )
+from app.services.excel_workbook import build_current_khs_workbook
 
 
 imports_bp = Blueprint("imports", __name__)
@@ -106,6 +109,128 @@ def _row_status(issues):
     return "VALID"
 
 
+@imports_bp.get("/workbook.xlsx")
+def download_current_workbook():
+    """Download a current-data Excel snapshot with the active import schema."""
+    try:
+        with get_db_pool().connection() as conn:
+            with conn.cursor(row_factory=dict_row) as cursor:
+                cursor.execute(
+                    """
+                    SELECT
+                        r.request_id,
+                        r.request_date,
+                        r.request_subject,
+                        r.requester_owner,
+                        COUNT(k.khs_id)::int AS total_khs,
+                        COUNT(k.khs_id) FILTER (
+                            WHERE k.khs_inject_completion_date IS NOT NULL
+                        )::int AS completed_khs,
+                        COUNT(k.khs_id) FILTER (
+                            WHERE k.khs_inject_completion_date IS NULL
+                        )::int AS open_khs,
+                        COALESCE(
+                            string_agg(DISTINCT k.vendor_name, ' · ' ORDER BY k.vendor_name)
+                                FILTER (WHERE k.vendor_name IS NOT NULL),
+                            ''
+                        ) AS vendor_summary,
+                        CASE
+                            WHEN COUNT(k.khs_id) = 0 THEN 'Not Started'
+                            WHEN COUNT(k.khs_id) FILTER (
+                                WHERE k.khs_inject_completion_date IS NOT NULL
+                            ) = COUNT(k.khs_id) THEN 'Completed'
+                            WHEN COUNT(k.khs_id) FILTER (
+                                WHERE k.khs_inject_completion_date IS NOT NULL
+                            ) > 0 THEN 'Partially Completed'
+                            ELSE 'In Progress'
+                        END AS request_status
+                    FROM khs_requests r
+                    LEFT JOIN khs_items k ON k.request_id = r.request_id
+                    GROUP BY r.request_id
+                    ORDER BY r.request_date DESC NULLS LAST, r.request_subject
+                    """
+                )
+                requests = cursor.fetchall()
+
+                cursor.execute(
+                    """
+                    SELECT
+                        i.*,
+                        r.request_date,
+                        r.request_subject,
+                        r.requester_owner
+                    FROM khs_items i
+                    JOIN khs_requests r ON r.request_id = i.request_id
+                    ORDER BY r.request_subject, i.vendor_name, i.khs_id
+                    """
+                )
+                items = cursor.fetchall()
+
+                executors = conn.execute(
+                    """
+                    SELECT executor_code, display_name
+                    FROM khs_executors
+                    WHERE is_active = TRUE
+                    ORDER BY display_name
+                    """
+                ).fetchall()
+                executors = [
+                    {"executor_code": row[0], "display_name": row[1]}
+                    for row in executors
+                ]
+
+                subtypes = conn.execute(
+                    """
+                    SELECT DISTINCT subtype
+                    FROM khs_items
+                    WHERE subtype IS NOT NULL AND btrim(subtype) <> ''
+                    ORDER BY subtype
+                    """
+                ).fetchall()
+                subtype_values = sorted(
+                    {"Renewal", "Kontrak Baru"} | {row[0] for row in subtypes}
+                )
+
+                waiting_rows = conn.execute(
+                    """
+                    SELECT DISTINCT waiting_for
+                    FROM khs_items
+                    WHERE waiting_for IS NOT NULL AND btrim(waiting_for) <> ''
+                    ORDER BY waiting_for
+                    """
+                ).fetchall()
+                waiting_values = [row[0] for row in waiting_rows]
+
+        workbook = build_current_khs_workbook(
+            requests=requests,
+            items=items,
+            executors=executors,
+            subtypes=subtype_values,
+            waiting_for=waiting_values,
+        )
+        filename = (
+            "KHS_Creation_Monitoring_Current_"
+            + datetime.now(ZoneInfo("Asia/Jakarta")).date().isoformat()
+            + ".xlsx"
+        )
+        response = send_file(
+            workbook,
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            as_attachment=True,
+            download_name=filename,
+        )
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        return response
+    except Exception:
+        current_app.logger.exception("Current KHS workbook export failed.")
+        return jsonify({
+            "success": False,
+            "code": "WORKBOOK_EXPORT_UNAVAILABLE",
+            "message": "Unable to generate the current KHS Excel workbook.",
+        }), 503
+
+
 @imports_bp.post("/preview")
 def preview_import():
     uploaded = request.files.get("file")
@@ -167,6 +292,20 @@ def preview_import():
                 row[0] for row in executor_rows
             }
 
+            request_rows = conn.execute(
+                """
+                SELECT request_id, request_date, request_subject
+                FROM khs_requests
+                """
+            ).fetchall()
+            known_requests = {
+                row[0]: {
+                    "request_date": row[1],
+                    "request_subject": row[2],
+                }
+                for row in request_rows
+            }
+
             existing = conn.execute(
                 """
                 SELECT id, status
@@ -188,6 +327,7 @@ def preview_import():
         parsed = parse_khs_workbook(
             BytesIO(payload),
             known_executors=known_executors,
+            known_requests=known_requests,
         )
 
         issues = parsed["issues"]
