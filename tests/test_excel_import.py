@@ -3,7 +3,7 @@ from io import BytesIO
 import re
 from zipfile import ZIP_DEFLATED, ZipFile
 
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 
 from app.services.excel_import import (
     KHS_HEADERS,
@@ -66,6 +66,7 @@ def build_workbook(item_overrides=None, extra_items=None):
         "Vendor Name": "PT Test Vendor",
         "Contract Start Date": datetime(2027, 1, 1),
         "Contract End Date": datetime(2027, 12, 31),
+        "Last Updated": datetime(2026, 11, 10),
         "MI Status": "Not Completed",
         "LP Status": "Not Completed",
         "Current Stage": "Dispatch",
@@ -116,6 +117,7 @@ def test_valid_template_parses_successfully():
     assert item["executor_code"] == "ALW"
     assert item["subtype"] == "Renewal"
     assert item["dispatch_date"] == date(2026, 11, 1)
+    assert "last_updated_date" not in item
 
 
 
@@ -330,3 +332,29 @@ def test_parser_supports_missing_worksheet_dimensions():
     assert result["summary"]["total_requests"] == 1
     assert result["summary"]["total_khs_items"] == 1
     assert result["items"][0]["executor_code"] == "ALW"
+
+
+def test_generated_workbook_stores_untrusted_text_as_plain_excel_text():
+    workbook = build_current_khs_workbook(
+        requests=[{
+            "request_id": "REQ-2026-001",
+            "request_subject": "=HYPERLINK(\"https://invalid.example\",\"click\")",
+        }],
+        items=[{
+            "khs_id": "KHS-2026-0001",
+            "request_id": "REQ-2026-001",
+            "request_subject": "Safe subject",
+            "vendor_name": "=HYPERLINK(\"https://invalid.example\",\"click\")",
+        }],
+        executors=[],
+    )
+    output = load_workbook(workbook, data_only=False)
+    try:
+        vendor_cell = output["02 - KHS Tracking"]["E6"]
+        assert vendor_cell.value.startswith("=")
+        assert vendor_cell.data_type == "s"
+        subject_cell = output["01 - Request Register"]["C6"]
+        assert subject_cell.value.startswith("=")
+        assert subject_cell.data_type == "s"
+    finally:
+        output.close()
