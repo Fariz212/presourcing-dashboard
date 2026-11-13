@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#14233b"><meta name="description" content="KHS Contract Creation Management">
-<title>KHS Management</title>
+<title>Contract Monitoring &amp; Tracking</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard-premium.css') }}">
 <script src="{{ url_for('static', filename='js/dashboard.js') }}" defer></script>
@@ -14,9 +14,11 @@
 <a class="brand" href="#overview" data-go="overview"><span class="brand-mark">K</span><span class="brand-copy"><strong>KHS</strong><small>CONTRACT OPERATIONS</small></span></a>
 <div class="sidebar-caption">WORKSPACE</div>
 <nav class="side-nav" aria-label="Main navigation">
-<a class="nav-link active" href="#overview" data-page="overview"><span class="nav-icon" aria-hidden="true"><svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span><span>Overview</span></a>
+<a class="nav-link active" href="#overview" data-page="overview"><span class="nav-icon" aria-hidden="true"><svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span><span>Contract Monitoring</span></a>
 <a class="nav-link" href="#requests" data-page="requests"><span class="nav-icon" aria-hidden="true"><svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3.75h7l4 4V20a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4.75a1 1 0 0 1 1-1Z"/><path d="M14 4v4h4M9 13h6M9 17h6"/></svg></span><span>Request Management</span></a>
 <a class="nav-link" href="#register" data-page="register"><span class="nav-icon" aria-hidden="true"><svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 5h12M8 12h12M8 19h12"/><path d="m3 5 1 1 2-2M3 12l1 1 2-2M3 19l1 1 2-2"/></svg></span><span>KHS Register</span><span class="nav-count" id="sidebarTotal">—</span></a>
+<a class="nav-link" href="#lp" data-page="lp"><span class="nav-icon" aria-hidden="true"><svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h6v6H4zM14 5h6v6h-6zM9 8h5M7 11v7M17 11v7M7 18h10M14 15l3 3 3-3"/></svg></span><span>LP Circulation</span></a>
+<a class="nav-link" href="#contracts" data-page="contracts"><span class="nav-icon" aria-hidden="true"><svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 9h18M7 13h4M7 17h7"/></svg></span><span>Contract Lifecycle</span></a>
 <a class="nav-link" href="#workflow" data-page="workflow"><span class="nav-icon" aria-hidden="true"><svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="5" r="2"/><circle cx="19" cy="19" r="2"/><path d="M7 5h4a4 4 0 0 1 4 4v2a4 4 0 0 0 4 4"/><path d="m15 15 4 4 4-4"/></svg></span><span>Workflow Monitoring</span></a>
 </nav>
 <div class="sidebar-caption secondary-caption">DATA MANAGEMENT</div>
@@ -29,8 +31,8 @@
 <main class="main-content">
 <header class="topbar"><div class="breadcrumbs"><span>Operations</span><span>/</span><strong id="breadcrumbCurrent">Overview</strong></div>
 <div class="topbar-actions"><div class="system-status" id="systemStatus"><span class="online-dot"></span><span id="systemStatusText">Ready</span></div><button class="refresh-button" id="refreshButton" type="button">↻ Refresh</button><button class="primary-button" id="quickAddKhs" type="button">+ Add KHS</button></div></header>
-<section class="page-view active" id="page-overview" data-title="Overview">
-<div class="page-heading"><div><div class="eyebrow">KHS OPERATIONS</div><h1>KHS Creation Overview</h1><p>See what is moving, what is waiting, and what needs attention.</p></div><div class="heading-meta"><span class="meta-label">LAST UPDATED</span><strong id="lastUpdated">—</strong></div></div>
+<section class="page-view active" id="page-overview" data-title="Contract Monitoring &amp; Tracking">
+<div class="page-heading"><div><div class="eyebrow">CONTRACT OPERATIONS</div><h1>Contract Monitoring &amp; Tracking</h1><p>Monitor contract execution, LP progression, and upcoming expirations in one workspace.</p></div><div class="heading-meta"><span class="meta-label">LAST UPDATED</span><strong id="lastUpdated">—</strong></div></div>
 <div class="action-strip"><button class="primary-button" id="newRequestButton">+ New Request</button><button class="secondary-button" id="overviewAddKhs">+ Add KHS Item</button><button class="secondary-button" data-go="imports">Import Excel</button></div>
 <div class="kpi-grid">
 <article class="kpi-card"><span class="kpi-label">Total Requests</span><strong class="kpi-value" id="totalRequests">—</strong><small>Parent requests</small></article>
@@ -77,6 +79,19 @@
     </article>
   </div>
 </section>
+<section class="contract-watch" aria-labelledby="contractWatchTitle">
+  <div class="contract-watch-heading">
+    <div><div class="eyebrow">POST-INJECTION MONITORING</div><h2 id="contractWatchTitle">Contract Lifecycle Watch</h2><p>Renewal visibility starts once a KHS is fully injected.</p></div>
+    <button type="button" class="text-button" data-go="contracts">Open contract lifecycle →</button>
+  </div>
+  <div class="contract-watch-grid">
+    <button type="button" class="contract-watch-card watch-six" data-contract-status="prep_6m"><span>Renewal preparation</span><strong id="overviewExpiring6m">—</strong><small>Within 6 months</small></button>
+    <button type="button" class="contract-watch-card watch-three" data-contract-status="watch_3m"><span>Renewal watch</span><strong id="overviewExpiring3m">—</strong><small>Within 3 months</small></button>
+    <button type="button" class="contract-watch-card watch-one" data-contract-status="urgent_1m"><span>Action required</span><strong id="overviewExpiring1m">—</strong><small>Within 1 month</small></button>
+    <button type="button" class="contract-watch-card watch-expired" data-contract-status="expired"><span>Expired</span><strong id="overviewExpiredContracts">—</strong><small>Past contract end date</small></button>
+    <button type="button" class="contract-watch-card watch-missing" data-contract-status="missing_dates"><span>Missing dates</span><strong id="overviewMissingContractDates">—</strong><small>Fully injected · incomplete period</small></button>
+  </div>
+</section>
 <div class="overview-grid">
 <article class="panel"><div class="panel-heading"><div><div class="eyebrow">LIFECYCLE</div><h2>LP Circulation Progress</h2></div><span class="subtle-tag" id="lpTotalTag">— KHS</span></div>
 <div class="progress-summary"><strong class="progress-primary" id="progressPrimary">—</strong><strong class="progress-rate" id="progressRate">0%</strong></div>
@@ -98,13 +113,74 @@
 <section class="page-view" id="page-register" data-title="KHS Register">
 <div class="page-heading"><div><div class="eyebrow">WORKSPACE / RECORDS</div><h1>KHS Register</h1><p>Manage each contract record, assign ownership, and update its milestones.</p></div><button class="primary-button" id="createKhsButton">+ Add KHS</button></div>
 <article class="panel"><div class="filter-toolbar"><input id="searchInput" type="search" placeholder="Search request subject, vendor, KHS…"><select id="statusFilter"><option value="">All LP statuses</option><option value="completed">Completed</option><option value="in_progress">In progress</option><option value="not_started">Not started</option></select><select id="executorFilter"><option value="">All executors</option></select><select id="subtypeFilter"><option value="">All subtypes</option></select><select id="waitingFilter"><option value="">All waiting parties</option></select><select id="stageFilter"><option value="">All workflow stages</option></select><button class="reset-button" id="resetFilters">Reset</button></div>
-<div class="table-wrap"><table><thead><tr><th>REQUEST SUBJECT / VENDOR</th><th>EXECUTOR</th><th>WORKFLOW STAGE</th><th>WORKFLOW STATUS</th><th>LP STATUS</th><th>INJECT START</th><th>FULLY INJECTED</th><th>WAITING FOR</th><th></th></tr></thead><tbody id="registerBody"><tr><td colspan="9" class="table-message">Loading…</td></tr></tbody></table></div>
+<div class="table-wrap"><table><thead><tr><th>REQUEST SUBJECT / VENDOR</th><th>EXECUTOR</th><th>WORKFLOW STAGE</th><th>WORKFLOW STATUS</th><th>LP STATUS</th><th>LP CURRENT STAGE / AGE</th><th>INJECT START</th><th>FULLY INJECTED</th><th>WAITING FOR</th><th></th></tr></thead><tbody id="registerBody"><tr><td colspan="10" class="table-message">Loading…</td></tr></tbody></table></div>
 <div class="register-footer"><span id="recordCount">—</span><div class="pagination"><span id="paginationText">—</span><button id="previousPage" type="button">‹</button><button id="nextPage" type="button">›</button></div></div></article>
+</section>
+<section class="page-view" id="page-lp" data-title="LP Circulation">
+  <div class="page-heading"><div><div class="eyebrow">APPROVAL JOURNEY / LP</div><h1>LP Circulation</h1><p>Track every LP milestone from User submission through Director sign-off, with current stage and stage age.</p></div><button class="secondary-button" id="lpRefresh">Refresh</button></div>
+  <div class="lp-stage-summary">
+    <button type="button" class="lp-stage-card" data-lp-stage=""><span>All LP records</span><strong id="lpTotalRecords">—</strong><small>Started or historically recorded</small></button>
+    <button type="button" class="lp-stage-card" data-lp-stage="contract_team"><span>Tim Kontrak</span><strong id="lpCountContractTeam">—</strong><small>Next milestone</small></button>
+    <button type="button" class="lp-stage-card" data-lp-stage="junior_manager"><span>Junior Manager</span><strong id="lpCountJunior">—</strong><small>Awaiting approval</small></button>
+    <button type="button" class="lp-stage-card" data-lp-stage="senior_manager"><span>Senior Manager</span><strong id="lpCountSenior">—</strong><small>Awaiting approval</small></button>
+    <button type="button" class="lp-stage-card" data-lp-stage="general_manager"><span>GM SCM</span><strong id="lpCountGm">—</strong><small>Awaiting approval</small></button>
+    <button type="button" class="lp-stage-card" data-lp-stage="director"><span>Director</span><strong id="lpCountDirector">—</strong><small>Final sign-off</small></button>
+  </div>
+  <article class="panel">
+    <div class="filter-toolbar lp-filter-toolbar">
+      <input id="lpSearch" type="search" placeholder="Search KHS, request, vendor…">
+      <select id="lpStageFilter">
+        <option value="">All LP stages</option>
+        <option value="legacy_incomplete">Legacy timeline incomplete</option>
+        <option value="contract_team">Tim Kontrak</option>
+        <option value="junior_manager">Junior Manager</option>
+        <option value="senior_manager">Senior Manager</option>
+        <option value="general_manager">GM SCM</option>
+        <option value="director">Director / Direktur</option>
+        <option value="completed">Completed</option>
+      </select>
+      <button type="button" class="reset-button" id="lpReset">Reset</button>
+    </div>
+    <div class="table-wrap"><table><thead><tr><th>KHS / VENDOR</th><th>REQUEST</th><th>CURRENT STAGE</th><th>STAGE AGE</th><th>LP START</th><th>WAITING FOR / NEXT ACTION</th><th>HISTORY</th><th></th></tr></thead><tbody id="lpBody"><tr><td colspan="8" class="table-message">Loading LP records…</td></tr></tbody></table></div>
+    <div class="register-footer"><span id="lpPagination">—</span><div class="pagination"><button id="lpPrevious" type="button">‹</button><button id="lpNext" type="button">›</button></div></div>
+  </article>
 </section>
 <section class="page-view" id="page-workflow" data-title="Workflow Monitoring">
 <div class="page-heading"><div><div class="eyebrow">WORKSPACE / PROCESS CONTROL</div><h1>Workflow Monitoring</h1><p>Distribution by the next workflow checkpoint and work awaiting action.</p></div><button class="secondary-button" id="workflowRefresh">Refresh</button></div>
 <div class="workflow-cards" id="workflowCards"><div class="panel">Loading workflow…</div></div>
 <article class="panel"><div class="panel-heading"><div><div class="eyebrow">LP CIRCULATION</div><h2>LoA Sign-off Route</h2></div></div><div class="loa-route"><span>User</span><i>→</i><span>Tim Kontrak</span><i>→</i><span>Junior Manager Vendor Management</span><i>→</i><span>Senior Manager Strategic Sourcing</span><i>→</i><span>GM SCM</span><i>→</i><span>Direktur</span></div><p class="muted">LP circulation is gated by GM SCM MI approval. The route is shown for process visibility; individual sign-off dates remain tracked on each KHS record.</p></article>
+</section>
+<section class="page-view" id="page-contracts" data-title="Contract Lifecycle">
+  <div class="page-heading"><div><div class="eyebrow">POST-INJECTION / RENEWAL CONTROL</div><h1>Contract Lifecycle</h1><p>Monitor contract duration and expiry exposure after KHS is fully injected.</p></div><button class="secondary-button" id="contractRefresh">Refresh</button></div>
+  <div class="contract-lifecycle-summary">
+    <article class="lifecycle-kpi"><span>Fully Injected</span><strong id="contractTotal">—</strong><small>Eligible contracts</small></article>
+    <article class="lifecycle-kpi lifecycle-kpi-six"><span>Expiring ≤ 6 months</span><strong id="contractSixMonths">—</strong><small>Start renewal preparation</small></article>
+    <article class="lifecycle-kpi lifecycle-kpi-three"><span>Expiring ≤ 3 months</span><strong id="contractThreeMonths">—</strong><small>Renewal action required</small></article>
+    <article class="lifecycle-kpi lifecycle-kpi-one"><span>Expiring ≤ 1 month</span><strong id="contractOneMonth">—</strong><small>Escalate renewal</small></article>
+    <article class="lifecycle-kpi lifecycle-kpi-expired"><span>Expired</span><strong id="contractExpired">—</strong><small>Past contract end date</small></article>
+    <article class="lifecycle-kpi lifecycle-kpi-missing"><span>Missing dates</span><strong id="contractMissingDates">—</strong><small>Requires data completion</small></article>
+  </div>
+  <article class="panel">
+    <div class="filter-toolbar contract-filter-toolbar">
+      <input id="contractSearch" type="search" placeholder="Search KHS, request, vendor…">
+      <select id="contractStatusFilter">
+        <option value="">All lifecycle statuses</option>
+        <option value="prep_6m">Renewal preparation · 6 months</option>
+        <option value="watch_3m">Renewal watch · 3 months</option>
+        <option value="urgent_1m">Action required · 1 month</option>
+        <option value="urgent_14d">Urgent · 14 days</option>
+        <option value="critical_7d">Final warning · 7 days</option>
+        <option value="expired">Expired</option>
+        <option value="missing_dates">Missing contract dates</option>
+        <option value="invalid_dates">Invalid contract dates</option>
+        <option value="active">Active · over 6 months</option>
+      </select>
+      <button type="button" class="reset-button" id="contractReset">Reset</button>
+    </div>
+    <div class="table-wrap"><table><thead><tr><th>KHS / VENDOR</th><th>REQUEST</th><th>FULLY INJECTED</th><th>CONTRACT PERIOD</th><th>TERM</th><th>TIME REMAINING</th><th>LIFECYCLE STATUS</th><th></th></tr></thead><tbody id="contractBody"><tr><td colspan="8" class="table-message">Loading contracts…</td></tr></tbody></table></div>
+    <div class="register-footer"><span id="contractPagination">—</span><div class="pagination"><button id="contractPrevious" type="button">‹</button><button id="contractNext" type="button">›</button></div></div>
+  </article>
+  <p class="lifecycle-footnote">Alert stages are calculated from Contract End Date using Jakarta local date. Monitoring is in-app; email and WhatsApp notifications are not enabled.</p>
 </section>
 <section class="page-view" id="page-imports" data-title="Excel Import / Export">
 <div class="page-heading"><div><div class="eyebrow">DATA MANAGEMENT / WORKBOOK WORKSPACE</div><h1>Excel Import / Export</h1><p>Download the latest database workbook, edit existing records by ID, then preview and confirm the changes. Legacy v2.2 workbooks remain supported.</p></div><div class="heading-actions"><button class="secondary-button" id="downloadCurrentWorkbookButton">↓ Download current Excel</button><button class="secondary-button" id="exportKhsButton">↓ Export KHS CSV</button></div></div>
@@ -123,7 +199,10 @@
 <footer class="main-footer"><span>KHS Contract Creation Management</span><span>Operational workspace · v2.1</span></footer>
 </main></div>
 <dialog id="recordDialog" class="record-dialog"><form id="recordForm" method="dialog"><div class="dialog-header"><div><div class="eyebrow" id="dialogEyebrow">NEW RECORD</div><h2 id="dialogTitle">Create record</h2></div><button type="button" class="dialog-close" id="closeRecordDialog">×</button></div><div id="dialogFields" class="form-grid"></div><div id="dialogHint" class="form-hint"></div><div class="dialog-footer"><button type="button" class="secondary-button" id="cancelRecord">Cancel</button><button type="submit" class="primary-button" id="saveRecord">Save record</button></div></form></dialog>
-<dialog id="detailDialog" class="detail-dialog"><div class="dialog-header"><div><div class="eyebrow">KHS RECORD</div><h2 id="detailTitle">KHS Details</h2><p class="detail-subtitle" id="detailSubtitle"></p></div><button class="dialog-close" id="closeDialog">×</button></div><div id="detailStatus" class="dialog-status-row"></div><div id="detailGrid" class="detail-grid"></div>
+<dialog id="detailDialog" class="detail-dialog"><div class="dialog-header"><div><div class="eyebrow">KHS RECORD</div><h2 id="detailTitle">KHS Details</h2><p class="detail-subtitle" id="detailSubtitle"></p></div><button class="dialog-close" id="closeDialog">×</button></div><div id="detailStatus" class="dialog-status-row"></div>
+<section class="lp-timeline-section"><div class="lp-timeline-heading"><div><div class="eyebrow">LP CIRCULATION</div><h3>Approval Timeline</h3></div><span id="lpTimelineStage" class="status-badge status-in_progress">—</span></div><div id="lpTimeline" class="lp-timeline"></div><div id="lpTimelineNotice" class="lp-timeline-notice" hidden></div></section>
+<section class="contract-detail-summary"><div class="contract-detail-heading"><div><div class="eyebrow">POST-INJECTION</div><h3>Contract Lifecycle</h3></div><span id="contractDetailStatus" class="status-badge">—</span></div><div id="contractDetailGrid" class="contract-detail-grid"></div></section>
+<div id="detailGrid" class="detail-grid"></div>
 <section class="document-section">
   <div class="document-section-heading"><div><h3>Evidence Documents</h3><p class="muted">Supporting files attached to this KHS record.</p></div></div>
   <form id="documentUploadForm" class="document-upload-form" enctype="multipart/form-data">
