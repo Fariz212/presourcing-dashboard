@@ -99,6 +99,9 @@ def test_dashboard_contains_separate_operational_modules(monkeypatch, tmp_path):
     assert "Contract Lifecycle" in body
     assert "Approval Timeline" in body
     assert "Contract Lifecycle Watch" in body
+    assert "CONTRACT STATUS" in body
+    assert "RENEWAL ALERT" in body
+    assert "Upcoming contract" in body
     assert 'id="page-lp"' in body
     assert 'id="page-contracts"' in body
     assert "Approval Pipeline" in body
