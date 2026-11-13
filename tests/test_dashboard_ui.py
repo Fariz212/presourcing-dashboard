@@ -57,6 +57,8 @@ def test_root_serves_dashboard_and_static_assets(monkeypatch, tmp_path):
     assert b"grid-template-columns: 252px minmax(0, 1fr)" in refresh_css.data
     assert b"width: auto" in refresh_css.data
     assert b"margin: 0" in refresh_css.data
+    assert b"@media (max-width: 680px)" in refresh_css.data
+    assert b".app-shell { display: block; grid-template-columns: 1fr; }" in refresh_css.data
     assert b"table-layout: fixed" in refresh_css.data
 
     refresh_css = client.get("/static/css/dashboard-refresh.css")
