@@ -40,6 +40,10 @@ KHS_HEADERS = [
     "MI Status",
     "Legal Submission Date",
     "LP Circulation Start Date",
+    "LP Contract Team Completion Date",
+    "LP Junior Manager Approval Date",
+    "LP Senior Manager Approval Date",
+    "LP GM SCM Approval Date",
     "LP Completion Date",
     "LP Status",
     "KHS Inject Start Date",
@@ -71,6 +75,10 @@ DATE_COLUMNS = {
     "MI GM Approval Date",
     "Legal Submission Date",
     "LP Circulation Start Date",
+    "LP Contract Team Completion Date",
+    "LP Junior Manager Approval Date",
+    "LP Senior Manager Approval Date",
+    "LP GM SCM Approval Date",
     "LP Completion Date",
     "KHS Inject Start Date",
     "KHS Inject Completion Date",
@@ -195,7 +203,7 @@ def build_current_khs_workbook(requests, items, executors, subtypes=None, waitin
     instructions["A1"] = "KHS CONTRACT CREATION MONITORING"
     instructions["A1"].font = Font(name="Aptos Display", bold=True, size=17, color="183153")
     instructions["A3"] = "Workbook version"
-    instructions["B3"] = "2.3 — current KHS Inject workflow"
+    instructions["B3"] = "2.4 — LP approval milestones and contract lifecycle"
     instructions["A4"] = "Purpose"
     instructions["B4"] = "This workbook is a snapshot of the current database records. Edit the existing rows and upload it through Excel Import / Export to preview and apply updates."
     instructions["A5"] = "Matching keys"
@@ -215,10 +223,14 @@ def build_current_khs_workbook(requests, items, executors, subtypes=None, waitin
     instructions["A12"] = "KHS Inject"
     instructions["B12"] = "KHS Inject starts only after LP Completion. KHS is fully complete only when KHS Inject Completion Date is populated."
     instructions["A13"] = "Legacy workbooks"
-    instructions["B13"] = "Existing v2.2 workbooks remain accepted. For new updates, download this current workbook so the latest columns are present."
+    instructions["B13"] = "Existing v2.2 and v2.3 workbooks remain accepted. For new updates, download this current workbook so all LP milestones are available."
     instructions["A14"] = "Workflow"
     instructions["B14"] = "Review the Preview result and all warnings/errors before selecting Confirm Import. Preview does not change master records."
-    for row in range(3, 15):
+    instructions["A15"] = "Contract Lifecycle"
+    instructions["B15"] = "Expiry monitoring starts only after KHS Inject Completion Date. Alert stages are calculated from Contract End Date; no alert status is imported."
+    instructions["A16"] = "LP Timeline"
+    instructions["B16"] = "Current LP stage and stage age are calculated from milestone dates. Blank historical milestone dates remain blank; do not invent dates."
+    for row in range(3, 17):
         instructions[f"A{row}"].font = Font(bold=True, color="183153")
         instructions[f"A{row}"].alignment = Alignment(vertical="top")
         instructions[f"B{row}"].alignment = Alignment(wrap_text=True, vertical="top")
@@ -303,6 +315,10 @@ def build_current_khs_workbook(requests, items, executors, subtypes=None, waitin
             "Completed" if record.get("mi_gm_approval_date") else "Not Completed",
             record.get("legal_submission_date"),
             record.get("lp_circulation_start_date"),
+            record.get("lp_contract_team_completion_date"),
+            record.get("lp_junior_manager_approval_date"),
+            record.get("lp_senior_manager_approval_date"),
+            record.get("lp_gm_scm_approval_date"),
             record.get("lp_completion_date"),
             lp_status,
             record.get("khs_inject_start_date"),
@@ -325,9 +341,10 @@ def build_current_khs_workbook(requests, items, executors, subtypes=None, waitin
     khs_widths = {
         "A": 20, "B": 20, "C": 15, "D": 42, "E": 34, "F": 14, "G": 15,
         "H": 18, "I": 18, "J": 16, "K": 16, "L": 18, "M": 16, "N": 18,
-        "O": 18, "P": 18, "Q": 18, "R": 17, "S": 18, "T": 19, "U": 19,
-        "V": 16, "W": 18, "X": 20, "Y": 17, "Z": 22, "AA": 20, "AB": 42,
-        "AC": 15, "AD": 42, "AE": 24, "AF": 28, "AG": 40, "AH": 28,
+        "O": 18, "P": 18, "Q": 18, "R": 17, "S": 18, "T": 19,
+        "U": 25, "V": 25, "W": 25, "X": 21, "Y": 19, "Z": 16,
+        "AA": 18, "AB": 20, "AC": 17, "AD": 22, "AE": 20, "AF": 42,
+        "AG": 15, "AH": 42, "AI": 24, "AJ": 28, "AK": 40, "AL": 28,
     }
     _style_sheet(khs_ws, khs_header_row, KHS_HEADERS, khs_widths)
 

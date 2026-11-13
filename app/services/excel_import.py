@@ -39,6 +39,10 @@ KHS_HEADERS = {
     "MI Status",
     "Legal Submission Date",
     "LP Circulation Start Date",
+    "LP Contract Team Completion Date",
+    "LP Junior Manager Approval Date",
+    "LP Senior Manager Approval Date",
+    "LP GM SCM Approval Date",
     "LP Completion Date (Director Signed)",
     "LP Status",
     "Current Stage",
@@ -70,6 +74,10 @@ ITEM_DATE_FIELDS = {
     "MI GM Approval Date": "mi_gm_approval_date",
     "Legal Submission Date": "legal_submission_date",
     "LP Circulation Start Date": "lp_circulation_start_date",
+    "LP Contract Team Completion Date": "lp_contract_team_completion_date",
+    "LP Junior Manager Approval Date": "lp_junior_manager_approval_date",
+    "LP Senior Manager Approval Date": "lp_senior_manager_approval_date",
+    "LP GM SCM Approval Date": "lp_gm_scm_approval_date",
     "LP Completion Date (Director Signed)": "lp_completion_date",
     "KHS Inject Start Date": "khs_inject_start_date",
     "KHS Inject Completion Date": "khs_inject_completion_date",
@@ -83,7 +91,7 @@ SUBTYPE_MAP = {
 
 
 class WorkbookImportError(ValueError):
-    """Raised when an uploaded workbook is not compatible with KHS v2.3."""
+    """Raised when an uploaded workbook is not compatible with the KHS v2.4 schema."""
 
     
 HEADER_ALIASES = {
@@ -333,7 +341,7 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None, k
     """
     Parse and validate a KHS workbook for safe insert/update.
 
-    Current v2.3 workbooks include KHS Inject milestones. Legacy v2.2
+    Current v2.4 workbooks include LP approval milestones and KHS Inject fields. Legacy v2.2 and v2.3
     headers remain accepted. Request and KHS IDs are matching keys; rows
     can be partial, provided their parent Request already exists.
 
@@ -386,6 +394,15 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None, k
 
         has_inject_start = _header_index(khs_map, "KHS Inject Start Date") is not None
         has_inject_completion = _header_index(khs_map, "KHS Inject Completion Date") is not None
+        has_lp_milestones = any(
+            _header_index(khs_map, header) is not None
+            for header in (
+                "LP Contract Team Completion Date",
+                "LP Junior Manager Approval Date",
+                "LP Senior Manager Approval Date",
+                "LP GM SCM Approval Date",
+            )
+        )
 
         requests = []
         items = []
@@ -730,8 +747,19 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None, k
 
             start_date = effective_dates["contract_start_date"]
             end_date = effective_dates["contract_end_date"]
+            contract_date_fields = ("contract_start_date", "contract_end_date")
+            contract_dates_changed = any(
+                dates.get(field) is not None
+                and dates.get(field) != (existing_item or {}).get(field)
+                for field in contract_date_fields
+            )
 
-            if start_date and end_date and end_date < start_date:
+            if (
+                start_date
+                and end_date
+                and end_date < start_date
+                and contract_dates_changed
+            ):
                 _add_issue(
                     issues,
                     "ERROR",
@@ -765,8 +793,67 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None, k
 
             lp_start = effective_dates["lp_circulation_start_date"]
             lp_completion = effective_dates["lp_completion_date"]
+            lp_milestone_fields = (
+                "lp_contract_team_completion_date",
+                "lp_junior_manager_approval_date",
+                "lp_senior_manager_approval_date",
+                "lp_gm_scm_approval_date",
+            )
+            all_lp_date_fields = (
+                "lp_circulation_start_date",
+                *lp_milestone_fields,
+                "lp_completion_date",
+            )
+            # Empty Excel cells and columns absent from legacy v2.2/v2.3
+            # workbooks mean "no change". Validate chronology only when an LP
+            # milestone is actually being added or changed, so old partial
+            # histories do not block unrelated updates.
+            lp_milestones_changed = any(
+                dates.get(field) is not None
+                and dates.get(field) != (existing_item or {}).get(field)
+                for field in all_lp_date_fields
+            )
+            if (
+                any(effective_dates.get(field) for field in lp_milestone_fields)
+                and not lp_start
+                and lp_milestones_changed
+            ):
+                _add_issue(
+                    issues,
+                    "ERROR",
+                    "LP_MILESTONE_WITHOUT_START",
+                    "KHS_ITEM",
+                    row_number,
+                    "LP Circulation Start Date",
+                    "LP intermediate milestones require an LP circulation start date.",
+                )
+
+            populated_lp_dates = [
+                effective_dates.get(field)
+                for field in all_lp_date_fields
+                if effective_dates.get(field) is not None
+            ]
+            if (
+                populated_lp_dates != sorted(populated_lp_dates)
+                and lp_milestones_changed
+            ):
+                _add_issue(
+                    issues,
+                    "ERROR",
+                    "LP_MILESTONE_CHRONOLOGY",
+                    "KHS_ITEM",
+                    row_number,
+                    "LP Milestones",
+                    "LP milestone dates must be in chronological order.",
+                )
+
             inject_start = effective_dates["khs_inject_start_date"]
             inject_completion = effective_dates["khs_inject_completion_date"]
+            inject_dates_changed = any(
+                dates.get(field) is not None
+                and dates.get(field) != (existing_item or {}).get(field)
+                for field in ("khs_inject_start_date", "khs_inject_completion_date")
+            )
             mi_gm = effective_dates["mi_gm_approval_date"]
 
             if lp_start and not mi_gm:
@@ -792,7 +879,7 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None, k
                     "LP circulation date precedes MI GM approval.",
                 )
 
-            if lp_completion and not lp_start:
+            if lp_completion and not lp_start and lp_milestones_changed:
                 _add_issue(
                     issues,
                     "ERROR",
@@ -803,7 +890,12 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None, k
                     "LP completion requires a circulation start date.",
                 )
 
-            elif lp_completion and lp_start and lp_completion < lp_start:
+            elif (
+                lp_completion
+                and lp_start
+                and lp_completion < lp_start
+                and lp_milestones_changed
+            ):
                 _add_issue(
                     issues,
                     "ERROR",
@@ -814,7 +906,7 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None, k
                     "LP completion date cannot precede LP start date.",
                 )
 
-            if inject_start and not lp_completion:
+            if inject_start and not lp_completion and inject_dates_changed:
                 _add_issue(
                     issues,
                     "ERROR",
@@ -825,7 +917,12 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None, k
                     "KHS Inject can only start after LP completion.",
                 )
 
-            elif inject_start and lp_completion and inject_start < lp_completion:
+            elif (
+                inject_start
+                and lp_completion
+                and inject_start < lp_completion
+                and inject_dates_changed
+            ):
                 _add_issue(
                     issues,
                     "ERROR",
@@ -836,7 +933,7 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None, k
                     "KHS Inject start date cannot precede LP completion.",
                 )
 
-            if inject_completion and not inject_start:
+            if inject_completion and not inject_start and inject_dates_changed:
                 _add_issue(
                     issues,
                     "ERROR",
@@ -847,7 +944,12 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None, k
                     "KHS Inject completion requires an Inject start date.",
                 )
 
-            elif inject_completion and inject_start and inject_completion < inject_start:
+            elif (
+                inject_completion
+                and inject_start
+                and inject_completion < inject_start
+                and inject_dates_changed
+            ):
                 _add_issue(
                     issues,
                     "ERROR",
@@ -933,7 +1035,9 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None, k
 
         return {
             "template_version": (
-                "2.3"
+                "2.4"
+                if has_lp_milestones
+                else "2.3"
                 if has_inject_start or has_inject_completion
                 else "2.2-compatible"
             ),

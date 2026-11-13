@@ -8,6 +8,8 @@ const state = {
   registerPage: 1,
   historyPage: 1,
   activityPage: 1,
+  lpPage: 1,
+  contractPage: 1,
   perPage: 25,
   requestQuery: "",
   searchTimer: null,
@@ -28,7 +30,9 @@ const dateFields = [
   "dispatch_date", "contract_start_date", "contract_end_date",
   "boq_confirmation_date", "negotiation_date", "final_negotiation_date",
   "mi_head_approval_date", "mi_sm_approval_date", "mi_gm_approval_date",
-  "legal_submission_date", "lp_circulation_start_date", "lp_completion_date",
+  "legal_submission_date", "lp_circulation_start_date",
+  "lp_contract_team_completion_date", "lp_junior_manager_approval_date",
+  "lp_senior_manager_approval_date", "lp_gm_scm_approval_date", "lp_completion_date",
   "khs_inject_start_date", "khs_inject_completion_date", "last_updated_date"
 ];
 
@@ -47,8 +51,12 @@ const itemFields = [
   ["mi_sm_approval_date", "MI SM approval", "date"],
   ["mi_gm_approval_date", "MI GM approval", "date"],
   ["legal_submission_date", "Legal submission date", "date"],
-  ["lp_circulation_start_date", "LP circulation start", "date"],
-  ["lp_completion_date", "LP completion date", "date"],
+  ["lp_circulation_start_date", "LP circulation start / User submitted", "date"],
+  ["lp_contract_team_completion_date", "LP Contract Team completion", "date"],
+  ["lp_junior_manager_approval_date", "LP Junior Manager approval", "date"],
+  ["lp_senior_manager_approval_date", "LP Senior Manager approval", "date"],
+  ["lp_gm_scm_approval_date", "LP GM SCM approval", "date"],
+  ["lp_completion_date", "LP Director sign-off / LP completion", "date"],
   ["khs_inject_start_date", "KHS injection start", "date"],
   ["khs_inject_completion_date", "KHS fully injected date", "date"],
   ["waiting_for", "Currently waiting for", "text"],
@@ -128,7 +136,7 @@ function showSystem(online, message) {
 }
 
 function go(page) {
-  const allowed = ["overview", "requests", "register", "workflow", "imports", "activity"];
+  const allowed = ["overview", "requests", "register", "lp", "contracts", "workflow", "imports", "activity"];
   if (allowed.indexOf(page) < 0) return;
   state.page = page;
   document.querySelectorAll(".page-view").forEach((el) => {
@@ -152,6 +160,8 @@ async function loadPage(page) {
     await ensureFilters();
     return loadRegister();
   }
+  if (page === "lp") return loadLPCirculation();
+  if (page === "contracts") return loadContractLifecycle();
   if (page === "workflow") return loadWorkflow();
   if (page === "imports") return Promise.all([loadImportHistory(), Promise.resolve()]);
   if (page === "activity") return loadActivity();
@@ -168,7 +178,8 @@ async function loadOverview() {
     const results = await Promise.all([
       api("/api/dashboard/summary"),
       api("/api/dashboard/khs?attention=true&per_page=8"),
-      api("/api/dashboard/workflow/overview").catch(() => null)
+      api("/api/dashboard/workflow/overview").catch(() => null),
+      api("/api/dashboard/contracts/lifecycle?per_page=1").catch(() => null)
     ]);
     const d = results[0].data;
     const p = d.lp;
@@ -195,6 +206,12 @@ async function loadOverview() {
     setWidth("lpStartedBar", d.total_khs ? (p.in_progress + p.completed) / d.total_khs * 100 : 0);
     set("attentionCount", results[1].pagination.total_records);
     renderApprovalPipeline(results[2] && results[2].data ? results[2].data : null);
+    const contractSummary = results[3] && results[3].summary ? results[3].summary : null;
+    set("overviewExpiring6m", contractSummary ? contractSummary.expiring_within_6_months : "—");
+    set("overviewExpiring3m", contractSummary ? contractSummary.expiring_within_3_months : "—");
+    set("overviewExpiring1m", contractSummary ? contractSummary.expiring_within_1_month : "—");
+    set("overviewExpiredContracts", contractSummary ? contractSummary.expired : "—");
+    set("overviewMissingContractDates", contractSummary ? contractSummary.missing_contract_dates : "—");
     set("lastUpdated", new Date().toLocaleString());
     const exceptions = d.data_quality.lp_started_without_mi_gm_approval;
     const alert = $("qualityAlert");
@@ -364,7 +381,7 @@ async function loadRegister() {
   const result = await api("/api/dashboard/khs?" + registerQuery());
   const body = $("registerBody");
   if (!body) return;
-  if (!result.data.length) emptyRow("registerBody", 9, "No KHS records match the current filters.");
+  if (!result.data.length) emptyRow("registerBody", 10, "No KHS records match the current filters.");
   else body.innerHTML = result.data.map((r) =>
     "<tr><td><span class=\"cell-primary\">" + esc(r.request_subject || "Untitled request") + "</span>" +
     "<span class=\"cell-secondary\">" + esc(r.vendor_name) + " · " + esc(r.khs_id) + "</span></td>" +
@@ -375,6 +392,9 @@ async function loadRegister() {
     esc((r.workflow_status || "not_started").replace("_", " ")) + "</span></td>" +
     "<td><span class=\"status-badge status-" + esc(r.lp_status) + "\">" +
     esc(r.lp_status.replace("_", " ")) + "</span></td>" +
+    "<td><span class=\"cell-primary\">" + esc(r.lp_stage_label || "—") + "</span>" +
+    "<span class=\"cell-secondary\">" + (r.lp_stage_age_days == null ? (r.lp_timeline_has_gaps ? "History incomplete" : "—") : esc(r.lp_stage_age_days + " days in stage")) + "</span>" +
+    (r.lp_timeline_has_gaps ? '<span class="exception-label">Legacy milestone gaps</span>' : "") + "</td>" +
     "<td>" + esc(fmt(r.khs_inject_start_date)) + "</td><td>" + esc(fmt(r.khs_inject_completion_date)) + "</td>" +
     "<td>" + esc(r.waiting_for || "—") + "</td>" +
     "<td><button class=\"view-button\" data-view-khs=\"" + esc(r.khs_id) + "\">Details</button></td></tr>"
@@ -395,6 +415,210 @@ async function loadWorkflow() {
     '</strong><p>Records currently at this checkpoint</p></article>'
   ).join("");
   if (!result.data || !result.data.length) wrap.textContent = "No workflow stage data.";
+}
+
+async function loadLPCirculation() {
+  const params = new URLSearchParams({ page: String(state.lpPage), per_page: String(state.perPage) });
+  const q = $("lpSearch") ? $("lpSearch").value.trim() : "";
+  const stage = $("lpStageFilter") ? $("lpStageFilter").value : "";
+  if (q) params.set("q", q);
+  if (stage) params.set("stage", stage);
+  const result = await api("/api/dashboard/lp-circulation?" + params.toString());
+  const summary = result.summary || {};
+  const byStage = summary.by_stage || {};
+  set("lpTotalRecords", summary.total_lp_records || 0);
+  set("lpCountContractTeam", byStage.contract_team || 0);
+  set("lpCountJunior", byStage.junior_manager || 0);
+  set("lpCountSenior", byStage.senior_manager || 0);
+  set("lpCountGm", byStage.general_manager || 0);
+  set("lpCountDirector", byStage.director || 0);
+  set("lpCountCompleted", byStage.completed || 0);
+  set("lpCountLegacy", byStage.legacy_incomplete || 0);
+
+  const body = $("lpBody");
+  if (!body) return;
+  if (!result.data.length) {
+    emptyRow("lpBody", 8, "No LP records match the selected stage.");
+  } else {
+    body.innerHTML = result.data.map((r) => {
+      const age = r.lp_stage_age_days == null ? "—" : r.lp_stage_age_days + " days";
+      const history = r.lp_timeline_has_gaps
+        ? '<span class="status-badge status-warning">Partial history</span>'
+        : '<span class="status-badge status-completed">Recorded</span>';
+      return "<tr><td><span class=\"cell-primary\">" + esc(r.khs_id) + "</span>" +
+        "<span class=\"cell-secondary\">" + esc(r.vendor_name) + "</span></td>" +
+        "<td><span class=\"cell-primary\">" + esc(r.request_subject || "Untitled request") + "</span>" +
+        "<span class=\"cell-secondary\">" + esc(r.request_id) + "</span></td>" +
+        "<td><span class=\"cell-primary\">" + esc(r.lp_stage_label || "—") + "</span>" +
+        (r.waiting_for ? "<span class=\"cell-secondary\">Waiting for " + esc(r.waiting_for) + "</span>" : "") + "</td>" +
+        "<td>" + esc(age) + "</td><td>" + esc(fmt(r.lp_circulation_start_date)) + "</td>" +
+        "<td>" + esc(r.waiting_reason || "—") + "</td><td>" + history + "</td>" +
+        "<td><button type=\"button\" class=\"view-button\" data-view-khs=\"" + esc(r.khs_id) + "\">Details</button></td></tr>";
+    }).join("");
+  }
+  const p = result.pagination || {};
+  set("lpPagination", "Page " + p.page + " of " + p.total_pages + " · " + p.total_records + " LP records");
+  $("lpPrevious").disabled = !p.has_previous;
+  $("lpNext").disabled = !p.has_next;
+}
+
+function lifecycleStatusLabel(status) {
+  const labels = {
+    missing_dates: "Missing contract dates",
+    invalid_dates: "Invalid contract dates",
+    expired: "Expired",
+    critical_7d: "Final warning · 7 days",
+    urgent_14d: "Urgent · 14 days",
+    urgent_1m: "Action required · 1 month",
+    watch_3m: "Renewal watch · 3 months",
+    prep_6m: "Renewal preparation · 6 months",
+    active: "Active · over 6 months",
+    not_fully_injected: "Not fully injected"
+  };
+  return labels[status] || status || "—";
+}
+
+function lifecycleBadgeClass(status) {
+  if (status === "expired" || status === "critical_7d") return "status-danger";
+  if (status === "urgent_14d" || status === "urgent_1m") return "status-warning";
+  if (status === "watch_3m" || status === "prep_6m") return "status-in_progress";
+  if (status === "active") return "status-completed";
+  return "status-neutral";
+}
+
+function contractOperationalStatusLabel(status) {
+  const labels = {
+    upcoming: "Upcoming",
+    active: "Active",
+    expired: "Expired",
+    missing_dates: "Missing dates",
+    invalid_dates: "Invalid dates",
+    not_fully_injected: "Not fully injected"
+  };
+  return labels[status] || status || "—";
+}
+
+function contractOperationalBadgeClass(status) {
+  if (status === "expired") return "status-danger";
+  if (status === "upcoming") return "status-in_progress";
+  if (status === "active") return "status-completed";
+  return "status-neutral";
+}
+
+function timeRemainingLabel(days) {
+  if (days == null) return "Dates required";
+  if (days < 0) return Math.abs(days) + " days overdue";
+  if (days === 0) return "Expires today";
+  return days + " days remaining";
+}
+
+async function loadContractLifecycle() {
+  const params = new URLSearchParams({ page: String(state.contractPage), per_page: String(state.perPage) });
+  const q = $("contractSearch") ? $("contractSearch").value.trim() : "";
+  const status = $("contractStatusFilter") ? $("contractStatusFilter").value : "";
+  if (q) params.set("q", q);
+  if (status) params.set("status", status);
+  const result = await api("/api/dashboard/contracts/lifecycle?" + params.toString());
+  const summary = result.summary || {};
+  set("contractTotal", summary.total_fully_injected || 0);
+  set("contractSixMonths", summary.expiring_within_6_months || 0);
+  set("contractThreeMonths", summary.expiring_within_3_months || 0);
+  set("contractOneMonth", summary.expiring_within_1_month || 0);
+  set("contractExpired", summary.expired || 0);
+  set("contractMissingDates", summary.missing_contract_dates || 0);
+
+  const body = $("contractBody");
+  if (!body) return;
+  if (!result.data.length) {
+    emptyRow("contractBody", 9, "No fully injected contracts match this lifecycle filter.");
+  } else {
+    body.innerHTML = result.data.map((r) => {
+      const statusValue = r.contract_renewal_alert_status || r.contract_lifecycle_status;
+      const badge = lifecycleBadgeClass(statusValue);
+      const operationalStatus = r.contract_operational_status;
+      const operationalBadge = contractOperationalBadgeClass(operationalStatus);
+      return "<tr><td><span class=\"cell-primary\">" + esc(r.khs_id) + "</span>" +
+        "<span class=\"cell-secondary\">" + esc(r.vendor_name) + "</span></td>" +
+        "<td><span class=\"cell-primary\">" + esc(r.request_subject || "Untitled request") + "</span>" +
+        "<span class=\"cell-secondary\">" + esc(r.request_id) + "</span></td>" +
+        "<td>" + esc(fmt(r.khs_inject_completion_date)) + "</td>" +
+        "<td>" + esc(fmt(r.contract_start_date)) + " – " + esc(fmt(r.contract_end_date)) + "</td>" +
+        "<td>" + esc(r.contract_duration_label || "—") + "</td>" +
+        "<td><span class=\"cell-primary\">" + esc(timeRemainingLabel(r.contract_days_remaining)) + "</span>" +
+        (r.contract_days_remaining != null && r.contract_days_remaining >= 0 && r.contract_days_remaining <= 30
+          ? "<span class=\"cell-secondary\">Renewal action due</span>" : "") + "</td>" +
+        "<td><span class=\"status-badge " + operationalBadge + "\">" + esc(contractOperationalStatusLabel(operationalStatus)) + "</span></td>" +
+        "<td><span class=\"status-badge " + badge + "\">" + esc(lifecycleStatusLabel(statusValue)) + "</span></td>" +
+        "<td><button type=\"button\" class=\"view-button\" data-view-khs=\"" + esc(r.khs_id) + "\">Details</button></td></tr>";
+    }).join("");
+  }
+  const p = result.pagination || {};
+  set("contractPagination", "Page " + p.page + " of " + p.total_pages + " · " + p.total_records + " contracts");
+  $("contractPrevious").disabled = !p.has_previous;
+  $("contractNext").disabled = !p.has_next;
+}
+
+function renderLPTimeline(record) {
+  const container = $("lpTimeline");
+  if (!container) return;
+  const stages = [
+    ["lp_circulation_start_date", "User submitted", "LP circulation started"],
+    ["lp_contract_team_completion_date", "Tim Kontrak", "Contract team completed"],
+    ["lp_junior_manager_approval_date", "Junior Manager", "Vendor Management approval"],
+    ["lp_senior_manager_approval_date", "Senior Manager", "Strategic Sourcing approval"],
+    ["lp_gm_scm_approval_date", "GM SCM", "Management approval"],
+    ["lp_completion_date", "Director / Direktur", "Final LP sign-off"]
+  ];
+  const currentField = {
+    contract_team: "lp_contract_team_completion_date",
+    junior_manager: "lp_junior_manager_approval_date",
+    senior_manager: "lp_senior_manager_approval_date",
+    general_manager: "lp_gm_scm_approval_date",
+    director: "lp_completion_date"
+  }[record.lp_stage_key];
+  container.innerHTML = stages.map((stage, index) => {
+    const dateValue = record[stage[0]];
+    const done = !!dateValue;
+    const current = !done && stage[0] === currentField;
+    const stateClass = done ? "done" : current ? "current" : "upcoming";
+    const stateLabel = done ? "Completed" : current ? "Current stage" : "Upcoming";
+    return '<div class="lp-timeline-item ' + stateClass + '">' +
+      '<span class="lp-timeline-marker">' + (done ? "✓" : String(index + 1).padStart(2, "0")) + "</span>" +
+      '<div class="lp-timeline-content"><div class="lp-timeline-meta"><strong>' + esc(stage[1]) +
+      '</strong><span class="lp-timeline-state">' + stateLabel + "</span></div>" +
+      "<small>" + esc(stage[2]) + "</small><time>" + esc(done ? fmt(dateValue) : current ? "In progress" : "Not recorded") + "</time></div></div>";
+  }).join("");
+  set("lpTimelineStage", record.lp_stage_label || "LP not started");
+  const notice = $("lpTimelineNotice");
+  if (notice) {
+    notice.hidden = !record.lp_timeline_has_gaps;
+    notice.textContent = "Legacy timeline: one or more intermediate milestones were not recorded in the previous workflow. Existing dates have been preserved; missing dates are not inferred.";
+  }
+}
+
+function renderContractDetail(record) {
+  const summary = record.contract_lifecycle || {};
+  const operationalStatus = summary.contract_operational_status || "not_fully_injected";
+  const badge = $("contractDetailStatus");
+  if (badge) {
+    badge.className = "status-badge " + contractOperationalBadgeClass(operationalStatus);
+    badge.textContent = contractOperationalStatusLabel(operationalStatus);
+  }
+  const items = [
+    ["Contract status", summary.contract_operational_status_label || contractOperationalStatusLabel(operationalStatus)],
+    ["Renewal alert", summary.contract_renewal_alert_label || summary.contract_lifecycle_label],
+    ["Contract start", record.contract_start_date],
+    ["Contract end", record.contract_end_date],
+    ["Contract term", summary.contract_duration_label],
+    ["Time remaining", timeRemainingLabel(summary.contract_days_remaining)],
+    ["Fully injected", record.khs_inject_completion_date]
+  ];
+  const grid = $("contractDetailGrid");
+  if (grid) {
+    grid.innerHTML = items.map((item) =>
+      '<div class="contract-detail-item"><span>' + esc(item[0]) + '</span><strong>' + esc(fmt(item[1])) + "</strong></div>"
+    ).join("");
+  }
 }
 
 async function loadActivity() {
@@ -554,6 +778,8 @@ async function openDetails(id) {
       '<span class="status-badge status-' + esc(r.lp_status) + '">' +
       "LP: " + esc(r.lp_status.replace("_", " ")) + "</span>" +
       (r.lp_started_without_mi_gm_approval ? '<span class="exception-label">LP start without MI GM approval</span>' : "");
+    renderLPTimeline(r);
+    renderContractDetail(r);
     const fields = [
       ["Request subject", r.request_subject], ["Request ID", r.request_id], ["Vendor", r.vendor_name],
       ["Executor", r.executor_name || r.executor_code], ["Type", r.subtype],
@@ -563,8 +789,7 @@ async function openDetails(id) {
       ["BOQ confirmation", r.boq_confirmation_date], ["Negotiation", r.negotiation_date],
       ["Final negotiation", r.final_negotiation_date], ["MI Head approval", r.mi_head_approval_date],
       ["MI SM approval", r.mi_sm_approval_date], ["MI GM approval", r.mi_gm_approval_date],
-      ["Legal submission", r.legal_submission_date], ["LP circulation start", r.lp_circulation_start_date],
-      ["LP completion", r.lp_completion_date], ["KHS injection start", r.khs_inject_start_date],
+      ["Legal submission", r.legal_submission_date], ["KHS injection start", r.khs_inject_start_date],
       ["KHS fully injected", r.khs_inject_completion_date],
       ["Waiting for", r.waiting_for], ["Waiting reason", r.waiting_reason],
       ["Remarks", r.remarks], ["Last updated", r.last_updated_date || r.updated_at]
@@ -794,7 +1019,45 @@ function bind() {
   );
   $("refreshButton").addEventListener("click", () => loadPage(state.page).catch((e) => toast(e.message)));
   $("workflowRefresh").addEventListener("click", () => loadWorkflow().catch((e) => toast(e.message)));
+  $("lpRefresh").addEventListener("click", () => { state.lpPage = 1; loadLPCirculation().catch((e) => toast(e.message)); });
+  $("contractRefresh").addEventListener("click", () => { state.contractPage = 1; loadContractLifecycle().catch((e) => toast(e.message)); });
   $("activityRefresh").addEventListener("click", () => { state.activityPage = 1; loadActivity().catch((e) => toast(e.message)); });
+  $("lpSearch").addEventListener("input", () => {
+    window.clearTimeout(state.searchTimer);
+    state.searchTimer = window.setTimeout(() => { state.lpPage = 1; loadLPCirculation().catch((e) => toast(e.message)); }, 300);
+  });
+  $("lpStageFilter").addEventListener("change", () => { state.lpPage = 1; loadLPCirculation().catch((e) => toast(e.message)); });
+  $("lpReset").addEventListener("click", () => {
+    $("lpSearch").value = ""; $("lpStageFilter").value = ""; state.lpPage = 1;
+    loadLPCirculation().catch((e) => toast(e.message));
+  });
+  document.querySelectorAll("[data-lp-stage]").forEach((el) => el.addEventListener("click", () => {
+    $("lpStageFilter").value = el.dataset.lpStage || "";
+    state.lpPage = 1;
+    loadLPCirculation().catch((e) => toast(e.message));
+  }));
+  $("lpPrevious").addEventListener("click", () => { if (state.lpPage > 1) { state.lpPage--; loadLPCirculation().catch((e) => toast(e.message)); } });
+  $("lpNext").addEventListener("click", () => { state.lpPage++; loadLPCirculation().catch((e) => toast(e.message)); });
+
+  $("contractSearch").addEventListener("input", () => {
+    window.clearTimeout(state.searchTimer);
+    state.searchTimer = window.setTimeout(() => { state.contractPage = 1; loadContractLifecycle().catch((e) => toast(e.message)); }, 300);
+  });
+  $("contractStatusFilter").addEventListener("change", () => { state.contractPage = 1; loadContractLifecycle().catch((e) => toast(e.message)); });
+  $("contractReset").addEventListener("click", () => {
+    $("contractSearch").value = ""; $("contractStatusFilter").value = ""; state.contractPage = 1;
+    loadContractLifecycle().catch((e) => toast(e.message));
+  });
+  document.querySelectorAll("[data-contract-status]").forEach((el) => el.addEventListener("click", () => {
+    $("contractStatusFilter").value = el.dataset.contractStatus || "";
+    $("contractSearch").value = "";
+    state.contractPage = 1;
+    go("contracts");
+  }));
+  $("contractPrevious").addEventListener("click", () => { if (state.contractPage > 1) { state.contractPage--; loadContractLifecycle().catch((e) => toast(e.message)); } });
+  $("contractNext").addEventListener("click", () => { state.contractPage++; loadContractLifecycle().catch((e) => toast(e.message)); });
+
+
   $("refreshHistoryButton").addEventListener("click", () => { state.historyPage = 1; loadImportHistory().catch((e) => toast(e.message)); });
   ["newRequestButton", "createRequestButton"].forEach((id) => $(id).addEventListener("click", () => openForm("request").catch((e) => toast(e.message))));
   ["quickAddKhs", "overviewAddKhs", "createKhsButton"].forEach((id) => $(id).addEventListener("click", () => openForm("khs").catch((e) => toast(e.message))));
@@ -852,6 +1115,10 @@ function bind() {
   $("acceptWarnings").addEventListener("change", () => {
     $("confirmImportButton").disabled = !state.importCanRun || (state.importWarnings && !$("acceptWarnings").checked);
   });
+  ["lpBody", "contractBody"].forEach((id) => $(id).addEventListener("click", (event) => {
+    const button = event.target.closest("[data-view-khs]");
+    if (button) openDetails(button.dataset.viewKhs);
+  }));
   $("requestBody").addEventListener("click", (event) => {
     const edit = event.target.closest("[data-edit-request]");
     const add = event.target.closest("[data-add-child]");
@@ -870,6 +1137,6 @@ function bind() {
 document.addEventListener("DOMContentLoaded", () => {
   bind();
   const initial = window.location.hash.replace("#", "");
-  go(["overview", "requests", "register", "workflow", "imports", "activity"].indexOf(initial) >= 0 ? initial : "overview");
+  go(["overview", "requests", "register", "lp", "contracts", "workflow", "imports", "activity"].indexOf(initial) >= 0 ? initial : "overview");
 });
 })();

@@ -25,7 +25,7 @@ def test_root_serves_dashboard_and_static_assets(monkeypatch, tmp_path):
 
     assert response.status_code == 200
     assert response.content_type.startswith("text/html")
-    assert b"KHS Creation Overview" in response.data
+    assert b"Contract Monitoring &amp; Tracking" in response.data
     assert b"dashboard.css" in response.data
     assert b"dashboard-premium.css" in response.data
     assert b"dashboard.js" in response.data
@@ -41,7 +41,7 @@ def test_root_serves_dashboard_and_static_assets(monkeypatch, tmp_path):
     # The dashboard also has a dedicated, direct URL.
     dashboard_response = client.get("/dashboard")
     assert dashboard_response.status_code == 200
-    assert b"KHS Creation Overview" in dashboard_response.data
+    assert b"Contract Monitoring &amp; Tracking" in dashboard_response.data
 
     css = client.get("/static/css/dashboard.css")
     assert css.status_code == 200
@@ -58,6 +58,16 @@ def test_root_serves_dashboard_and_static_assets(monkeypatch, tmp_path):
     assert b"/api/dashboard/khs" in javascript.data
     assert b"bindImportDropzone" in javascript.data
     assert b"clearRegisterFilters" in javascript.data
+    assert b"/api/dashboard/lp-circulation" in javascript.data
+    assert b"/api/dashboard/contracts/lifecycle" in javascript.data
+    assert b"renderLPTimeline" in javascript.data
+    assert b"renderContractDetail" in javascript.data
+    assert b"lp_contract_team_completion_date" in javascript.data
+    assert b"lp_junior_manager_approval_date" in javascript.data
+    assert b"lp_senior_manager_approval_date" in javascript.data
+    assert b"lp_gm_scm_approval_date" in javascript.data
+    assert b"lp_circulation_start_date" in javascript.data
+    assert b"lp_completion_date" in javascript.data
 
 def test_dashboard_contains_separate_operational_modules(monkeypatch, tmp_path):
     monkeypatch.setattr(
@@ -77,12 +87,23 @@ def test_dashboard_contains_separate_operational_modules(monkeypatch, tmp_path):
         'data-page="overview"',
         'data-page="requests"',
         'data-page="register"',
+        'data-page="lp"',
+        'data-page="contracts"',
         'data-page="workflow"',
         'data-page="imports"',
         'data-page="activity"',
     ):
         assert module in body
-    assert "KHS Creation Overview" in body
+    assert "Contract Monitoring &amp; Tracking" in body
+    assert "LP Circulation" in body
+    assert "Contract Lifecycle" in body
+    assert "Approval Timeline" in body
+    assert "Contract Lifecycle Watch" in body
+    assert "CONTRACT STATUS" in body
+    assert "RENEWAL ALERT" in body
+    assert "Upcoming contract" in body
+    assert 'id="page-lp"' in body
+    assert 'id="page-contracts"' in body
     assert "Approval Pipeline" in body
     assert "Memo Internal" in body
     assert "LP Circulation" in body
@@ -136,3 +157,9 @@ def test_request_vendor_portfolio_is_compact_and_expandable(monkeypatch, tmp_pat
     assert b".page-heading {\n  align-items: flex-start;" in css.data
     assert b"top: 0;\n  z-index: 2;" in css.data
     assert b"vertical-align: middle;" in css.data
+    assert b".lp-timeline-item.current" in css.data
+    assert b".contract-lifecycle-summary" in css.data
+    assert b".contract-watch-grid" in css.data
+    assert b".lp-stage-summary" in css.data
+    assert b".lp-timeline" in css.data
+    assert b".contract-lifecycle-summary" in css.data
