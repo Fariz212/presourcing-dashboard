@@ -7,6 +7,7 @@ from flask import Flask
 from app.routes.dashboard import (
     _contract_lifecycle_data,
     _contract_term,
+    _lp_milestone_update_error,
     _lp_timeline_summary,
     _jakarta_today,
     dashboard_bp,
@@ -510,6 +511,61 @@ def test_khs_register_rejects_unknown_waiting_role_without_query(make_client):
     assert response.status_code == 400
     assert response.get_json()["code"] == "INVALID_WAITING_ROLE"
     assert pool.queries == []
+
+
+def test_lp_update_allows_unrelated_metadata_change_on_legacy_partial_timeline():
+    before = {
+        "lp_circulation_start_date": None,
+        "lp_contract_team_completion_date": None,
+        "lp_junior_manager_approval_date": date(2026, 2, 5),
+        "lp_senior_manager_approval_date": date(2026, 2, 6),
+        "lp_gm_scm_approval_date": None,
+        "lp_completion_date": None,
+    }
+
+    assert _lp_milestone_update_error(before, {"remarks": "Updated note"}) is None
+
+
+def test_lp_update_rejects_new_intermediate_date_without_start():
+    before = {
+        "lp_circulation_start_date": None,
+        "lp_contract_team_completion_date": None,
+        "lp_junior_manager_approval_date": None,
+        "lp_senior_manager_approval_date": None,
+        "lp_gm_scm_approval_date": None,
+        "lp_completion_date": None,
+    }
+
+    error = _lp_milestone_update_error(
+        before,
+        {"lp_junior_manager_approval_date": date(2026, 2, 5)},
+    )
+
+    assert error == (
+        "LP_START_REQUIRED",
+        "LP milestone dates require an LP circulation start date.",
+    )
+
+
+def test_lp_update_rejects_out_of_order_new_milestone():
+    before = {
+        "lp_circulation_start_date": date(2026, 2, 1),
+        "lp_contract_team_completion_date": date(2026, 2, 10),
+        "lp_junior_manager_approval_date": None,
+        "lp_senior_manager_approval_date": None,
+        "lp_gm_scm_approval_date": None,
+        "lp_completion_date": None,
+    }
+
+    error = _lp_milestone_update_error(
+        before,
+        {"lp_junior_manager_approval_date": date(2026, 2, 9)},
+    )
+
+    assert error == (
+        "LP_MILESTONE_CHRONOLOGY",
+        "lp_junior_manager_approval_date cannot precede an earlier LP milestone.",
+    )
 
 
 def test_lp_timeline_derives_stage_age_and_preserves_missing_legacy_dates():
