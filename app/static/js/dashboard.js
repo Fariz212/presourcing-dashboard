@@ -733,6 +733,7 @@ function bind() {
         state.workflowRoleFilter = null;
         state.attentionOnly = el.dataset.attentionOnly === "true";
         state.registerPage = 1;
+        ["stageFilter", "waitingFilter"].forEach((id) => { if ($(id)) $(id).value = ""; });
       }
       go(el.dataset.go);
     })
@@ -743,6 +744,8 @@ function bind() {
       state.workflowRoleFilter = null;
       state.attentionOnly = false;
       state.registerPage = 1;
+      if ($("stageFilter")) $("stageFilter").value = "";
+      if ($("waitingFilter")) $("waitingFilter").value = "";
       go("register");
     })
   );
@@ -752,6 +755,8 @@ function bind() {
       state.workflowRoleFilter = el.dataset.queueRole;
       state.attentionOnly = false;
       state.registerPage = 1;
+      if ($("stageFilter")) $("stageFilter").value = "";
+      if ($("waitingFilter")) $("waitingFilter").value = "";
       go("register");
     })
   );
