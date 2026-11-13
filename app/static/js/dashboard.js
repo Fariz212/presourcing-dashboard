@@ -18,7 +18,10 @@ const state = {
   editing: null,
   importBatch: null,
   importCanRun: false,
-  importWarnings: false
+  importWarnings: false,
+  workflowStageFilter: null,
+  workflowRoleFilter: null,
+  attentionOnly: false
 };
 
 const dateFields = [
@@ -164,7 +167,8 @@ async function loadOverview() {
   try {
     const results = await Promise.all([
       api("/api/dashboard/summary"),
-      api("/api/dashboard/khs?attention=true&per_page=8")
+      api("/api/dashboard/khs?attention=true&per_page=8"),
+      api("/api/dashboard/workflow/overview").catch(() => null)
     ]);
     const d = results[0].data;
     const p = d.lp;
@@ -190,6 +194,7 @@ async function loadOverview() {
     setWidth("legalBar", d.total_khs ? d.workflow.legal_submitted / d.total_khs * 100 : 0);
     setWidth("lpStartedBar", d.total_khs ? (p.in_progress + p.completed) / d.total_khs * 100 : 0);
     set("attentionCount", results[1].pagination.total_records);
+    renderApprovalPipeline(results[2] && results[2].data ? results[2].data : null);
     set("lastUpdated", new Date().toLocaleString());
     const exceptions = d.data_quality.lp_started_without_mi_gm_approval;
     const alert = $("qualityAlert");
@@ -201,6 +206,44 @@ async function loadOverview() {
     showSystem(false, "Connection issue");
     throw err;
   }
+}
+
+function renderApprovalPipeline(data) {
+  if (!data) {
+    [
+      "miQueueTotal", "miJuniorCount", "miSeniorCount", "miGeneralCount",
+      "lpQueueTotal", "lpJuniorCount", "lpSeniorCount", "lpGeneralCount",
+      "lpDirectorCount", "lpOtherCount"
+    ].forEach((id) => set(id, "—"));
+    set("lpQueueNote", "Approval queue data is temporarily unavailable.");
+    return;
+  }
+
+  const mi = data.memo_internal || [];
+  const lp = data.lp || [];
+  const countFor = (items, key) => {
+    const item = items.find((entry) => entry.key === key);
+    return item ? Number(item.count) || 0 : 0;
+  };
+
+  const miJunior = countFor(mi, "junior_manager");
+  const miSenior = countFor(mi, "senior_manager");
+  const miGeneral = countFor(mi, "general_manager");
+  set("miJuniorCount", miJunior);
+  set("miSeniorCount", miSenior);
+  set("miGeneralCount", miGeneral);
+  set("miQueueTotal", miJunior + miSenior + miGeneral);
+
+  set("lpJuniorCount", countFor(lp, "junior_manager"));
+  set("lpSeniorCount", countFor(lp, "senior_manager"));
+  set("lpGeneralCount", countFor(lp, "general_manager"));
+  set("lpDirectorCount", countFor(lp, "director"));
+  set("lpQueueTotal", data.lp_active_total);
+  set("lpOtherCount", data.lp_unassigned_or_other);
+  set(
+    "lpQueueNote",
+    "Active LP records not mapped to the four roles are retained in this bucket."
+  );
 }
 
 function renderAttention(rows) {
@@ -272,10 +315,14 @@ function registerQuery() {
   p.set("page", String(state.registerPage));
   p.set("per_page", String(state.perPage));
   [["q","searchInput"],["lp_status","statusFilter"],["executor_code","executorFilter"],
-   ["subtype","subtypeFilter"],["waiting_for","waitingFilter"],["stage","stageFilter"]].forEach((pair) => {
+   ["subtype","subtypeFilter"],["waiting_for","waitingFilter"]].forEach((pair) => {
     const el = $(pair[1]);
     if (el && el.value) p.set(pair[0], el.value);
   });
+  if (state.workflowStageFilter) p.set("stage", state.workflowStageFilter);
+  else if ($("stageFilter") && $("stageFilter").value) p.set("stage", $("stageFilter").value);
+  if (state.workflowRoleFilter) p.set("waiting_role", state.workflowRoleFilter);
+  if (state.attentionOnly) p.set("attention", "true");
   return p.toString();
 }
 
@@ -669,10 +716,44 @@ function bindImportDropzone() {
 
 function bind() {
   document.querySelectorAll(".nav-link[data-page]").forEach((el) => {
-    el.addEventListener("click", (event) => { event.preventDefault(); go(el.dataset.page); });
+    el.addEventListener("click", (event) => {
+      event.preventDefault();
+      if (el.dataset.page === "register") {
+        state.workflowStageFilter = null;
+        state.workflowRoleFilter = null;
+        state.attentionOnly = false;
+      }
+      go(el.dataset.page);
+    });
   });
   document.querySelectorAll("[data-go]").forEach((el) =>
-    el.addEventListener("click", () => go(el.dataset.go))
+    el.addEventListener("click", () => {
+      if (el.dataset.go === "register") {
+        state.workflowStageFilter = null;
+        state.workflowRoleFilter = null;
+        state.attentionOnly = el.dataset.attentionOnly === "true";
+        state.registerPage = 1;
+      }
+      go(el.dataset.go);
+    })
+  );
+  document.querySelectorAll("[data-queue-stage]").forEach((el) =>
+    el.addEventListener("click", () => {
+      state.workflowStageFilter = el.dataset.queueStage;
+      state.workflowRoleFilter = null;
+      state.attentionOnly = false;
+      state.registerPage = 1;
+      go("register");
+    })
+  );
+  document.querySelectorAll("[data-queue-role]").forEach((el) =>
+    el.addEventListener("click", () => {
+      state.workflowStageFilter = null;
+      state.workflowRoleFilter = el.dataset.queueRole;
+      state.attentionOnly = false;
+      state.registerPage = 1;
+      go("register");
+    })
   );
   $("refreshButton").addEventListener("click", () => loadPage(state.page).catch((e) => toast(e.message)));
   $("workflowRefresh").addEventListener("click", () => loadWorkflow().catch((e) => toast(e.message)));
@@ -711,6 +792,9 @@ function bind() {
   );
   $("resetFilters").addEventListener("click", () => {
     ["searchInput", "statusFilter", "executorFilter", "subtypeFilter", "waitingFilter", "stageFilter"].forEach((id) => { $(id).value = ""; });
+    state.workflowStageFilter = null;
+    state.workflowRoleFilter = null;
+    state.attentionOnly = false;
     state.registerPage = 1;
     loadRegister().catch((e) => toast(e.message));
   });
