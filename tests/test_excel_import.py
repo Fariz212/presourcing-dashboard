@@ -158,6 +158,47 @@ def test_legacy_v23_workbook_remains_supported():
     assert result["template_version"] == "2.3"
 
 
+def test_legacy_v23_partial_update_preserves_unrecorded_lp_milestones():
+    workbook = build_workbook(
+        item_overrides={"Remarks": "Updated note"},
+        legacy_v23=True,
+    )
+    existing_item = {
+        "request_id": "REQ-2026-001",
+        "vendor_name": "PT Test Vendor",
+        "contract_start_date": date(2027, 1, 1),
+        "contract_end_date": date(2027, 12, 31),
+        "lp_circulation_start_date": None,
+        "lp_contract_team_completion_date": None,
+        "lp_junior_manager_approval_date": date(2026, 11, 5),
+        "lp_senior_manager_approval_date": date(2026, 11, 6),
+        "lp_gm_scm_approval_date": None,
+        "lp_completion_date": None,
+        "khs_inject_start_date": None,
+        "khs_inject_completion_date": None,
+    }
+
+    result = parse_khs_workbook(
+        workbook,
+        known_executors={"ALW", "AME"},
+        known_requests={
+            "REQ-2026-001": {
+                "request_date": date(2026, 11, 1),
+                "request_subject": "KHS Test Request",
+            }
+        },
+        known_items={"KHS-2026-0001": existing_item},
+    )
+
+    assert result["summary"]["can_import"] is True
+    assert result["template_version"] == "2.3"
+    assert result["items"][0]["remarks"] == "Updated note"
+    assert any(
+        issue["code"] == "LP_MILESTONE_WITHOUT_START"
+        for issue in result["issues"]
+    ) is False
+
+
 def test_current_v24_workbook_round_trips_lp_and_khs_inject_dates():
     workbook = build_current_khs_workbook(
         requests=[{
