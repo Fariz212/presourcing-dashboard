@@ -97,6 +97,37 @@ def test_dashboard_contains_separate_operational_modules(monkeypatch, tmp_path):
     assert "Download current Excel" in body
     assert "Fully Injected" in body
     assert "REQUEST SUBJECT / VENDOR" in body
+    assert "VENDOR PORTFOLIO" in body
     assert "Evidence Documents" in body
     assert 'id="documentUploadForm"' in body
 
+
+
+
+def test_request_vendor_portfolio_is_compact_and_expandable(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        "app.init_db_pool",
+        lambda _app: DummyPool(),
+    )
+    flask_app = create_app({
+        "TESTING": True,
+        "SECRET_KEY": "dashboard-vendor-test-secret",
+        "DATABASE_URL": "postgresql://test:test@localhost/test",
+        "UPLOAD_DIR": tmp_path / "uploads",
+    })
+    client = flask_app.test_client()
+
+    dashboard = client.get("/dashboard")
+    assert dashboard.status_code == 200
+    assert b"VENDOR PORTFOLIO" in dashboard.data
+
+    javascript = client.get("/static/js/dashboard.js")
+    assert javascript.status_code == 200
+    assert b"renderVendorPortfolio" in javascript.data
+    assert b"vendor-count-badge" in javascript.data
+    assert b"vendor-details" in javascript.data
+
+    css = client.get("/static/css/dashboard-premium.css")
+    assert css.status_code == 200
+    assert b".vendor-count-badge" in css.data
+    assert b".vendor-detail-list" in css.data
