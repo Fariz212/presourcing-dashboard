@@ -1754,14 +1754,40 @@ def update_khs(khs_id):
                 "lp_senior_manager_approval_date",
                 "lp_gm_scm_approval_date",
             )
-            if any(merged.get(field) for field in intermediate_lp_dates) and not merged.get("lp_circulation_start_date"):
+            lp_milestone_fields = (
+                "lp_circulation_start_date",
+                *intermediate_lp_dates,
+                "lp_completion_date",
+            )
+            lp_milestones_changed = any(
+                field in data and data[field] != before.get(field)
+                for field in lp_milestone_fields
+            )
+            legacy_intermediate_without_start = (
+                not before.get("lp_circulation_start_date")
+                and any(before.get(field) for field in intermediate_lp_dates)
+            )
+            if (
+                any(merged.get(field) for field in intermediate_lp_dates)
+                and not merged.get("lp_circulation_start_date")
+                and (not legacy_intermediate_without_start or lp_milestones_changed)
+            ):
                 return jsonify(success=False,code="LP_START_REQUIRED",message="LP milestone dates require an LP circulation start date."),422
             out_of_order_lp_field = _lp_date_order_error(merged)
-            if out_of_order_lp_field:
+            if out_of_order_lp_field and lp_milestones_changed:
                 return jsonify(success=False,code="LP_MILESTONE_CHRONOLOGY",message=f"{out_of_order_lp_field} cannot precede an earlier LP milestone."),422
-            if merged.get("lp_completion_date") and not merged.get("lp_circulation_start_date"):
+            if (
+                merged.get("lp_completion_date")
+                and not merged.get("lp_circulation_start_date")
+                and lp_milestones_changed
+            ):
                 return jsonify(success=False,code="LP_START_REQUIRED",message="LP completion requires circulation start."),422
-            if merged.get("lp_completion_date") and merged.get("lp_circulation_start_date") and merged["lp_completion_date"]<merged["lp_circulation_start_date"]:
+            if (
+                merged.get("lp_completion_date")
+                and merged.get("lp_circulation_start_date")
+                and merged["lp_completion_date"] < merged["lp_circulation_start_date"]
+                and lp_milestones_changed
+            ):
                 return jsonify(success=False,code="LP_DATE_ORDER",message="LP completion cannot precede circulation start."),422
             if merged.get("khs_inject_start_date") and not merged.get("lp_completion_date"):
                 return jsonify(success=False,code="LP_COMPLETION_REQUIRED",message="KHS injection can only start after LP completion."),422
