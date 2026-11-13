@@ -116,4 +116,8 @@ CREATE INDEX IF NOT EXISTS idx_khs_items_contract_end_fully_injected
     ON khs_items(contract_end_date)
     WHERE khs_inject_completion_date IS NOT NULL;
 
+INSERT INTO schema_migrations (version)
+VALUES ('004_lp_milestones_and_contract_lifecycle')
+ON CONFLICT (version) DO NOTHING;
+
 COMMIT;
