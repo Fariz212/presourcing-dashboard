@@ -818,8 +818,8 @@ def test_contract_operational_status_distinguishes_upcoming_active_and_expired()
             "contract_end_date": end_date,
         }, today=today)
 
-    upcoming = lifecycle(today + timedelta(days=30), today + timedelta(days=365))
-    active = lifecycle(today - timedelta(days=1), today + timedelta(days=365))
+    upcoming = lifecycle(today + timedelta(days=30), today + timedelta(days=150))
+    active = lifecycle(today - timedelta(days=1), today + timedelta(days=150))
     expired = lifecycle(today - timedelta(days=365), today - timedelta(days=1))
 
     assert upcoming["contract_operational_status"] == "upcoming"
