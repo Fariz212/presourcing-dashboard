@@ -336,6 +336,14 @@ async function loadRequests() {
   $("requestNext").disabled = state.requestPage >= (pg.total_pages || 0);
 }
 
+function clearRegisterFilters() {
+  ["searchInput", "statusFilter", "executorFilter", "subtypeFilter", "waitingFilter", "stageFilter"]
+    .forEach((id) => {
+      const control = $(id);
+      if (control) control.value = "";
+    });
+}
+
 function registerQuery() {
   const p = new URLSearchParams();
   p.set("page", String(state.registerPage));
@@ -759,7 +767,7 @@ function bind() {
         state.workflowRoleFilter = null;
         state.attentionOnly = el.dataset.attentionOnly === "true";
         state.registerPage = 1;
-        ["stageFilter", "waitingFilter"].forEach((id) => { if ($(id)) $(id).value = ""; });
+        if (state.attentionOnly) clearRegisterFilters();
       }
       go(el.dataset.go);
     })
@@ -770,8 +778,7 @@ function bind() {
       state.workflowRoleFilter = null;
       state.attentionOnly = false;
       state.registerPage = 1;
-      if ($("stageFilter")) $("stageFilter").value = "";
-      if ($("waitingFilter")) $("waitingFilter").value = "";
+      clearRegisterFilters();
       go("register");
     })
   );
@@ -781,8 +788,7 @@ function bind() {
       state.workflowRoleFilter = el.dataset.queueRole;
       state.attentionOnly = false;
       state.registerPage = 1;
-      if ($("stageFilter")) $("stageFilter").value = "";
-      if ($("waitingFilter")) $("waitingFilter").value = "";
+      clearRegisterFilters();
       go("register");
     })
   );
@@ -822,7 +828,7 @@ function bind() {
     $(id).addEventListener("change", () => { state.registerPage = 1; loadRegister().catch((e) => toast(e.message)); })
   );
   $("resetFilters").addEventListener("click", () => {
-    ["searchInput", "statusFilter", "executorFilter", "subtypeFilter", "waitingFilter", "stageFilter"].forEach((id) => { $(id).value = ""; });
+    clearRegisterFilters();
     state.workflowStageFilter = null;
     state.workflowRoleFilter = null;
     state.attentionOnly = false;
