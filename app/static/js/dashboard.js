@@ -258,7 +258,10 @@ function renderAttention(rows) {
     "</span><span class=\"cell-secondary\">" + esc(r.khs_id) + " · " + esc(r.request_id) + "</span></td>" +
     "<td>" + esc(r.vendor_name) + "</td><td>" + esc(r.current_stage_name || r.current_stage_code) +
     (r.lp_started_without_mi_gm_approval ? '<span class="exception-label">MI GM prerequisite exception</span>' : "") +
-    "</td><td>" + esc(r.waiting_for || (r.lp_started_without_mi_gm_approval ? "Review prerequisite" : "—")) +
+    "</td><td><span class=\\"cell-primary\\">" +
+    esc(r.waiting_for || (r.lp_started_without_mi_gm_approval ? "Review prerequisite" : "Review next action")) +
+    "</span>" +
+    (r.waiting_reason ? '<span class=\\"cell-secondary\\">' + esc(r.waiting_reason) + "</span>" : "") +
     "</td><td>" + esc(fmt(r.last_updated_date || r.updated_at)) +
     "</td><td><button class=\"view-button\" data-view-khs=\"" + esc(r.khs_id) + "\">Open</button></td></tr>"
   ).join("");
