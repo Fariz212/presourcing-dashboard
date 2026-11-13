@@ -381,7 +381,7 @@ async function loadRegister() {
   const result = await api("/api/dashboard/khs?" + registerQuery());
   const body = $("registerBody");
   if (!body) return;
-  if (!result.data.length) emptyRow("registerBody", 9, "No KHS records match the current filters.");
+  if (!result.data.length) emptyRow("registerBody", 10, "No KHS records match the current filters.");
   else body.innerHTML = result.data.map((r) =>
     "<tr><td><span class=\"cell-primary\">" + esc(r.request_subject || "Untitled request") + "</span>" +
     "<span class=\"cell-secondary\">" + esc(r.vendor_name) + " · " + esc(r.khs_id) + "</span></td>" +
@@ -392,6 +392,9 @@ async function loadRegister() {
     esc((r.workflow_status || "not_started").replace("_", " ")) + "</span></td>" +
     "<td><span class=\"status-badge status-" + esc(r.lp_status) + "\">" +
     esc(r.lp_status.replace("_", " ")) + "</span></td>" +
+    "<td><span class=\"cell-primary\">" + esc(r.lp_stage_label || "—") + "</span>" +
+    "<span class=\"cell-secondary\">" + (r.lp_stage_age_days == null ? (r.lp_timeline_has_gaps ? "History incomplete" : "—") : esc(r.lp_stage_age_days + " days in stage")) + "</span>" +
+    (r.lp_timeline_has_gaps ? '<span class="exception-label">Legacy milestone gaps</span>' : "") + "</td>" +
     "<td>" + esc(fmt(r.khs_inject_start_date)) + "</td><td>" + esc(fmt(r.khs_inject_completion_date)) + "</td>" +
     "<td>" + esc(r.waiting_for || "—") + "</td>" +
     "<td><button class=\"view-button\" data-view-khs=\"" + esc(r.khs_id) + "\">Details</button></td></tr>"
@@ -571,6 +574,8 @@ async function openDetails(id) {
       '<span class="status-badge status-' + esc(r.lp_status) + '">' +
       "LP: " + esc(r.lp_status.replace("_", " ")) + "</span>" +
       (r.lp_started_without_mi_gm_approval ? '<span class="exception-label">LP start without MI GM approval</span>' : "");
+    renderLPTimeline(r);
+    renderContractDetail(r);
     const fields = [
       ["Request subject", r.request_subject], ["Request ID", r.request_id], ["Vendor", r.vendor_name],
       ["Executor", r.executor_name || r.executor_code], ["Type", r.subtype],
@@ -580,8 +585,7 @@ async function openDetails(id) {
       ["BOQ confirmation", r.boq_confirmation_date], ["Negotiation", r.negotiation_date],
       ["Final negotiation", r.final_negotiation_date], ["MI Head approval", r.mi_head_approval_date],
       ["MI SM approval", r.mi_sm_approval_date], ["MI GM approval", r.mi_gm_approval_date],
-      ["Legal submission", r.legal_submission_date], ["LP circulation start", r.lp_circulation_start_date],
-      ["LP completion", r.lp_completion_date], ["KHS injection start", r.khs_inject_start_date],
+      ["Legal submission", r.legal_submission_date], ["KHS injection start", r.khs_inject_start_date],
       ["KHS fully injected", r.khs_inject_completion_date],
       ["Waiting for", r.waiting_for], ["Waiting reason", r.waiting_reason],
       ["Remarks", r.remarks], ["Last updated", r.last_updated_date || r.updated_at]
