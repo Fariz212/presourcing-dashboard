@@ -90,7 +90,8 @@ def test_dashboard_contains_separate_operational_modules(monkeypatch, tmp_path):
         "DATABASE_URL": "postgresql://test:test@localhost/test",
         "UPLOAD_DIR": tmp_path / "uploads",
     })
-    response = flask_app.test_client().get("/dashboard")
+    client = flask_app.test_client()
+    response = client.get("/dashboard")
     assert response.status_code == 200
     body = response.data.decode("utf-8")
     for module in (
