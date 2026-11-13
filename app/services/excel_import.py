@@ -39,6 +39,10 @@ KHS_HEADERS = {
     "MI Status",
     "Legal Submission Date",
     "LP Circulation Start Date",
+    "LP Contract Team Completion Date",
+    "LP Junior Manager Approval Date",
+    "LP Senior Manager Approval Date",
+    "LP GM SCM Approval Date",
     "LP Completion Date (Director Signed)",
     "LP Status",
     "Current Stage",
@@ -70,6 +74,10 @@ ITEM_DATE_FIELDS = {
     "MI GM Approval Date": "mi_gm_approval_date",
     "Legal Submission Date": "legal_submission_date",
     "LP Circulation Start Date": "lp_circulation_start_date",
+    "LP Contract Team Completion Date": "lp_contract_team_completion_date",
+    "LP Junior Manager Approval Date": "lp_junior_manager_approval_date",
+    "LP Senior Manager Approval Date": "lp_senior_manager_approval_date",
+    "LP GM SCM Approval Date": "lp_gm_scm_approval_date",
     "LP Completion Date (Director Signed)": "lp_completion_date",
     "KHS Inject Start Date": "khs_inject_start_date",
     "KHS Inject Completion Date": "khs_inject_completion_date",
@@ -386,6 +394,15 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None, k
 
         has_inject_start = _header_index(khs_map, "KHS Inject Start Date") is not None
         has_inject_completion = _header_index(khs_map, "KHS Inject Completion Date") is not None
+        has_lp_milestones = any(
+            _header_index(khs_map, header) is not None
+            for header in (
+                "LP Contract Team Completion Date",
+                "LP Junior Manager Approval Date",
+                "LP Senior Manager Approval Date",
+                "LP GM SCM Approval Date",
+            )
+        )
 
         requests = []
         items = []
@@ -765,6 +782,43 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None, k
 
             lp_start = effective_dates["lp_circulation_start_date"]
             lp_completion = effective_dates["lp_completion_date"]
+            lp_milestone_fields = (
+                "lp_contract_team_completion_date",
+                "lp_junior_manager_approval_date",
+                "lp_senior_manager_approval_date",
+                "lp_gm_scm_approval_date",
+            )
+            if any(effective_dates.get(field) for field in lp_milestone_fields) and not lp_start:
+                _add_issue(
+                    issues,
+                    "ERROR",
+                    "LP_MILESTONE_WITHOUT_START",
+                    "KHS_ITEM",
+                    row_number,
+                    "LP Circulation Start Date",
+                    "LP intermediate milestones require an LP circulation start date.",
+                )
+
+            populated_lp_dates = [
+                effective_dates.get(field)
+                for field in (
+                    "lp_circulation_start_date",
+                    *lp_milestone_fields,
+                    "lp_completion_date",
+                )
+                if effective_dates.get(field) is not None
+            ]
+            if populated_lp_dates != sorted(populated_lp_dates):
+                _add_issue(
+                    issues,
+                    "ERROR",
+                    "LP_MILESTONE_CHRONOLOGY",
+                    "KHS_ITEM",
+                    row_number,
+                    "LP Milestones",
+                    "LP milestone dates must be in chronological order.",
+                )
+
             inject_start = effective_dates["khs_inject_start_date"]
             inject_completion = effective_dates["khs_inject_completion_date"]
             mi_gm = effective_dates["mi_gm_approval_date"]
@@ -933,7 +987,9 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None, k
 
         return {
             "template_version": (
-                "2.3"
+                "2.4"
+                if has_lp_milestones
+                else "2.3"
                 if has_inject_start or has_inject_completion
                 else "2.2-compatible"
             ),
