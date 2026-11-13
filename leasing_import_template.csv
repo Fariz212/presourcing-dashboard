@@ -1,0 +1,3 @@
+Request ID,Customer,Requester,Due Date,Notes,Jenis Order,SI,Area,Alamat,Gedung/Kawasan,A End,Z End,Bandwidth,Satuan,Jasa,Fitur Khusus,MRC Eksisting,Currency MRC Eksisting
+LEASE-EXAMPLE-2026-001,PT Contoh Indonesia,Budi Contoh,,Contoh request dua site,Pasang Baru (PSB),,Jakarta,"Jl. Sudirman No. 10, Jakarta Pusat",,Jakarta Pusat,Bandung Kota,100,Mbps,Internet Dedicated,Tidak ada,,
+LEASE-EXAMPLE-2026-001,PT Contoh Indonesia,Budi Contoh,,Contoh request dua site,Perubahan Bandwidth,SI-002,Bandung,"Jl. Asia Afrika No. 8, Bandung",Gedung B,Bandung Kota,Jakarta Pusat,200,,Internet Dedicated,Redundancy aktif,2500000,
