@@ -508,8 +508,9 @@ def test_lp_timeline_derives_stage_age_and_preserves_missing_legacy_dates():
         "lp_completion_date": None,
     }, today=today)
 
-    assert legacy["lp_stage_key"] == "contract_team"
-    assert legacy["lp_stage_age_days"] == 7
+    assert legacy["lp_stage_key"] == "legacy_incomplete"
+    assert legacy["lp_stage_label"] == "Legacy Timeline Incomplete"
+    assert legacy["lp_stage_age_days"] is None
     assert legacy["lp_timeline_has_gaps"] is True
     assert legacy["lp_timeline_gaps"] == ["lp_contract_team_completion_date"]
     assert legacy["lp_timeline_data_status"] == "legacy_incomplete"
@@ -529,6 +530,55 @@ def test_lp_completed_legacy_record_keeps_intermediate_gaps_visible():
     assert timeline["lp_timeline_has_gaps"] is True
     assert timeline["lp_timeline_gaps"] == ["lp_contract_team_completion_date"]
     assert timeline["lp_timeline_data_status"] == "legacy_incomplete"
+
+
+
+
+def test_lp_circulation_legacy_gap_filter_includes_completed_history(make_client):
+    today = _jakarta_today()
+    row = {
+        "khs_id": "KHS-2026-0014",
+        "request_id": "REQ-2026-014",
+        "request_subject": "Legacy completed contract",
+        "vendor_name": "PT Legacy Vendor",
+        "contract_start_date": date(2026, 1, 1),
+        "contract_end_date": date(2026, 12, 31),
+        "khs_inject_completion_date": today,
+        "lp_circulation_start_date": date(2026, 2, 1),
+        "lp_contract_team_completion_date": None,
+        "lp_junior_manager_approval_date": date(2026, 2, 5),
+        "lp_senior_manager_approval_date": date(2026, 2, 6),
+        "lp_gm_scm_approval_date": date(2026, 2, 7),
+        "lp_completion_date": date(2026, 2, 8),
+        "lp_stage_key": "completed",
+        "lp_status": "completed",
+        "workflow_status": "completed",
+        "current_stage_code": "KHS_INJECTION",
+        "current_stage_name": "KHS Inject",
+        "waiting_for": None,
+        "waiting_reason": None,
+        "updated_at": None,
+    }
+    pool = RegisterFakePool(
+        rows=[row],
+        total=1,
+        stage_summary_rows=[
+            {"lp_stage_key": "completed", "total": 1, "timeline_gaps": 1}
+        ],
+    )
+
+    response = make_client(pool).get(
+        "/api/dashboard/lp-circulation?stage=legacy_incomplete"
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["summary"]["by_stage"]["legacy_incomplete"] == 1
+    assert payload["summary"]["legacy_timeline_gaps"] == 1
+    assert payload["data"][0]["lp_stage_key"] == "completed"
+    assert payload["data"][0]["lp_timeline_has_gaps"] is True
+    assert "register.lp_timeline_has_gaps IS TRUE" in pool.queries[0][0]
+    assert pool.queries[0][1] == []
 
 
 def test_contract_expiry_uses_calendar_month_and_day_thresholds():
@@ -609,7 +659,7 @@ def test_lp_circulation_endpoint_returns_stage_counts_and_age(make_client):
     pool = RegisterFakePool(
         rows=[row],
         total=1,
-        stage_summary_rows=[{"lp_stage_key": "contract_team", "total": 1}],
+        stage_summary_rows=[{"lp_stage_key": "contract_team", "total": 1, "timeline_gaps": 0}],
     )
 
     response = make_client(pool).get("/api/dashboard/lp-circulation?stage=contract_team")
