@@ -271,19 +271,19 @@ function renderAttention(rows) {
     return;
   }
   body.innerHTML = rows.map((r) =>
-    "<tr><td><span class=\"cell-primary\">" + esc(r.request_subject || "Untitled request") +
+    "<tr><td data-label=\"REQUEST / KHS\"><span class=\"cell-primary\">" + esc(r.request_subject || "Untitled request") +
     "</span><span class=\"cell-secondary\">" + esc(r.khs_id) + " · " + esc(r.request_id) + "</span></td>" +
-    "<td>" + esc(r.vendor_name) + "</td><td>" + esc(r.current_stage_name || r.current_stage_code) +
+    "<td data-label=\"VENDOR\">" + esc(r.vendor_name) + "</td><td data-label=\"CURRENT STAGE\">" + esc(r.current_stage_name || r.current_stage_code) +
     (r.lp_started_without_mi_gm_approval ? '<span class="exception-label">MI GM prerequisite exception</span>' : "") +
-    "</td><td><span class=\"cell-primary\">" +
+    "</td><td data-label=\"WAITING FOR / NEXT ACTION\"><span class=\"cell-primary\">" +
     esc(r.waiting_for || (r.lp_started_without_mi_gm_approval ? "Review prerequisite" : "Review next action")) +
     "</span>" +
     (r.waiting_reason ? '<span class="cell-secondary">' + esc(r.waiting_reason) + "</span>" : "") +
-    "</td><td>" + esc(fmt(r.last_updated_date || r.updated_at)) +
-    "</td><td><button class=\"view-button\" data-view-khs=\"" + esc(r.khs_id) + "\">Open</button></td></tr>"
+    "</td><td data-label=\"UPDATED\">" + esc(fmt(r.last_updated_date || r.updated_at)) +
+    "</td><td data-label=\"ACTION\"><button class=\"view-button\" data-view-khs=\"" + esc(r.khs_id) +
+    "\" aria-label=\"Open KHS " + esc(r.khs_id) + "\">View record</button></td></tr>"
   ).join("");
 }
-
 async function loadFilters() {
   const result = await api("/api/dashboard/filters");
   state.filters = result.data;
@@ -1060,7 +1060,7 @@ function bind() {
 
   $("refreshHistoryButton").addEventListener("click", () => { state.historyPage = 1; loadImportHistory().catch((e) => toast(e.message)); });
   ["newRequestButton", "createRequestButton"].forEach((id) => $(id).addEventListener("click", () => openForm("request").catch((e) => toast(e.message))));
-  ["quickAddKhs", "overviewAddKhs", "createKhsButton"].forEach((id) => $(id).addEventListener("click", () => openForm("khs").catch((e) => toast(e.message))));
+  ["quickAddKhs", "createKhsButton"].forEach((id) => $(id).addEventListener("click", () => openForm("khs").catch((e) => toast(e.message))));
   $("recordForm").addEventListener("submit", saveRecord);
   $("documentUploadForm").addEventListener("submit", uploadEvidence);
   ["closeRecordDialog", "cancelRecord"].forEach((id) => $(id).addEventListener("click", () => $("recordDialog").close()));
