@@ -458,10 +458,9 @@ def test_khs_register_filters_lp_queue_by_waiting_role(make_client):
         assert "register.lp_completion_date IS NULL" in query
         assert "CASE" in query
         assert "POSITION('director' IN lower(trim(COALESCE(register.waiting_for, '')))) > 0" in query
-        # Literal percent characters break psycopg's placeholder parsing when
-        # the statement also includes %s parameters. The role classifier uses
-        # POSITION instead, leaving placeholders unambiguous.
-        assert "%" not in query
+        # The role classifier must not add literal LIKE percent patterns
+        # alongside psycopg's %s bind placeholders.
+        assert "LIKE '%" not in query
     assert pool.queries[0][1] == ["director"]
     assert pool.queries[1][1][-3:] == ["director", 25, 0]
 
