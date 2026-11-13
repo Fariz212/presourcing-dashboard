@@ -52,6 +52,12 @@ def test_root_serves_dashboard_and_static_assets(monkeypatch, tmp_path):
     assert premium_css.status_code == 200
     assert b".import-guide" in premium_css.data
     assert b".nav-icon" in premium_css.data
+    refresh_css = client.get("/static/css/dashboard-refresh.css")
+    assert refresh_css.status_code == 200
+    assert b"grid-template-columns: 252px minmax(0, 1fr)" in refresh_css.data
+    assert b"width: auto" in refresh_css.data
+    assert b"margin: 0" in refresh_css.data
+    assert b"table-layout: fixed" in refresh_css.data
 
     refresh_css = client.get("/static/css/dashboard-refresh.css")
     assert refresh_css.status_code == 200
@@ -102,6 +108,10 @@ def test_dashboard_contains_separate_operational_modules(monkeypatch, tmp_path):
     ):
         assert module in body
     assert "Contract Monitoring &amp; Tracking" in body
+    assert 'id="quickAddKhs"' in body
+    assert 'id="overviewAddKhs"' not in body
+    assert "Priority action queue" in body
+    assert "REQUEST / KHS" in body
     assert "LP Circulation" in body
     assert "Contract Lifecycle" in body
     assert "Approval Timeline" in body
