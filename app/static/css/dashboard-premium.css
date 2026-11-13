@@ -904,3 +904,95 @@ tbody tr:hover { background: #f8fbff; }
   outline: 3px solid rgba(66,111,224,.26);
   outline-offset: 2px;
 }
+
+
+/* Request Management: compact vendor portfolio, names revealed on demand */
+.vendor-summary {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  min-width: 130px;
+}
+.vendor-count-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 25px;
+  padding: 3px 9px;
+  border: 1px solid #e0e8f1;
+  border-radius: 7px;
+  background: #f6f8fb;
+  color: #49617d;
+  font-size: 9px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.vendor-details { position: relative; min-width: 0; }
+.vendor-details summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 25px;
+  padding: 2px 5px;
+  border-radius: 6px;
+  color: #5274bd;
+  font-size: 9px;
+  font-weight: 750;
+  cursor: pointer;
+  list-style: none;
+  white-space: nowrap;
+  transition: background .14s ease, color .14s ease;
+}
+.vendor-details summary::-webkit-details-marker { display: none; }
+.vendor-details summary::after {
+  content: "+";
+  margin-left: 5px;
+  color: #7890bd;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+.vendor-details[open] summary {
+  background: #edf3ff;
+  color: #3e64b5;
+}
+.vendor-details[open] summary::after { content: "−"; }
+.vendor-details summary:hover { background: #f1f5fc; color: #315ba9; }
+.vendor-details summary:focus-visible {
+  outline: 3px solid rgba(66,111,224,.22);
+  outline-offset: 2px;
+}
+.vendor-detail-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  width: min(420px, 68vw);
+  max-height: 168px;
+  overflow-y: auto;
+  margin-top: 7px;
+  padding: 10px;
+  border: 1px solid #e5ebf3;
+  border-radius: 9px;
+  background: #fff;
+  box-shadow: 0 7px 20px rgba(25,48,77,.07);
+  white-space: normal;
+}
+.vendor-name-chip {
+  display: inline-flex;
+  max-width: 100%;
+  padding: 5px 8px;
+  border: 1px solid #edf0f5;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #5c6e84;
+  font-size: 9px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.vendor-empty {
+  color: #a1acba;
+  font-size: 10px;
+  font-style: italic;
+}
+#page-requests .table-wrap td:nth-child(2) { min-width: 185px; }
+#page-requests .table-wrap th:nth-child(2) { min-width: 185px; }
