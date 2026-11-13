@@ -286,6 +286,7 @@ SELECT
     derived.current_stage_code,
     stage.stage_name AS current_stage_name,
     derived.lp_stage_key,
+    derived.lp_timeline_has_gaps,
 
     (
         k.lp_circulation_start_date IS NOT NULL
