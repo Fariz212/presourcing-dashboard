@@ -1346,3 +1346,13 @@ input:focus, select:focus, textarea:focus {
   .nav-link { flex: 0 0 auto; min-height: 36px; padding: 7px 9px; white-space: nowrap; }
   .main-content { grid-column: auto; }
 }
+
+
+/* Readability calibration for dense operational data. */
+table { font-size: 11px; }
+thead th { font-size: 9px; line-height: 1.4; }
+tbody td { font-size: 11px; line-height: 1.45; }
+.attention-panel th { font-size: 9px; }
+.attention-panel tbody td { font-size: 11px; }
+.attention-panel .cell-primary { font-size: 12px; }
+.attention-panel .cell-secondary { font-size: 10px; }
