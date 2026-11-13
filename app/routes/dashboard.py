@@ -360,16 +360,16 @@ def _waiting_role_case_sql(column):
     value = f"lower(trim(COALESCE({column}, '')))"
     return f"""
         CASE
-            WHEN {value} LIKE '%junior manager%'
-              OR {value} LIKE '%jm vendor%'
+            WHEN POSITION('junior manager' IN {value}) > 0
+              OR POSITION('jm vendor' IN {value}) > 0
                 THEN 'junior_manager'
-            WHEN {value} LIKE '%senior manager%'
+            WHEN POSITION('senior manager' IN {value}) > 0
                 THEN 'senior_manager'
-            WHEN {value} LIKE '%general manager%'
-              OR {value} LIKE '%gm scm%'
+            WHEN POSITION('general manager' IN {value}) > 0
+              OR POSITION('gm scm' IN {value}) > 0
                 THEN 'general_manager'
-            WHEN {value} LIKE '%director%'
-              OR {value} LIKE '%direktur%'
+            WHEN POSITION('director' IN {value}) > 0
+              OR POSITION('direktur' IN {value}) > 0
                 THEN 'director'
             ELSE 'unassigned_or_other'
         END
