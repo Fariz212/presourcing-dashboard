@@ -35,8 +35,12 @@ BEGIN
             ADD CONSTRAINT chk_lp_junior_after_contract_team
             CHECK (
                 lp_junior_manager_approval_date IS NULL
-                OR lp_contract_team_completion_date IS NULL
-                OR lp_junior_manager_approval_date >= lp_contract_team_completion_date
+                OR (
+                    (lp_circulation_start_date IS NULL
+                        OR lp_junior_manager_approval_date >= lp_circulation_start_date)
+                    AND (lp_contract_team_completion_date IS NULL
+                        OR lp_junior_manager_approval_date >= lp_contract_team_completion_date)
+                )
             );
     END IF;
 
@@ -49,8 +53,14 @@ BEGIN
             ADD CONSTRAINT chk_lp_senior_after_junior
             CHECK (
                 lp_senior_manager_approval_date IS NULL
-                OR lp_junior_manager_approval_date IS NULL
-                OR lp_senior_manager_approval_date >= lp_junior_manager_approval_date
+                OR (
+                    (lp_circulation_start_date IS NULL
+                        OR lp_senior_manager_approval_date >= lp_circulation_start_date)
+                    AND (lp_contract_team_completion_date IS NULL
+                        OR lp_senior_manager_approval_date >= lp_contract_team_completion_date)
+                    AND (lp_junior_manager_approval_date IS NULL
+                        OR lp_senior_manager_approval_date >= lp_junior_manager_approval_date)
+                )
             );
     END IF;
 
@@ -63,8 +73,16 @@ BEGIN
             ADD CONSTRAINT chk_lp_gm_after_senior
             CHECK (
                 lp_gm_scm_approval_date IS NULL
-                OR lp_senior_manager_approval_date IS NULL
-                OR lp_gm_scm_approval_date >= lp_senior_manager_approval_date
+                OR (
+                    (lp_circulation_start_date IS NULL
+                        OR lp_gm_scm_approval_date >= lp_circulation_start_date)
+                    AND (lp_contract_team_completion_date IS NULL
+                        OR lp_gm_scm_approval_date >= lp_contract_team_completion_date)
+                    AND (lp_junior_manager_approval_date IS NULL
+                        OR lp_gm_scm_approval_date >= lp_junior_manager_approval_date)
+                    AND (lp_senior_manager_approval_date IS NULL
+                        OR lp_gm_scm_approval_date >= lp_senior_manager_approval_date)
+                )
             );
     END IF;
 
@@ -77,8 +95,18 @@ BEGIN
             ADD CONSTRAINT chk_lp_director_after_gm
             CHECK (
                 lp_completion_date IS NULL
-                OR lp_gm_scm_approval_date IS NULL
-                OR lp_completion_date >= lp_gm_scm_approval_date
+                OR (
+                    (lp_circulation_start_date IS NULL
+                        OR lp_completion_date >= lp_circulation_start_date)
+                    AND (lp_contract_team_completion_date IS NULL
+                        OR lp_completion_date >= lp_contract_team_completion_date)
+                    AND (lp_junior_manager_approval_date IS NULL
+                        OR lp_completion_date >= lp_junior_manager_approval_date)
+                    AND (lp_senior_manager_approval_date IS NULL
+                        OR lp_completion_date >= lp_senior_manager_approval_date)
+                    AND (lp_gm_scm_approval_date IS NULL
+                        OR lp_completion_date >= lp_gm_scm_approval_date)
+                )
             );
     END IF;
 END
