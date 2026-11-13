@@ -381,3 +381,53 @@ def test_document_upload_rejects_unsupported_file_extensions(make_client):
     )
     assert response.status_code == 400
     assert "Supported formats" in response.get_json()["message"]
+
+
+
+def test_workflow_overview_returns_role_level_mi_and_lp_queues(make_client):
+    pool = FakePool(row=(4, 3, 2, 5, 4, 3, 2, 1, 15))
+
+    response = make_client(pool).get("/api/dashboard/workflow/overview")
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["success"] is True
+    assert payload["data"]["memo_internal"] == [
+        {
+            "key": "junior_manager",
+            "label": "Junior Manager",
+            "count": 4,
+            "stage_code": "MI_HEAD_APPROVAL",
+        },
+        {
+            "key": "senior_manager",
+            "label": "Senior Manager",
+            "count": 3,
+            "stage_code": "MI_SM_APPROVAL",
+        },
+        {
+            "key": "general_manager",
+            "label": "General Manager",
+            "count": 2,
+            "stage_code": "MI_GM_APPROVAL",
+        },
+    ]
+    assert [item["count"] for item in payload["data"]["lp"]] == [5, 4, 3, 2]
+    assert payload["data"]["lp_active_total"] == 15
+    assert payload["data"]["lp_unassigned_or_other"] == 1
+    assert "Waiting For" in payload["data"]["lp_count_basis"]
+
+    query = pool.connection_object.executed_query
+    assert "mi_head_approval_date" in query
+    assert "mi_sm_approval_date" in query
+    assert "mi_gm_approval_date" in query
+    assert "waiting_for" in query
+
+
+def test_workflow_overview_returns_service_unavailable_on_db_error(make_client):
+    pool = FakePool(error=RuntimeError("simulated DB error"))
+
+    response = make_client(pool).get("/api/dashboard/workflow/overview")
+
+    assert response.status_code == 503
+    assert response.get_json()["code"] == "WORKFLOW_OVERVIEW_UNAVAILABLE"
