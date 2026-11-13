@@ -8,6 +8,8 @@ const state = {
   registerPage: 1,
   historyPage: 1,
   activityPage: 1,
+  lpPage: 1,
+  contractPage: 1,
   perPage: 25,
   requestQuery: "",
   searchTimer: null,
@@ -28,7 +30,9 @@ const dateFields = [
   "dispatch_date", "contract_start_date", "contract_end_date",
   "boq_confirmation_date", "negotiation_date", "final_negotiation_date",
   "mi_head_approval_date", "mi_sm_approval_date", "mi_gm_approval_date",
-  "legal_submission_date", "lp_circulation_start_date", "lp_completion_date",
+  "legal_submission_date", "lp_circulation_start_date",
+  "lp_contract_team_completion_date", "lp_junior_manager_approval_date",
+  "lp_senior_manager_approval_date", "lp_gm_scm_approval_date", "lp_completion_date",
   "khs_inject_start_date", "khs_inject_completion_date", "last_updated_date"
 ];
 
@@ -47,8 +51,12 @@ const itemFields = [
   ["mi_sm_approval_date", "MI SM approval", "date"],
   ["mi_gm_approval_date", "MI GM approval", "date"],
   ["legal_submission_date", "Legal submission date", "date"],
-  ["lp_circulation_start_date", "LP circulation start", "date"],
-  ["lp_completion_date", "LP completion date", "date"],
+  ["lp_circulation_start_date", "LP circulation start / User submitted", "date"],
+  ["lp_contract_team_completion_date", "LP Contract Team completion", "date"],
+  ["lp_junior_manager_approval_date", "LP Junior Manager approval", "date"],
+  ["lp_senior_manager_approval_date", "LP Senior Manager approval", "date"],
+  ["lp_gm_scm_approval_date", "LP GM SCM approval", "date"],
+  ["lp_completion_date", "LP Director sign-off / LP completion", "date"],
   ["khs_inject_start_date", "KHS injection start", "date"],
   ["khs_inject_completion_date", "KHS fully injected date", "date"],
   ["waiting_for", "Currently waiting for", "text"],
@@ -128,7 +136,7 @@ function showSystem(online, message) {
 }
 
 function go(page) {
-  const allowed = ["overview", "requests", "register", "workflow", "imports", "activity"];
+  const allowed = ["overview", "requests", "register", "lp", "contracts", "workflow", "imports", "activity"];
   if (allowed.indexOf(page) < 0) return;
   state.page = page;
   document.querySelectorAll(".page-view").forEach((el) => {
@@ -152,6 +160,8 @@ async function loadPage(page) {
     await ensureFilters();
     return loadRegister();
   }
+  if (page === "lp") return loadLPCirculation();
+  if (page === "contracts") return loadContractLifecycle();
   if (page === "workflow") return loadWorkflow();
   if (page === "imports") return Promise.all([loadImportHistory(), Promise.resolve()]);
   if (page === "activity") return loadActivity();
@@ -168,7 +178,8 @@ async function loadOverview() {
     const results = await Promise.all([
       api("/api/dashboard/summary"),
       api("/api/dashboard/khs?attention=true&per_page=8"),
-      api("/api/dashboard/workflow/overview").catch(() => null)
+      api("/api/dashboard/workflow/overview").catch(() => null),
+      api("/api/dashboard/contracts/lifecycle?per_page=1").catch(() => null)
     ]);
     const d = results[0].data;
     const p = d.lp;
@@ -195,6 +206,12 @@ async function loadOverview() {
     setWidth("lpStartedBar", d.total_khs ? (p.in_progress + p.completed) / d.total_khs * 100 : 0);
     set("attentionCount", results[1].pagination.total_records);
     renderApprovalPipeline(results[2] && results[2].data ? results[2].data : null);
+    const contractSummary = results[3] && results[3].summary ? results[3].summary : null;
+    set("overviewExpiring6m", contractSummary ? contractSummary.expiring_within_6_months : "—");
+    set("overviewExpiring3m", contractSummary ? contractSummary.expiring_within_3_months : "—");
+    set("overviewExpiring1m", contractSummary ? contractSummary.expiring_within_1_month : "—");
+    set("overviewExpiredContracts", contractSummary ? contractSummary.expired : "—");
+    set("overviewMissingContractDates", contractSummary ? contractSummary.missing_contract_dates : "—");
     set("lastUpdated", new Date().toLocaleString());
     const exceptions = d.data_quality.lp_started_without_mi_gm_approval;
     const alert = $("qualityAlert");
@@ -870,6 +887,6 @@ function bind() {
 document.addEventListener("DOMContentLoaded", () => {
   bind();
   const initial = window.location.hash.replace("#", "");
-  go(["overview", "requests", "register", "workflow", "imports", "activity"].indexOf(initial) >= 0 ? initial : "overview");
+  go(["overview", "requests", "register", "lp", "contracts", "workflow", "imports", "activity"].indexOf(initial) >= 0 ? initial : "overview");
 });
 })();
