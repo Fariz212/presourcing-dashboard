@@ -91,7 +91,7 @@ SUBTYPE_MAP = {
 
 
 class WorkbookImportError(ValueError):
-    """Raised when an uploaded workbook is not compatible with KHS v2.3."""
+    """Raised when an uploaded workbook is not compatible with the KHS v2.4 schema."""
 
     
 HEADER_ALIASES = {
@@ -341,7 +341,7 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None, k
     """
     Parse and validate a KHS workbook for safe insert/update.
 
-    Current v2.3 workbooks include KHS Inject milestones. Legacy v2.2
+    Current v2.4 workbooks include LP approval milestones and KHS Inject fields. Legacy v2.2 and v2.3
     headers remain accepted. Request and KHS IDs are matching keys; rows
     can be partial, provided their parent Request already exists.
 
