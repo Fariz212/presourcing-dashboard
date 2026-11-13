@@ -60,8 +60,15 @@ def build_workbook(item_overrides=None, extra_items=None, legacy_v22=False, lega
             "LP GM SCM Approval Date",
         }
         headers = [header for header in headers if header not in legacy_only_headers]
+    if legacy_v22:
+        headers = [
+            header for header in headers
+            if header not in {"KHS Inject Start Date", "KHS Inject Completion Date"}
+        ]
     if legacy_v23:
-        headers.extend(["KHS Inject Start Date", "KHS Inject Completion Date"])
+        for header in ("KHS Inject Start Date", "KHS Inject Completion Date"):
+            if header not in headers:
+                headers.append(header)
     khs_ws.append(headers)
 
     item = {
