@@ -882,3 +882,25 @@ tbody tr:hover { background: #f8fbff; }
   .queue-step { min-height: 104px; }
   .queue-reconciliation-note { flex: 1 0 100%; margin-left: 0; }
 }
+
+.queue-step-button {
+  appearance: none;
+  width: 100%;
+  border: 1px solid #e9eef5;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.queue-step-button:hover {
+  transform: translateY(-2px);
+  border-color: #c9d7e8;
+  background: #fff;
+  box-shadow: 0 7px 16px rgba(27,54,87,.07);
+}
+.memo-lane .queue-step-button:hover { border-color: #becdf0; }
+.lp-lane .queue-step-button:hover { border-color: #b8dfd5; }
+.queue-step-button:focus-visible {
+  outline: 3px solid rgba(66,111,224,.26);
+  outline-offset: 2px;
+}
