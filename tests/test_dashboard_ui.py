@@ -134,5 +134,5 @@ def test_request_vendor_portfolio_is_compact_and_expandable(monkeypatch, tmp_pat
     assert b".vendor-detail-list" in css.data
     assert b".attention-panel td:nth-child(4)" in css.data
     assert b".page-heading {\n  align-items: flex-start;" in css.data
-    assert b"top: 74px;\n  z-index: 2;" in css.data
+    assert b"top: 0;\n  z-index: 2;" in css.data
     assert b"vertical-align: middle;" in css.data

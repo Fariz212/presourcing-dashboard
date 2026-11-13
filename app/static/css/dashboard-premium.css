@@ -341,7 +341,7 @@ table { border-collapse: separate; border-spacing: 0; white-space: nowrap; }
 thead { background: #f7f9fc; }
 th {
   position: sticky;
-  top: 74px;
+  top: 0;
   z-index: 2;
   height: 43px;
   padding: 0 14px;
