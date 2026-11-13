@@ -196,7 +196,7 @@ def test_partial_khs_excel_roundtrip_updates_existing_record(client):
         )
         assert preview.status_code == 201, preview.get_json()
         preview_payload = preview.get_json()
-        assert preview_payload["template_version"] == "2.3"
+        assert preview_payload["template_version"] == "2.4"
         assert preview_payload["summary"]["can_import"] is True
         assert preview_payload["summary"]["total_requests"] == 0
         assert preview_payload["summary"]["total_khs_items"] == 1
