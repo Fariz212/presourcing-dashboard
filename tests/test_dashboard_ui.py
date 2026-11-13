@@ -82,6 +82,15 @@ def test_dashboard_contains_separate_operational_modules(monkeypatch, tmp_path):
     ):
         assert module in body
     assert "KHS Creation Overview" in body
+    assert "Approval Pipeline" in body
+    assert "Memo Internal" in body
+    assert "LP Circulation" in body
+    assert "Junior Manager" in body
+    assert "Senior Manager" in body
+    assert "General Manager" in body
+    assert "Director" in body
+    assert 'data-attention-only="true"' in body
+    assert 'data-queue-role="director"' in body
     assert "New Request" in body
     assert "Add KHS" in body
     assert "Export KHS CSV" in body
