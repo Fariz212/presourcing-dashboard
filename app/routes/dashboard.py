@@ -675,8 +675,18 @@ CONTRACT_ALERT_LABELS = {
     "not_fully_injected": "Not Fully Injected",
 }
 
+CONTRACT_OPERATIONAL_LABELS = {
+    "missing_dates": "Missing Contract Dates",
+    "invalid_dates": "Invalid Contract Dates",
+    "expired": "Expired",
+    "upcoming": "Upcoming",
+    "active": "Active",
+    "not_fully_injected": "Not Fully Injected",
+}
+
 
 def _contract_lifecycle_data(record, today=None):
+    """Return operational contract state separately from renewal urgency."""
     today = today or _jakarta_today()
     fully_injected = _date_only(record.get("khs_inject_completion_date"))
     start = _date_only(record.get("contract_start_date"))
@@ -705,11 +715,28 @@ def _contract_lifecycle_data(record, today=None):
         else:
             status = "active"
 
+    if not fully_injected:
+        operational_status = "not_fully_injected"
+    elif start is None or end is None:
+        operational_status = "missing_dates"
+    elif end < start:
+        operational_status = "invalid_dates"
+    elif end < today:
+        operational_status = "expired"
+    elif start > today:
+        operational_status = "upcoming"
+    else:
+        operational_status = "active"
+
     duration_days, duration_label = _contract_term(start, end)
     days_remaining = (end - today).days if end else None
     return {
         "contract_lifecycle_status": status,
         "contract_lifecycle_label": CONTRACT_ALERT_LABELS[status],
+        "contract_renewal_alert_status": status,
+        "contract_renewal_alert_label": CONTRACT_ALERT_LABELS[status],
+        "contract_operational_status": operational_status,
+        "contract_operational_status_label": CONTRACT_OPERATIONAL_LABELS[operational_status],
         "contract_days_remaining": days_remaining,
         "contract_duration_days": duration_days,
         "contract_duration_label": duration_label,
@@ -1167,14 +1194,14 @@ def contract_lifecycle_register():
         return jsonify(success=False, code="INVALID_SEARCH", message="Search query must not exceed 100 characters."), 400
 
     status = request.args.get("status", "").strip().lower()
-    allowed_statuses = set(CONTRACT_ALERT_LABELS) - {"not_fully_injected"}
+    alert_statuses = set(CONTRACT_ALERT_LABELS) - {"not_fully_injected"}
     grouped_statuses = {
         "within_6m": {"prep_6m", "watch_3m", "urgent_1m", "urgent_14d", "critical_7d"},
         "within_3m": {"watch_3m", "urgent_1m", "urgent_14d", "critical_7d"},
         "within_1m": {"urgent_1m", "urgent_14d", "critical_7d"},
         "missing_dates": {"missing_dates", "invalid_dates"},
     }
-    allowed_statuses.update(grouped_statuses)
+    allowed_statuses = alert_statuses | set(grouped_statuses) | {"upcoming"}
     if status and status not in allowed_statuses:
         return jsonify(success=False, code="INVALID_CONTRACT_ALERT", message="Unsupported contract alert filter."), 400
 
@@ -1225,13 +1252,20 @@ def contract_lifecycle_register():
             "urgent_within_14_days": counts["urgent_14d"] + counts["critical_7d"],
             "critical_within_7_days": counts["critical_7d"],
             "expired": counts["expired"],
+            "upcoming_contracts": sum(1 for row in records if row["contract_operational_status"] == "upcoming"),
+            "active_contracts": sum(1 for row in records if row["contract_operational_status"] == "active"),
             "missing_contract_dates": counts["missing_dates"] + counts["invalid_dates"],
             "active_over_6_months": counts["active"],
             "by_status": counts,
         }
 
         filtered = records
-        if status:
+        if status == "upcoming":
+            filtered = [
+                row for row in filtered
+                if row["contract_operational_status"] == "upcoming"
+            ]
+        elif status:
             accepted_statuses = grouped_statuses.get(status, {status})
             filtered = [
                 row for row in filtered
