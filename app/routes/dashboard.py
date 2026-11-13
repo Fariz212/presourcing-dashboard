@@ -1008,6 +1008,13 @@ def contract_lifecycle_register():
 
     status = request.args.get("status", "").strip().lower()
     allowed_statuses = set(CONTRACT_ALERT_LABELS) - {"not_fully_injected"}
+    grouped_statuses = {
+        "within_6m": {"prep_6m", "watch_3m", "urgent_1m", "urgent_14d", "critical_7d"},
+        "within_3m": {"watch_3m", "urgent_1m", "urgent_14d", "critical_7d"},
+        "within_1m": {"urgent_1m", "urgent_14d", "critical_7d"},
+        "missing_dates": {"missing_dates", "invalid_dates"},
+    }
+    allowed_statuses.update(grouped_statuses)
     if status and status not in allowed_statuses:
         return jsonify(success=False, code="INVALID_CONTRACT_ALERT", message="Unsupported contract alert filter."), 400
 
@@ -1065,7 +1072,11 @@ def contract_lifecycle_register():
 
         filtered = records
         if status:
-            filtered = [row for row in filtered if row["contract_lifecycle_status"] == status]
+            accepted_statuses = grouped_statuses.get(status, {status})
+            filtered = [
+                row for row in filtered
+                if row["contract_lifecycle_status"] in accepted_statuses
+            ]
         if search:
             needle = search.casefold()
             filtered = [
