@@ -993,7 +993,45 @@ function bind() {
   );
   $("refreshButton").addEventListener("click", () => loadPage(state.page).catch((e) => toast(e.message)));
   $("workflowRefresh").addEventListener("click", () => loadWorkflow().catch((e) => toast(e.message)));
+  $("lpRefresh").addEventListener("click", () => { state.lpPage = 1; loadLPCirculation().catch((e) => toast(e.message)); });
+  $("contractRefresh").addEventListener("click", () => { state.contractPage = 1; loadContractLifecycle().catch((e) => toast(e.message)); });
   $("activityRefresh").addEventListener("click", () => { state.activityPage = 1; loadActivity().catch((e) => toast(e.message)); });
+  $("lpSearch").addEventListener("input", () => {
+    window.clearTimeout(state.searchTimer);
+    state.searchTimer = window.setTimeout(() => { state.lpPage = 1; loadLPCirculation().catch((e) => toast(e.message)); }, 300);
+  });
+  $("lpStageFilter").addEventListener("change", () => { state.lpPage = 1; loadLPCirculation().catch((e) => toast(e.message)); });
+  $("lpReset").addEventListener("click", () => {
+    $("lpSearch").value = ""; $("lpStageFilter").value = ""; state.lpPage = 1;
+    loadLPCirculation().catch((e) => toast(e.message));
+  });
+  document.querySelectorAll("[data-lp-stage]").forEach((el) => el.addEventListener("click", () => {
+    $("lpStageFilter").value = el.dataset.lpStage || "";
+    state.lpPage = 1;
+    loadLPCirculation().catch((e) => toast(e.message));
+  }));
+  $("lpPrevious").addEventListener("click", () => { if (state.lpPage > 1) { state.lpPage--; loadLPCirculation().catch((e) => toast(e.message)); } });
+  $("lpNext").addEventListener("click", () => { state.lpPage++; loadLPCirculation().catch((e) => toast(e.message)); });
+
+  $("contractSearch").addEventListener("input", () => {
+    window.clearTimeout(state.searchTimer);
+    state.searchTimer = window.setTimeout(() => { state.contractPage = 1; loadContractLifecycle().catch((e) => toast(e.message)); }, 300);
+  });
+  $("contractStatusFilter").addEventListener("change", () => { state.contractPage = 1; loadContractLifecycle().catch((e) => toast(e.message)); });
+  $("contractReset").addEventListener("click", () => {
+    $("contractSearch").value = ""; $("contractStatusFilter").value = ""; state.contractPage = 1;
+    loadContractLifecycle().catch((e) => toast(e.message));
+  });
+  document.querySelectorAll("[data-contract-status]").forEach((el) => el.addEventListener("click", () => {
+    $("contractStatusFilter").value = el.dataset.contractStatus || "";
+    $("contractSearch").value = "";
+    state.contractPage = 1;
+    go("contracts");
+  }));
+  $("contractPrevious").addEventListener("click", () => { if (state.contractPage > 1) { state.contractPage--; loadContractLifecycle().catch((e) => toast(e.message)); } });
+  $("contractNext").addEventListener("click", () => { state.contractPage++; loadContractLifecycle().catch((e) => toast(e.message)); });
+
+
   $("refreshHistoryButton").addEventListener("click", () => { state.historyPage = 1; loadImportHistory().catch((e) => toast(e.message)); });
   ["newRequestButton", "createRequestButton"].forEach((id) => $(id).addEventListener("click", () => openForm("request").catch((e) => toast(e.message))));
   ["quickAddKhs", "overviewAddKhs", "createKhsButton"].forEach((id) => $(id).addEventListener("click", () => openForm("khs").catch((e) => toast(e.message))));
@@ -1051,6 +1089,10 @@ function bind() {
   $("acceptWarnings").addEventListener("change", () => {
     $("confirmImportButton").disabled = !state.importCanRun || (state.importWarnings && !$("acceptWarnings").checked);
   });
+  ["lpBody", "contractBody"].forEach((id) => $(id).addEventListener("click", (event) => {
+    const button = event.target.closest("[data-view-khs]");
+    if (button) openDetails(button.dataset.viewKhs);
+  }));
   $("requestBody").addEventListener("click", (event) => {
     const edit = event.target.closest("[data-edit-request]");
     const add = event.target.closest("[data-add-child]");
