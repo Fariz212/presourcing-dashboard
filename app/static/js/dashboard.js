@@ -18,7 +18,10 @@ const state = {
   editing: null,
   importBatch: null,
   importCanRun: false,
-  importWarnings: false
+  importWarnings: false,
+  workflowStageFilter: null,
+  workflowRoleFilter: null,
+  attentionOnly: false
 };
 
 const dateFields = [
@@ -164,7 +167,8 @@ async function loadOverview() {
   try {
     const results = await Promise.all([
       api("/api/dashboard/summary"),
-      api("/api/dashboard/khs?attention=true&per_page=8")
+      api("/api/dashboard/khs?attention=true&per_page=8"),
+      api("/api/dashboard/workflow/overview").catch(() => null)
     ]);
     const d = results[0].data;
     const p = d.lp;
@@ -190,6 +194,7 @@ async function loadOverview() {
     setWidth("legalBar", d.total_khs ? d.workflow.legal_submitted / d.total_khs * 100 : 0);
     setWidth("lpStartedBar", d.total_khs ? (p.in_progress + p.completed) / d.total_khs * 100 : 0);
     set("attentionCount", results[1].pagination.total_records);
+    renderApprovalPipeline(results[2] && results[2].data ? results[2].data : null);
     set("lastUpdated", new Date().toLocaleString());
     const exceptions = d.data_quality.lp_started_without_mi_gm_approval;
     const alert = $("qualityAlert");
@@ -201,6 +206,44 @@ async function loadOverview() {
     showSystem(false, "Connection issue");
     throw err;
   }
+}
+
+function renderApprovalPipeline(data) {
+  if (!data) {
+    [
+      "miQueueTotal", "miJuniorCount", "miSeniorCount", "miGeneralCount",
+      "lpQueueTotal", "lpJuniorCount", "lpSeniorCount", "lpGeneralCount",
+      "lpDirectorCount", "lpOtherCount"
+    ].forEach((id) => set(id, "—"));
+    set("lpQueueNote", "Approval queue data is temporarily unavailable.");
+    return;
+  }
+
+  const mi = data.memo_internal || [];
+  const lp = data.lp || [];
+  const countFor = (items, key) => {
+    const item = items.find((entry) => entry.key === key);
+    return item ? Number(item.count) || 0 : 0;
+  };
+
+  const miJunior = countFor(mi, "junior_manager");
+  const miSenior = countFor(mi, "senior_manager");
+  const miGeneral = countFor(mi, "general_manager");
+  set("miJuniorCount", miJunior);
+  set("miSeniorCount", miSenior);
+  set("miGeneralCount", miGeneral);
+  set("miQueueTotal", miJunior + miSenior + miGeneral);
+
+  set("lpJuniorCount", countFor(lp, "junior_manager"));
+  set("lpSeniorCount", countFor(lp, "senior_manager"));
+  set("lpGeneralCount", countFor(lp, "general_manager"));
+  set("lpDirectorCount", countFor(lp, "director"));
+  set("lpQueueTotal", data.lp_active_total);
+  set("lpOtherCount", data.lp_unassigned_or_other);
+  set(
+    "lpQueueNote",
+    "Active LP records not mapped to the four roles are retained in this bucket."
+  );
 }
 
 function renderAttention(rows) {
@@ -215,7 +258,10 @@ function renderAttention(rows) {
     "</span><span class=\"cell-secondary\">" + esc(r.khs_id) + " · " + esc(r.request_id) + "</span></td>" +
     "<td>" + esc(r.vendor_name) + "</td><td>" + esc(r.current_stage_name || r.current_stage_code) +
     (r.lp_started_without_mi_gm_approval ? '<span class="exception-label">MI GM prerequisite exception</span>' : "") +
-    "</td><td>" + esc(r.waiting_for || (r.lp_started_without_mi_gm_approval ? "Review prerequisite" : "—")) +
+    "</td><td><span class=\"cell-primary\">" +
+    esc(r.waiting_for || (r.lp_started_without_mi_gm_approval ? "Review prerequisite" : "Review next action")) +
+    "</span>" +
+    (r.waiting_reason ? '<span class="cell-secondary">' + esc(r.waiting_reason) + "</span>" : "") +
     "</td><td>" + esc(fmt(r.last_updated_date || r.updated_at)) +
     "</td><td><button class=\"view-button\" data-view-khs=\"" + esc(r.khs_id) + "\">Open</button></td></tr>"
   ).join("");
@@ -245,6 +291,29 @@ async function ensureFilters() {
   if (!state.filters) await loadFilters();
 }
 
+function renderVendorPortfolio(record) {
+  const vendors = Array.isArray(record.vendors)
+    ? record.vendors.filter((name) => typeof name === "string" && name.trim())
+    : [];
+  if (!vendors.length) {
+    return '<span class="vendor-empty">No vendors yet</span>';
+  }
+
+  const count = vendors.length;
+  const label = count + (count === 1 ? " vendor" : " vendors");
+  const names = vendors.map((name) =>
+    '<span class="vendor-name-chip">' + esc(name) + '</span>'
+  ).join("");
+
+  return '<div class="vendor-summary">' +
+    '<span class="vendor-count-badge">' + label + '</span>' +
+    '<details class="vendor-details">' +
+    '<summary aria-label="View ' + count + ' vendors">View list</summary>' +
+    '<div class="vendor-detail-list" aria-label="Vendor list for ' + esc(record.request_id) + '">' +
+    names +
+    '</div></details></div>';
+}
+
 async function loadRequests() {
   const q = state.requestQuery ? "&q=" + encodeURIComponent(state.requestQuery) : "";
   const result = await api("/api/dashboard/requests?page=" + state.requestPage + "&per_page=25" + q);
@@ -255,7 +324,7 @@ async function loadRequests() {
   else body.innerHTML = state.requests.map((r) =>
     "<tr><td><span class=\"cell-primary\">" + esc(r.request_subject) + "</span>" +
     "<span class=\"cell-secondary\">" + esc(r.request_id) + "</span></td>" +
-    "<td>" + esc(r.vendor_summary || "No KHS items yet") + "</td>" +
+    "<td>" + renderVendorPortfolio(r) + "</td>" +
     "<td>" + esc(fmt(r.request_date)) + "</td><td>" + esc(r.requester_owner || "—") +
     "</td><td>" + esc(r.total_khs) + "</td><td>" + esc(r.completed_khs) +
     "</td><td><button class=\"view-button\" data-edit-request=\"" + esc(r.request_id) + "\">Edit</button> " +
@@ -267,15 +336,27 @@ async function loadRequests() {
   $("requestNext").disabled = state.requestPage >= (pg.total_pages || 0);
 }
 
+function clearRegisterFilters() {
+  ["searchInput", "statusFilter", "executorFilter", "subtypeFilter", "waitingFilter", "stageFilter"]
+    .forEach((id) => {
+      const control = $(id);
+      if (control) control.value = "";
+    });
+}
+
 function registerQuery() {
   const p = new URLSearchParams();
   p.set("page", String(state.registerPage));
   p.set("per_page", String(state.perPage));
   [["q","searchInput"],["lp_status","statusFilter"],["executor_code","executorFilter"],
-   ["subtype","subtypeFilter"],["waiting_for","waitingFilter"],["stage","stageFilter"]].forEach((pair) => {
+   ["subtype","subtypeFilter"],["waiting_for","waitingFilter"]].forEach((pair) => {
     const el = $(pair[1]);
     if (el && el.value) p.set(pair[0], el.value);
   });
+  if (state.workflowStageFilter) p.set("stage", state.workflowStageFilter);
+  else if ($("stageFilter") && $("stageFilter").value) p.set("stage", $("stageFilter").value);
+  if (state.workflowRoleFilter) p.set("waiting_role", state.workflowRoleFilter);
+  if (state.attentionOnly) p.set("attention", "true");
   return p.toString();
 }
 
@@ -617,12 +698,99 @@ async function uploadEvidence(event) {
   }
 }
 
+function syncImportFile(file) {
+  if (!file) {
+    set("importFileName", "No file selected");
+    $("previewImportButton").disabled = true;
+    return false;
+  }
+  if (!/\.xlsx$/i.test(file.name || "")) {
+    toast("Please choose an Excel workbook in .xlsx format.");
+    return false;
+  }
+  set("importFileName", file.name);
+  $("previewImportButton").disabled = false;
+  $("importPreview").hidden = true;
+  $("importFeedback").hidden = true;
+  return true;
+}
+
+function bindImportDropzone() {
+  const zone = document.querySelector(".upload-card");
+  const input = $("importFile");
+  if (!zone || !input) return;
+
+  zone.addEventListener("dragover", (event) => {
+    event.preventDefault();
+    zone.classList.add("is-dragover");
+  });
+  ["dragleave", "dragend"].forEach((name) => zone.addEventListener(name, (event) => {
+    if (name === "dragleave" && zone.contains(event.relatedTarget)) return;
+    zone.classList.remove("is-dragover");
+  }));
+  zone.addEventListener("drop", (event) => {
+    event.preventDefault();
+    zone.classList.remove("is-dragover");
+    const file = event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0];
+    if (!file) return;
+    if (!/\.xlsx$/i.test(file.name || "")) {
+      toast("Only .xlsx Excel workbooks can be uploaded.");
+      return;
+    }
+    try {
+      const transfer = new DataTransfer();
+      transfer.items.add(file);
+      input.files = transfer.files;
+      syncImportFile(file);
+    } catch (_) {
+      toast("Use Choose file to select this workbook in your browser.");
+    }
+  });
+}
+
 function bind() {
   document.querySelectorAll(".nav-link[data-page]").forEach((el) => {
-    el.addEventListener("click", (event) => { event.preventDefault(); go(el.dataset.page); });
+    el.addEventListener("click", (event) => {
+      event.preventDefault();
+      if (el.dataset.page === "register") {
+        state.workflowStageFilter = null;
+        state.workflowRoleFilter = null;
+        state.attentionOnly = false;
+      }
+      go(el.dataset.page);
+    });
   });
   document.querySelectorAll("[data-go]").forEach((el) =>
-    el.addEventListener("click", () => go(el.dataset.go))
+    el.addEventListener("click", () => {
+      if (el.dataset.go === "register") {
+        state.workflowStageFilter = null;
+        state.workflowRoleFilter = null;
+        state.attentionOnly = el.dataset.attentionOnly === "true";
+        state.registerPage = 1;
+        if (state.attentionOnly) clearRegisterFilters();
+      }
+      go(el.dataset.go);
+    })
+  );
+  document.querySelectorAll("[data-queue-stage]").forEach((el) =>
+    el.addEventListener("click", () => {
+      state.workflowStageFilter = el.dataset.queueStage;
+      state.workflowRoleFilter = null;
+      state.attentionOnly = false;
+      state.registerPage = 1;
+      clearRegisterFilters();
+      go("register");
+    })
+  );
+  document.querySelectorAll("[data-queue-role]").forEach((el) =>
+    el.addEventListener("click", () => {
+      state.workflowStageFilter = null;
+      state.workflowRoleFilter = el.dataset.queueRole;
+      state.attentionOnly = false;
+      state.registerPage = 1;
+      clearRegisterFilters();
+      go("register");
+    })
   );
   $("refreshButton").addEventListener("click", () => loadPage(state.page).catch((e) => toast(e.message)));
   $("workflowRefresh").addEventListener("click", () => loadWorkflow().catch((e) => toast(e.message)));
@@ -660,7 +828,10 @@ function bind() {
     $(id).addEventListener("change", () => { state.registerPage = 1; loadRegister().catch((e) => toast(e.message)); })
   );
   $("resetFilters").addEventListener("click", () => {
-    ["searchInput", "statusFilter", "executorFilter", "subtypeFilter", "waitingFilter", "stageFilter"].forEach((id) => { $(id).value = ""; });
+    clearRegisterFilters();
+    state.workflowStageFilter = null;
+    state.workflowRoleFilter = null;
+    state.attentionOnly = false;
     state.registerPage = 1;
     loadRegister().catch((e) => toast(e.message));
   });
@@ -672,11 +843,10 @@ function bind() {
   $("activityNext").addEventListener("click", () => { state.activityPage++; loadActivity().catch((e) => toast(e.message)); });
   $("importFile").addEventListener("change", () => {
     const file = $("importFile").files[0];
-    set("importFileName", file ? file.name : "No file selected");
-    $("previewImportButton").disabled = !file;
-    $("importPreview").hidden = true;
-    $("importFeedback").hidden = true;
+    if (file && !syncImportFile(file)) $("importFile").value = "";
+    else if (!file) syncImportFile(null);
   });
+  bindImportDropzone();
   $("previewImportButton").addEventListener("click", previewWorkbook);
   $("confirmImportButton").addEventListener("click", confirmImport);
   $("acceptWarnings").addEventListener("change", () => {

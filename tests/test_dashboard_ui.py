@@ -27,6 +27,7 @@ def test_root_serves_dashboard_and_static_assets(monkeypatch, tmp_path):
     assert response.content_type.startswith("text/html")
     assert b"KHS Creation Overview" in response.data
     assert b"dashboard.css" in response.data
+    assert b"dashboard-premium.css" in response.data
     assert b"dashboard.js" in response.data
 
     # API clients must retain the legacy JSON root response.
@@ -46,10 +47,17 @@ def test_root_serves_dashboard_and_static_assets(monkeypatch, tmp_path):
     assert css.status_code == 200
     assert b".kpi-grid" in css.data
 
+    premium_css = client.get("/static/css/dashboard-premium.css")
+    assert premium_css.status_code == 200
+    assert b".import-guide" in premium_css.data
+    assert b".nav-icon" in premium_css.data
+
     javascript = client.get("/static/js/dashboard.js")
     assert javascript.status_code == 200
     assert b"/api/dashboard/summary" in javascript.data
     assert b"/api/dashboard/khs" in javascript.data
+    assert b"bindImportDropzone" in javascript.data
+    assert b"clearRegisterFilters" in javascript.data
 
 def test_dashboard_contains_separate_operational_modules(monkeypatch, tmp_path):
     monkeypatch.setattr(
@@ -75,12 +83,53 @@ def test_dashboard_contains_separate_operational_modules(monkeypatch, tmp_path):
     ):
         assert module in body
     assert "KHS Creation Overview" in body
+    assert "Approval Pipeline" in body
+    assert "Memo Internal" in body
+    assert "LP Circulation" in body
+    assert "Junior Manager" in body
+    assert "Senior Manager" in body
+    assert "General Manager" in body
+    assert "Director" in body
+    assert 'data-attention-only="true"' in body
+    assert 'data-queue-role="director"' in body
     assert "New Request" in body
     assert "Add KHS" in body
     assert "Export KHS CSV" in body
     assert "Download current Excel" in body
     assert "Fully Injected" in body
     assert "REQUEST SUBJECT / VENDOR" in body
+    assert "VENDOR PORTFOLIO" in body
     assert "Evidence Documents" in body
     assert 'id="documentUploadForm"' in body
 
+
+
+
+def test_request_vendor_portfolio_is_compact_and_expandable(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        "app.init_db_pool",
+        lambda _app: DummyPool(),
+    )
+    flask_app = create_app({
+        "TESTING": True,
+        "SECRET_KEY": "dashboard-vendor-test-secret",
+        "DATABASE_URL": "postgresql://test:test@localhost/test",
+        "UPLOAD_DIR": tmp_path / "uploads",
+    })
+    client = flask_app.test_client()
+
+    dashboard = client.get("/dashboard")
+    assert dashboard.status_code == 200
+    assert b"VENDOR PORTFOLIO" in dashboard.data
+
+    javascript = client.get("/static/js/dashboard.js")
+    assert javascript.status_code == 200
+    assert b"renderVendorPortfolio" in javascript.data
+    assert b"vendor-count-badge" in javascript.data
+    assert b"vendor-details" in javascript.data
+
+    css = client.get("/static/css/dashboard-premium.css")
+    assert css.status_code == 200
+    assert b".vendor-count-badge" in css.data
+    assert b".vendor-detail-list" in css.data
+    assert b".attention-panel td:nth-child(4)" in css.data

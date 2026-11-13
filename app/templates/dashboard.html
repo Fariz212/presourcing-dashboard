@@ -5,6 +5,7 @@
 <meta name="theme-color" content="#14233b"><meta name="description" content="KHS Contract Creation Management">
 <title>KHS Management</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard-premium.css') }}">
 <script src="{{ url_for('static', filename='js/dashboard.js') }}" defer></script>
 </head>
 <body>
@@ -13,15 +14,15 @@
 <a class="brand" href="#overview" data-go="overview"><span class="brand-mark">K</span><span class="brand-copy"><strong>KHS</strong><small>CONTRACT OPERATIONS</small></span></a>
 <div class="sidebar-caption">WORKSPACE</div>
 <nav class="side-nav" aria-label="Main navigation">
-<a class="nav-link active" href="#overview" data-page="overview">▦ <span>Overview</span></a>
-<a class="nav-link" href="#requests" data-page="requests">▤ <span>Request Management</span></a>
-<a class="nav-link" href="#register" data-page="register">▣ <span>KHS Register</span><span class="nav-count" id="sidebarTotal">—</span></a>
-<a class="nav-link" href="#workflow" data-page="workflow">⇢ <span>Workflow Monitoring</span></a>
+<a class="nav-link active" href="#overview" data-page="overview"><span class="nav-icon" aria-hidden="true"><svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span><span>Overview</span></a>
+<a class="nav-link" href="#requests" data-page="requests"><span class="nav-icon" aria-hidden="true"><svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3.75h7l4 4V20a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4.75a1 1 0 0 1 1-1Z"/><path d="M14 4v4h4M9 13h6M9 17h6"/></svg></span><span>Request Management</span></a>
+<a class="nav-link" href="#register" data-page="register"><span class="nav-icon" aria-hidden="true"><svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 5h12M8 12h12M8 19h12"/><path d="m3 5 1 1 2-2M3 12l1 1 2-2M3 19l1 1 2-2"/></svg></span><span>KHS Register</span><span class="nav-count" id="sidebarTotal">—</span></a>
+<a class="nav-link" href="#workflow" data-page="workflow"><span class="nav-icon" aria-hidden="true"><svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="5" r="2"/><circle cx="19" cy="19" r="2"/><path d="M7 5h4a4 4 0 0 1 4 4v2a4 4 0 0 0 4 4"/><path d="m15 15 4 4 4-4"/></svg></span><span>Workflow Monitoring</span></a>
 </nav>
 <div class="sidebar-caption secondary-caption">DATA MANAGEMENT</div>
 <nav class="side-nav">
-<a class="nav-link" href="#imports" data-page="imports">⇧ <span>Excel Import / Export</span></a>
-<a class="nav-link" href="#activity" data-page="activity">◷ <span>Activity & Audit Log</span></a>
+<a class="nav-link" href="#imports" data-page="imports"><span class="nav-icon" aria-hidden="true"><svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3m0 0L8 7m4-4 4 4"/><path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/></svg></span><span>Excel Import / Export</span></a>
+<a class="nav-link" href="#activity" data-page="activity"><span class="nav-icon" aria-hidden="true"><svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg></span><span>Activity & Audit Log</span></a>
 </nav>
 <div class="sidebar-bottom"><div class="sidebar-note"><strong>Contract Creation Workspace</strong><p>Manage requests, KHS records, and the complete workflow in one place.</p></div><div class="sidebar-footer"><span class="online-dot"></span> Internal operations <span class="version-label">v2.0</span></div></div>
 </aside>
@@ -37,6 +38,45 @@
 <article class="kpi-card"><span class="kpi-label">Needs Attention</span><strong class="kpi-value" id="attentionCount">—</strong><small>Waiting / exception records</small></article>
 <article class="kpi-card"><span class="kpi-label">Fully Injected</span><strong class="kpi-value" id="injectCompleted">—</strong><small><span id="completionRate">0%</span> of all KHS records</small></article>
 </div>
+
+<section class="approval-command" aria-labelledby="approvalCommandTitle">
+  <div class="approval-command-heading">
+    <div>
+      <div class="eyebrow">LIVE WORKFLOW QUEUE</div>
+      <h2 id="approvalCommandTitle">Approval Pipeline</h2>
+      <p>Every active approval queue, grouped by process and decision level.</p>
+    </div>
+    <span class="queue-live-tag"><span class="online-dot"></span> Live from register</span>
+  </div>
+  <div class="approval-lanes">
+    <article class="approval-lane memo-lane">
+      <div class="approval-lane-heading">
+        <div class="lane-icon lane-icon-memo" aria-hidden="true">MI</div>
+        <div><h3>Memo Internal</h3><p>Pending management approvals</p></div>
+        <div class="lane-total"><strong id="miQueueTotal">—</strong><span>in queue</span></div>
+      </div>
+      <div class="queue-steps queue-steps-three">
+        <button type="button" class="queue-step queue-step-button" data-queue-stage="MI_HEAD_APPROVAL"><span class="queue-step-index">01</span><span class="queue-step-label">Junior Manager</span><strong id="miJuniorCount">—</strong><small>Awaiting Head approval</small></button>
+        <button type="button" class="queue-step queue-step-button" data-queue-stage="MI_SM_APPROVAL"><span class="queue-step-index">02</span><span class="queue-step-label">Senior Manager</span><strong id="miSeniorCount">—</strong><small>Awaiting SM approval</small></button>
+        <button type="button" class="queue-step queue-step-button" data-queue-stage="MI_GM_APPROVAL"><span class="queue-step-index">03</span><span class="queue-step-label">General Manager</span><strong id="miGeneralCount">—</strong><small>Awaiting GM approval</small></button>
+      </div>
+    </article>
+    <article class="approval-lane lp-lane">
+      <div class="approval-lane-heading">
+        <div class="lane-icon lane-icon-lp" aria-hidden="true">LP</div>
+        <div><h3>LP Circulation</h3><p>Active sign-off route · grouped by Waiting For</p></div>
+        <div class="lane-total"><strong id="lpQueueTotal">—</strong><span>in circulation</span></div>
+      </div>
+      <div class="queue-steps queue-steps-four">
+        <button type="button" class="queue-step queue-step-button" data-queue-role="junior_manager"><span class="queue-step-index">01</span><span class="queue-step-label">Junior Manager</span><strong id="lpJuniorCount">—</strong><small>Pending sign-off</small></button>
+        <button type="button" class="queue-step queue-step-button" data-queue-role="senior_manager"><span class="queue-step-index">02</span><span class="queue-step-label">Senior Manager</span><strong id="lpSeniorCount">—</strong><small>Pending sign-off</small></button>
+        <button type="button" class="queue-step queue-step-button" data-queue-role="general_manager"><span class="queue-step-index">03</span><span class="queue-step-label">General Manager</span><strong id="lpGeneralCount">—</strong><small>Pending sign-off</small></button>
+        <button type="button" class="queue-step queue-step-button" data-queue-role="director"><span class="queue-step-index">04</span><span class="queue-step-label">Director / Direktur</span><strong id="lpDirectorCount">—</strong><small>Final sign-off</small></button>
+      </div>
+      <div class="queue-reconciliation"><span>Unassigned / other</span><strong id="lpOtherCount">—</strong><span class="queue-reconciliation-note" id="lpQueueNote">LP roles follow the current Waiting For value.</span></div>
+    </article>
+  </div>
+</section>
 <div class="overview-grid">
 <article class="panel"><div class="panel-heading"><div><div class="eyebrow">LIFECYCLE</div><h2>LP Circulation Progress</h2></div><span class="subtle-tag" id="lpTotalTag">— KHS</span></div>
 <div class="progress-summary"><strong class="progress-primary" id="progressPrimary">—</strong><strong class="progress-rate" id="progressRate">0%</strong></div>
@@ -45,14 +85,14 @@
 <article class="panel"><div class="panel-heading"><div><div class="eyebrow">PROCESS CHECKPOINTS</div><h2>Workflow Overview</h2></div></div>
 <div class="workflow-list"><div class="workflow-item"><span>MI GM approved</span><b id="miGmCount">—</b><div class="mini-track"><i id="miGmBar"></i></div></div><div class="workflow-item"><span>Legal submitted</span><b id="legalCount">—</b><div class="mini-track"><i id="legalBar"></i></div></div><div class="workflow-item"><span>LP started</span><b id="lpStartedCount">—</b><div class="mini-track"><i id="lpStartedBar"></i></div></div></div></article>
 </div>
-<article class="panel attention-panel"><div class="panel-heading"><div><div class="eyebrow">ACTION REQUIRED</div><h2>Needs Attention</h2><p>Records with a waiting party, missing prerequisite, or unresolved next step.</p></div><button class="text-button" data-go="register">View all →</button></div>
-<div class="table-wrap"><table><thead><tr><th>REQUEST SUBJECT</th><th>VENDOR</th><th>NEXT WORKFLOW STAGE</th><th>WAITING FOR</th><th>LAST UPDATED</th><th></th></tr></thead><tbody id="attentionBody"><tr><td colspan="6" class="table-message">Loading…</td></tr></tbody></table></div></article>
+<article class="panel attention-panel"><div class="panel-heading"><div><div class="eyebrow">ACTION REQUIRED</div><h2>KHS Atensi</h2><p>KHS records waiting on action, carrying an unresolved next step, or requiring prerequisite review.</p></div><button class="text-button" data-go="register" data-attention-only="true">Open attention queue →</button></div>
+<div class="table-wrap"><table><thead><tr><th>REQUEST SUBJECT</th><th>VENDOR</th><th>NEXT WORKFLOW STAGE</th><th>WAITING FOR / NEXT ACTION</th><th>LAST UPDATED</th><th></th></tr></thead><tbody id="attentionBody"><tr><td colspan="6" class="table-message">Loading…</td></tr></tbody></table></div></article>
 <article class="quality-alert" id="qualityAlert" hidden><strong>Data quality alert</strong><span id="qualityCount">0</span> record(s) show LP circulation without GM MI approval. <button class="text-button" data-go="register">Review records</button></article>
 </section>
 <section class="page-view" id="page-requests" data-title="Request Management">
 <div class="page-heading"><div><div class="eyebrow">WORKSPACE / INTAKE</div><h1>Request Management</h1><p>Create and manage parent requests. One request may contain multiple KHS items.</p></div><button class="primary-button" id="createRequestButton">+ New Request</button></div>
 <article class="panel"><div class="filter-toolbar"><input id="requestSearch" type="search" placeholder="Search subject, vendor, owner…"><button class="reset-button" id="requestSearchReset">Reset</button></div>
-<div class="table-wrap"><table><thead><tr><th>REQUEST SUBJECT</th><th>VENDORS</th><th>REQUEST DATE</th><th>REQUESTER / OWNER</th><th>KHS ITEMS</th><th>FULLY INJECTED</th><th></th></tr></thead><tbody id="requestBody"><tr><td colspan="7" class="table-message">Loading requests…</td></tr></tbody></table></div>
+<div class="table-wrap"><table><thead><tr><th>REQUEST SUBJECT</th><th>VENDOR PORTFOLIO</th><th>REQUEST DATE</th><th>REQUESTER / OWNER</th><th>KHS ITEMS</th><th>FULLY INJECTED</th><th></th></tr></thead><tbody id="requestBody"><tr><td colspan="7" class="table-message">Loading requests…</td></tr></tbody></table></div>
 <div class="register-footer"><span id="requestPagination">—</span><div class="pagination"><button id="requestPrevious" type="button">‹</button><button id="requestNext" type="button">›</button></div></div></article>
 </section>
 <section class="page-view" id="page-register" data-title="KHS Register">
@@ -67,8 +107,8 @@
 <article class="panel"><div class="panel-heading"><div><div class="eyebrow">LP CIRCULATION</div><h2>LoA Sign-off Route</h2></div></div><div class="loa-route"><span>User</span><i>→</i><span>Tim Kontrak</span><i>→</i><span>Junior Manager Vendor Management</span><i>→</i><span>Senior Manager Strategic Sourcing</span><i>→</i><span>GM SCM</span><i>→</i><span>Direktur</span></div><p class="muted">LP circulation is gated by GM SCM MI approval. The route is shown for process visibility; individual sign-off dates remain tracked on each KHS record.</p></article>
 </section>
 <section class="page-view" id="page-imports" data-title="Excel Import / Export">
-<div class="page-heading"><div><div class="eyebrow">DATA MANAGEMENT</div><h1>Excel Import / Export</h1><p>Download the latest database workbook, edit existing records by ID, then preview and confirm the changes. Legacy v2.2 workbooks remain supported.</p></div><div class="heading-actions"><button class="secondary-button" id="downloadCurrentWorkbookButton">↓ Download current Excel</button><button class="secondary-button" id="exportKhsButton">↓ Export KHS CSV</button></div></div>
-<article class="panel"><div class="upload-card"><div><strong>Upload edited KHS workbook</strong><p>Use the current workbook download for updates. Keep Request ID and KHS ID unchanged. Blank cells preserve existing database values; removed rows do not delete records.</p></div><div class="upload-actions"><label class="file-select-button" for="importFile">Choose file</label><input id="importFile" type="file" accept=".xlsx"><span id="importFileName" class="selected-file">No file selected</span><button class="primary-button" id="previewImportButton" type="button" disabled>Validate workbook</button></div></div>
+<div class="page-heading"><div><div class="eyebrow">DATA MANAGEMENT / WORKBOOK WORKSPACE</div><h1>Excel Import / Export</h1><p>Download the latest database workbook, edit existing records by ID, then preview and confirm the changes. Legacy v2.2 workbooks remain supported.</p></div><div class="heading-actions"><button class="secondary-button" id="downloadCurrentWorkbookButton">↓ Download current Excel</button><button class="secondary-button" id="exportKhsButton">↓ Export KHS CSV</button></div></div>
+<article class="panel import-workspace"><div class="import-guide" aria-label="Workbook workflow"><div class="import-guide-step"><span class="guide-number">01</span><div><strong>Download the live workbook</strong><small>Start with the latest database snapshot</small></div></div><span class="guide-connector" aria-hidden="true"></span><div class="import-guide-step"><span class="guide-number">02</span><div><strong>Update in Excel</strong><small>Keep record IDs unchanged</small></div></div><span class="guide-connector" aria-hidden="true"></span><div class="import-guide-step"><span class="guide-number">03</span><div><strong>Validate & confirm</strong><small>Review changes before they are saved</small></div></div></div><div class="upload-card" role="region" aria-label="Excel workbook upload area"><div><strong>Upload edited KHS workbook</strong><p>Use the current workbook download for updates. Keep Request ID and KHS ID unchanged. Blank cells preserve existing database values; removed rows do not delete records. <span class="drop-hint">You can also drag and drop an .xlsx file here.</span></p></div><div class="upload-actions"><label class="file-select-button" for="importFile">Choose file</label><input id="importFile" type="file" accept=".xlsx"><span id="importFileName" class="selected-file" role="status" aria-live="polite">No file selected</span><button class="primary-button" id="previewImportButton" type="button" disabled>Validate workbook</button></div></div>
 <div id="importFeedback" class="import-feedback" hidden role="status"></div><div id="importPreview" class="import-preview" hidden><div class="preview-heading"><div><div class="eyebrow">VALIDATION RESULT</div><h3 id="previewTitle">Workbook preview</h3><p id="previewDescription"></p></div><span id="previewBadge" class="import-status">PREVIEWED</span></div>
 <div class="import-metrics"><div class="import-metric"><span>Total rows</span><strong id="previewTotal">—</strong></div><div class="import-metric"><span>Valid rows</span><strong id="previewValid">—</strong></div><div class="import-metric"><span>Warnings</span><strong id="previewWarnings">—</strong></div><div class="import-metric"><span>Errors</span><strong id="previewErrors">—</strong></div></div><div class="preview-eligibility" id="previewEligibility"></div><div class="issues-section" id="issuesSection" hidden><div class="issues-heading"><strong>Validation issues</strong><span id="issuesCount"></span></div><div class="table-wrap"><table><thead><tr><th>SEVERITY</th><th>ENTITY</th><th>SHEET / ROW</th><th>DETAIL</th></tr></thead><tbody id="issuesBody"></tbody></table></div><p id="issuesTruncated" hidden>Additional issues are not displayed.</p></div>
 <div class="confirmation-area"><label id="warningAckWrap" hidden><input type="checkbox" id="acceptWarnings"> I have reviewed and acknowledge the warnings.</label><div class="confirmation-actions"><span id="confirmationHint">Review validation result.</span><button class="primary-button" id="confirmImportButton" type="button" disabled>Confirm import</button></div></div></div>

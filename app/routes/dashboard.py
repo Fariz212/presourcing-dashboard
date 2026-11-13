@@ -350,6 +350,32 @@ ALLOWED_SUBTYPES = {
     "Kontrak Baru",
 }
 
+def _waiting_role_case_sql(column):
+    """Map a free-text Waiting For value to one exclusive approval role.
+
+    The column name is supplied only by internal code, never by request input.
+    Role precedence prevents compound labels from being counted in multiple
+    LP lanes.
+    """
+    value = f"lower(trim(COALESCE({column}, '')))"
+    return f"""
+        CASE
+            WHEN {value} LIKE '%junior manager%'
+              OR {value} LIKE '%jm vendor%'
+                THEN 'junior_manager'
+            WHEN {value} LIKE '%senior manager%'
+                THEN 'senior_manager'
+            WHEN {value} LIKE '%general manager%'
+              OR {value} LIKE '%gm scm%'
+                THEN 'general_manager'
+            WHEN {value} LIKE '%director%'
+              OR {value} LIKE '%direktur%'
+                THEN 'director'
+            ELSE 'unassigned_or_other'
+        END
+    """
+
+
 ALLOWED_STAGES = {
     "REQUEST_RECEIVED",
     "DISPATCH",
@@ -460,6 +486,17 @@ def khs_register():
             "message": "Unsupported workflow stage filter.",
         }), 400
 
+    waiting_role = request.args.get("waiting_role", "").strip().lower()
+    allowed_waiting_roles = {
+        "junior_manager", "senior_manager", "general_manager", "director"
+    }
+    if waiting_role and waiting_role not in allowed_waiting_roles:
+        return jsonify({
+            "success": False,
+            "code": "INVALID_WAITING_ROLE",
+            "message": "Unsupported LP approval role filter.",
+        }), 400
+
     waiting_for = request.args.get("waiting_for", "").strip()
     if len(waiting_for) > 100:
         return jsonify({
@@ -501,13 +538,30 @@ def khs_register():
         filters.append("register.current_stage_code = %s")
         params.append(stage)
 
+    if waiting_role:
+        filters.append(
+            "(register.lp_circulation_start_date IS NOT NULL "
+            "AND register.lp_completion_date IS NULL "
+            "AND " + _waiting_role_case_sql("register.waiting_for") + " = %s)"
+        )
+        params.append(waiting_role)
+
     if waiting_for:
         filters.append("register.waiting_for = %s")
         params.append(waiting_for)
 
     attention = request.args.get("attention", "").strip().lower() in {"1", "true", "yes"}
     if attention:
-        filters.append("(register.waiting_for IS NOT NULL OR register.lp_started_without_mi_gm_approval IS TRUE)")
+        filters.append("""
+            (
+                register.workflow_status <> 'completed'
+                AND (
+                    NULLIF(BTRIM(COALESCE(register.waiting_for, '')), '') IS NOT NULL
+                    OR NULLIF(BTRIM(COALESCE(register.waiting_reason, '')), '') IS NOT NULL
+                    OR register.lp_started_without_mi_gm_approval IS TRUE
+                )
+            )
+        """)
 
     where_sql = (
         "WHERE " + " AND ".join(filters)
@@ -581,6 +635,7 @@ def khs_register():
             "subtype": subtype or None,
             "stage": stage or None,
             "waiting_for": waiting_for or None,
+            "waiting_role": waiting_role or None,
         },
     }), 200
 
@@ -1167,6 +1222,119 @@ def workflow_monitoring():
     except Exception:
         current_app.logger.exception("Workflow summary query failed.")
         return jsonify(success=False, message="Workflow data unavailable."), 503
+
+
+WORKFLOW_OVERVIEW_QUERY = f"""
+WITH active_lp AS (
+    SELECT {_waiting_role_case_sql("waiting_for")} AS approval_role
+    FROM khs_items
+    WHERE lp_circulation_start_date IS NOT NULL
+      AND lp_completion_date IS NULL
+),
+mi_queue AS (
+    SELECT
+        COUNT(*) FILTER (
+            WHERE final_negotiation_date IS NOT NULL
+              AND mi_head_approval_date IS NULL
+              AND mi_sm_approval_date IS NULL
+              AND mi_gm_approval_date IS NULL
+        )::int AS junior_manager,
+        COUNT(*) FILTER (
+            WHERE mi_head_approval_date IS NOT NULL
+              AND mi_sm_approval_date IS NULL
+              AND mi_gm_approval_date IS NULL
+        )::int AS senior_manager,
+        COUNT(*) FILTER (
+            WHERE mi_sm_approval_date IS NOT NULL
+              AND mi_gm_approval_date IS NULL
+        )::int AS general_manager
+    FROM khs_items
+),
+lp_queue AS (
+    SELECT
+        COUNT(*) FILTER (WHERE approval_role = 'junior_manager')::int AS junior_manager,
+        COUNT(*) FILTER (WHERE approval_role = 'senior_manager')::int AS senior_manager,
+        COUNT(*) FILTER (WHERE approval_role = 'general_manager')::int AS general_manager,
+        COUNT(*) FILTER (WHERE approval_role = 'director')::int AS director,
+        COUNT(*) FILTER (WHERE approval_role = 'unassigned_or_other')::int AS unassigned_or_other,
+        COUNT(*)::int AS active_total
+    FROM active_lp
+)
+SELECT
+    mi_queue.junior_manager,
+    mi_queue.senior_manager,
+    mi_queue.general_manager,
+    lp_queue.junior_manager,
+    lp_queue.senior_manager,
+    lp_queue.general_manager,
+    lp_queue.director,
+    lp_queue.unassigned_or_other,
+    lp_queue.active_total
+FROM mi_queue
+CROSS JOIN lp_queue;
+"""
+
+
+@dashboard_bp.get("/workflow/overview")
+def workflow_overview():
+    """Return role-level approval queues for the executive overview.
+
+    MI queues are derived from the sequential MI approval date fields.
+    LP queues use the current Waiting For value on active LP records. Any
+    active LP record without a recognized role is retained in the
+    unassigned_or_other bucket so the displayed totals remain reconcilable.
+    """
+    try:
+        with get_db_pool().connection() as conn:
+            row = conn.execute(WORKFLOW_OVERVIEW_QUERY).fetchone()
+
+        if row is None:
+            raise RuntimeError("Workflow overview query returned no row.")
+
+        (
+            mi_junior,
+            mi_senior,
+            mi_general,
+            lp_junior,
+            lp_senior,
+            lp_general,
+            lp_director,
+            lp_unassigned,
+            lp_active,
+        ) = row
+
+        mi = [
+            {"key": "junior_manager", "label": "Junior Manager", "count": mi_junior, "stage_code": "MI_HEAD_APPROVAL"},
+            {"key": "senior_manager", "label": "Senior Manager", "count": mi_senior, "stage_code": "MI_SM_APPROVAL"},
+            {"key": "general_manager", "label": "General Manager", "count": mi_general, "stage_code": "MI_GM_APPROVAL"},
+        ]
+        lp = [
+            {"key": "junior_manager", "label": "Junior Manager", "count": lp_junior},
+            {"key": "senior_manager", "label": "Senior Manager", "count": lp_senior},
+            {"key": "general_manager", "label": "General Manager", "count": lp_general},
+            {"key": "director", "label": "Director", "count": lp_director},
+        ]
+
+        return jsonify(
+            success=True,
+            data={
+                "memo_internal": mi,
+                "lp": lp,
+                "lp_active_total": lp_active,
+                "lp_unassigned_or_other": lp_unassigned,
+                "lp_count_basis": (
+                    "LP role counts use the Waiting For value on active LP records "
+                    "(LP circulation started, not yet completed)."
+                ),
+            },
+        ), 200
+    except Exception:
+        current_app.logger.exception("Workflow overview query failed.")
+        return jsonify(
+            success=False,
+            code="WORKFLOW_OVERVIEW_UNAVAILABLE",
+            message="Approval workflow overview is temporarily unavailable.",
+        ), 503
 
 
 @dashboard_bp.get("/activity")
