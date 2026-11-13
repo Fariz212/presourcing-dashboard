@@ -27,6 +27,7 @@ def test_root_serves_dashboard_and_static_assets(monkeypatch, tmp_path):
     assert response.content_type.startswith("text/html")
     assert b"KHS Creation Overview" in response.data
     assert b"dashboard.css" in response.data
+    assert b"dashboard-premium.css" in response.data
     assert b"dashboard.js" in response.data
 
     # API clients must retain the legacy JSON root response.
@@ -46,10 +47,16 @@ def test_root_serves_dashboard_and_static_assets(monkeypatch, tmp_path):
     assert css.status_code == 200
     assert b".kpi-grid" in css.data
 
+    premium_css = client.get("/static/css/dashboard-premium.css")
+    assert premium_css.status_code == 200
+    assert b".import-guide" in premium_css.data
+    assert b".nav-icon" in premium_css.data
+
     javascript = client.get("/static/js/dashboard.js")
     assert javascript.status_code == 200
     assert b"/api/dashboard/summary" in javascript.data
     assert b"/api/dashboard/khs" in javascript.data
+    assert b"bindImportDropzone" in javascript.data
 
 def test_dashboard_contains_separate_operational_modules(monkeypatch, tmp_path):
     monkeypatch.setattr(
