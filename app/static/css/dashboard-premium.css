@@ -666,3 +666,15 @@ tbody tr:hover { background: #f8fbff; }
     transition-duration: .01ms !important;
   }
 }
+
+
+/* Direct-manipulation affordance for workbook uploads */
+.upload-card.is-dragover {
+  border-color: #4f9d8a;
+  border-style: solid;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(87,183,157,.16), transparent 18rem),
+    linear-gradient(120deg,#f4fcf9,#eef8f5);
+  box-shadow: 0 0 0 4px rgba(21,155,134,.08);
+}
+.drop-hint { display: inline; color: #4b8c7c; font-weight: 700; }
