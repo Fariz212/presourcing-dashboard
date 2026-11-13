@@ -1169,6 +1169,133 @@ def workflow_monitoring():
         return jsonify(success=False, message="Workflow data unavailable."), 503
 
 
+WORKFLOW_OVERVIEW_QUERY = """
+SELECT
+    COUNT(*) FILTER (
+        WHERE final_negotiation_date IS NOT NULL
+          AND mi_head_approval_date IS NULL
+    )::int AS mi_junior_manager,
+    COUNT(*) FILTER (
+        WHERE mi_head_approval_date IS NOT NULL
+          AND mi_sm_approval_date IS NULL
+    )::int AS mi_senior_manager,
+    COUNT(*) FILTER (
+        WHERE mi_sm_approval_date IS NOT NULL
+          AND mi_gm_approval_date IS NULL
+    )::int AS mi_general_manager,
+
+    COUNT(*) FILTER (
+        WHERE lp_circulation_start_date IS NOT NULL
+          AND lp_completion_date IS NULL
+          AND (
+              lower(trim(COALESCE(waiting_for, ''))) LIKE '%junior manager%'
+              OR lower(trim(COALESCE(waiting_for, ''))) LIKE '%jm vendor%'
+          )
+    )::int AS lp_junior_manager,
+    COUNT(*) FILTER (
+        WHERE lp_circulation_start_date IS NOT NULL
+          AND lp_completion_date IS NULL
+          AND lower(trim(COALESCE(waiting_for, ''))) LIKE '%senior manager%'
+    )::int AS lp_senior_manager,
+    COUNT(*) FILTER (
+        WHERE lp_circulation_start_date IS NOT NULL
+          AND lp_completion_date IS NULL
+          AND (
+              lower(trim(COALESCE(waiting_for, ''))) LIKE '%general manager%'
+              OR lower(trim(COALESCE(waiting_for, ''))) LIKE '%gm scm%'
+          )
+    )::int AS lp_general_manager,
+    COUNT(*) FILTER (
+        WHERE lp_circulation_start_date IS NOT NULL
+          AND lp_completion_date IS NULL
+          AND (
+              lower(trim(COALESCE(waiting_for, ''))) LIKE '%director%'
+              OR lower(trim(COALESCE(waiting_for, ''))) LIKE '%direktur%'
+          )
+    )::int AS lp_director,
+    COUNT(*) FILTER (
+        WHERE lp_circulation_start_date IS NOT NULL
+          AND lp_completion_date IS NULL
+          AND NOT (
+              lower(trim(COALESCE(waiting_for, ''))) LIKE '%junior manager%'
+              OR lower(trim(COALESCE(waiting_for, ''))) LIKE '%jm vendor%'
+              OR lower(trim(COALESCE(waiting_for, ''))) LIKE '%senior manager%'
+              OR lower(trim(COALESCE(waiting_for, ''))) LIKE '%general manager%'
+              OR lower(trim(COALESCE(waiting_for, ''))) LIKE '%gm scm%'
+              OR lower(trim(COALESCE(waiting_for, ''))) LIKE '%director%'
+              OR lower(trim(COALESCE(waiting_for, ''))) LIKE '%direktur%'
+          )
+    )::int AS lp_unassigned_or_other,
+    COUNT(*) FILTER (
+        WHERE lp_circulation_start_date IS NOT NULL
+          AND lp_completion_date IS NULL
+    )::int AS lp_active_total
+FROM khs_items;
+"""
+
+
+@dashboard_bp.get("/workflow/overview")
+def workflow_overview():
+    """Return role-level approval queues for the executive overview.
+
+    MI queues are derived from the sequential MI approval date fields.
+    LP queues use the current Waiting For value on active LP records. Any
+    active LP record without a recognized role is retained in the
+    unassigned_or_other bucket so the displayed totals remain reconcilable.
+    """
+    try:
+        with get_db_pool().connection() as conn:
+            row = conn.execute(WORKFLOW_OVERVIEW_QUERY).fetchone()
+
+        if row is None:
+            raise RuntimeError("Workflow overview query returned no row.")
+
+        (
+            mi_junior,
+            mi_senior,
+            mi_general,
+            lp_junior,
+            lp_senior,
+            lp_general,
+            lp_director,
+            lp_unassigned,
+            lp_active,
+        ) = row
+
+        mi = [
+            {"key": "junior_manager", "label": "Junior Manager", "count": mi_junior, "stage_code": "MI_HEAD_APPROVAL"},
+            {"key": "senior_manager", "label": "Senior Manager", "count": mi_senior, "stage_code": "MI_SM_APPROVAL"},
+            {"key": "general_manager", "label": "General Manager", "count": mi_general, "stage_code": "MI_GM_APPROVAL"},
+        ]
+        lp = [
+            {"key": "junior_manager", "label": "Junior Manager", "count": lp_junior},
+            {"key": "senior_manager", "label": "Senior Manager", "count": lp_senior},
+            {"key": "general_manager", "label": "General Manager", "count": lp_general},
+            {"key": "director", "label": "Director", "count": lp_director},
+        ]
+
+        return jsonify(
+            success=True,
+            data={
+                "memo_internal": mi,
+                "lp": lp,
+                "lp_active_total": lp_active,
+                "lp_unassigned_or_other": lp_unassigned,
+                "lp_count_basis": (
+                    "LP role counts use the Waiting For value on active LP records "
+                    "(LP circulation started, not yet completed)."
+                ),
+            },
+        ), 200
+    except Exception:
+        current_app.logger.exception("Workflow overview query failed.")
+        return jsonify(
+            success=False,
+            code="WORKFLOW_OVERVIEW_UNAVAILABLE",
+            message="Approval workflow overview is temporarily unavailable.",
+        ), 503
+
+
 @dashboard_bp.get("/activity")
 def activity_log():
     try:
