@@ -208,9 +208,12 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 
 /* Page titles and actions */
 .page-heading {
-  align-items: center;
+  align-items: flex-start;
   gap: 24px;
-  padding: 36px 0 24px;
+  padding: 32px 0 24px;
+}
+.page-heading > :first-child {
+  min-width: 0;
 }
 .eyebrow {
   display: inline-flex;
@@ -338,7 +341,8 @@ table { border-collapse: separate; border-spacing: 0; white-space: nowrap; }
 thead { background: #f7f9fc; }
 th {
   position: sticky;
-  top: 73px;
+  top: 74px;
+  z-index: 2;
   height: 43px;
   padding: 0 14px;
   border-bottom: 1px solid #e9edf3;
@@ -347,6 +351,7 @@ th {
   font-size: 9px;
   font-weight: 800;
   letter-spacing: .075em;
+  vertical-align: middle;
 }
 th:first-child { border-top-left-radius: 10px; }
 th:last-child { border-top-right-radius: 10px; }
