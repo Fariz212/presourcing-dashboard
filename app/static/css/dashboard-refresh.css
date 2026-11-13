@@ -1309,3 +1309,40 @@ input:focus, select:focus, textarea:focus {
   .contract-watch-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .queue-steps-four { grid-template-columns: repeat(2,minmax(0,1fr)); }
 }
+
+
+/* Breakpoint ownership is explicit after the v2 desktop layout reset. */
+@media (max-width: 1180px) {
+  .app-shell { grid-template-columns: 232px minmax(0,1fr); }
+  .sidebar { width: 232px; max-width: 232px; }
+}
+@media (max-width: 900px) {
+  .app-shell { grid-template-columns: 205px minmax(0,1fr); }
+  .sidebar { width: 205px; max-width: 205px; }
+}
+@media (max-width: 680px) {
+  .app-shell { display: block; grid-template-columns: 1fr; }
+  .sidebar {
+    position: relative;
+    top: auto;
+    align-self: stretch;
+    width: 100%;
+    max-width: none;
+    height: auto;
+    max-height: none;
+    overflow: visible;
+    padding: 12px 14px 10px;
+  }
+  .brand { min-height: 39px; margin: 0 4px 12px; }
+  .sidebar-caption, .sidebar-bottom { display: none; }
+  .side-nav {
+    display: flex;
+    gap: 5px;
+    overflow-x: auto;
+    margin-top: 4px;
+    padding: 2px 0 5px;
+    scrollbar-width: thin;
+  }
+  .nav-link { flex: 0 0 auto; min-height: 36px; padding: 7px 9px; white-space: nowrap; }
+  .main-content { grid-column: auto; }
+}
