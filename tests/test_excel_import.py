@@ -24,7 +24,7 @@ REQUEST_HEADERS = [
 ]
 
 
-def build_workbook(item_overrides=None, extra_items=None, legacy_v22=False):
+def build_workbook(item_overrides=None, extra_items=None, legacy_v22=False, legacy_v23=False):
     wb = Workbook()
 
     request_ws = wb.active
@@ -52,7 +52,7 @@ def build_workbook(item_overrides=None, extra_items=None, legacy_v22=False):
         khs_ws.append([])
 
     headers = list(KHS_HEADERS)
-    if legacy_v22:
+    if legacy_v22 or legacy_v23:
         legacy_only_headers = {
             "LP Contract Team Completion Date",
             "LP Junior Manager Approval Date",
@@ -60,6 +60,8 @@ def build_workbook(item_overrides=None, extra_items=None, legacy_v22=False):
             "LP GM SCM Approval Date",
         }
         headers = [header for header in headers if header not in legacy_only_headers]
+    if legacy_v23:
+        headers.extend(["KHS Inject Start Date", "KHS Inject Completion Date"])
     khs_ws.append(headers)
 
     item = {
@@ -137,6 +139,16 @@ def test_legacy_v22_workbook_remains_supported():
     )
     assert result["summary"]["can_import"] is True
     assert result["template_version"] == "2.2-compatible"
+
+
+def test_legacy_v23_workbook_remains_supported():
+    result = parse_khs_workbook(
+        build_workbook(legacy_v23=True),
+        known_executors={"ALW", "AME"},
+        known_requests={},
+    )
+    assert result["summary"]["can_import"] is True
+    assert result["template_version"] == "2.3"
 
 
 def test_current_v24_workbook_round_trips_lp_and_khs_inject_dates():
