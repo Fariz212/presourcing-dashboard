@@ -66,6 +66,8 @@ def test_root_serves_dashboard_and_static_assets(monkeypatch, tmp_path):
     assert b"lp_junior_manager_approval_date" in javascript.data
     assert b"lp_senior_manager_approval_date" in javascript.data
     assert b"lp_gm_scm_approval_date" in javascript.data
+    assert b"lp_circulation_start_date" in javascript.data
+    assert b"lp_completion_date" in javascript.data
 
 def test_dashboard_contains_separate_operational_modules(monkeypatch, tmp_path):
     monkeypatch.setattr(
@@ -99,12 +101,6 @@ def test_dashboard_contains_separate_operational_modules(monkeypatch, tmp_path):
     assert "Contract Lifecycle Watch" in body
     assert 'id="page-lp"' in body
     assert 'id="page-contracts"' in body
-    assert "LP Circulation Start Date" in body
-    assert "LP Contract Team Completion Date" in body
-    assert "LP Junior Manager Approval Date" in body
-    assert "LP Senior Manager Approval Date" in body
-    assert "LP GM SCM Approval Date" in body
-    assert "LP Completion Date" in body
     assert "Approval Pipeline" in body
     assert "Memo Internal" in body
     assert "LP Circulation" in body
