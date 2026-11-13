@@ -617,6 +617,56 @@ async function uploadEvidence(event) {
   }
 }
 
+function syncImportFile(file) {
+  if (!file) {
+    set("importFileName", "No file selected");
+    $("previewImportButton").disabled = true;
+    return false;
+  }
+  if (!/\.xlsx$/i.test(file.name || "")) {
+    toast("Please choose an Excel workbook in .xlsx format.");
+    return false;
+  }
+  set("importFileName", file.name);
+  $("previewImportButton").disabled = false;
+  $("importPreview").hidden = true;
+  $("importFeedback").hidden = true;
+  return true;
+}
+
+function bindImportDropzone() {
+  const zone = document.querySelector(".upload-card");
+  const input = $("importFile");
+  if (!zone || !input) return;
+
+  zone.addEventListener("dragover", (event) => {
+    event.preventDefault();
+    zone.classList.add("is-dragover");
+  });
+  ["dragleave", "dragend"].forEach((name) => zone.addEventListener(name, (event) => {
+    if (name === "dragleave" && zone.contains(event.relatedTarget)) return;
+    zone.classList.remove("is-dragover");
+  }));
+  zone.addEventListener("drop", (event) => {
+    event.preventDefault();
+    zone.classList.remove("is-dragover");
+    const file = event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0];
+    if (!file) return;
+    if (!/\.xlsx$/i.test(file.name || "")) {
+      toast("Only .xlsx Excel workbooks can be uploaded.");
+      return;
+    }
+    try {
+      const transfer = new DataTransfer();
+      transfer.items.add(file);
+      input.files = transfer.files;
+      syncImportFile(file);
+    } catch (_) {
+      toast("Use Choose file to select this workbook in your browser.");
+    }
+  });
+}
+
 function bind() {
   document.querySelectorAll(".nav-link[data-page]").forEach((el) => {
     el.addEventListener("click", (event) => { event.preventDefault(); go(el.dataset.page); });
@@ -672,11 +722,10 @@ function bind() {
   $("activityNext").addEventListener("click", () => { state.activityPage++; loadActivity().catch((e) => toast(e.message)); });
   $("importFile").addEventListener("change", () => {
     const file = $("importFile").files[0];
-    set("importFileName", file ? file.name : "No file selected");
-    $("previewImportButton").disabled = !file;
-    $("importPreview").hidden = true;
-    $("importFeedback").hidden = true;
+    if (file && !syncImportFile(file)) $("importFile").value = "";
+    else if (!file) syncImportFile(null);
   });
+  bindImportDropzone();
   $("previewImportButton").addEventListener("click", previewWorkbook);
   $("confirmImportButton").addEventListener("click", confirmImport);
   $("acceptWarnings").addEventListener("change", () => {
