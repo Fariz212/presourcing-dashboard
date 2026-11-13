@@ -61,6 +61,11 @@ def test_root_serves_dashboard_and_static_assets(monkeypatch, tmp_path):
     assert b"/api/dashboard/lp-circulation" in javascript.data
     assert b"/api/dashboard/contracts/lifecycle" in javascript.data
     assert b"renderLPTimeline" in javascript.data
+    assert b"renderContractDetail" in javascript.data
+    assert b"lp_contract_team_completion_date" in javascript.data
+    assert b"lp_junior_manager_approval_date" in javascript.data
+    assert b"lp_senior_manager_approval_date" in javascript.data
+    assert b"lp_gm_scm_approval_date" in javascript.data
 
 def test_dashboard_contains_separate_operational_modules(monkeypatch, tmp_path):
     monkeypatch.setattr(
@@ -92,6 +97,14 @@ def test_dashboard_contains_separate_operational_modules(monkeypatch, tmp_path):
     assert "Contract Lifecycle" in body
     assert "Approval Timeline" in body
     assert "Contract Lifecycle Watch" in body
+    assert 'id="page-lp"' in body
+    assert 'id="page-contracts"' in body
+    assert "LP Circulation Start Date" in body
+    assert "LP Contract Team Completion Date" in body
+    assert "LP Junior Manager Approval Date" in body
+    assert "LP Senior Manager Approval Date" in body
+    assert "LP GM SCM Approval Date" in body
+    assert "LP Completion Date" in body
     assert "Approval Pipeline" in body
     assert "Memo Internal" in body
     assert "LP Circulation" in body
@@ -148,3 +161,6 @@ def test_request_vendor_portfolio_is_compact_and_expandable(monkeypatch, tmp_pat
     assert b".lp-timeline-item.current" in css.data
     assert b".contract-lifecycle-summary" in css.data
     assert b".contract-watch-grid" in css.data
+    assert b".lp-stage-summary" in css.data
+    assert b".lp-timeline" in css.data
+    assert b".contract-lifecycle-summary" in css.data
