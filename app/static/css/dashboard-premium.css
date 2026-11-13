@@ -996,3 +996,17 @@ tbody tr:hover { background: #f8fbff; }
 }
 #page-requests .table-wrap td:nth-child(2) { min-width: 185px; }
 #page-requests .table-wrap th:nth-child(2) { min-width: 185px; }
+
+
+/* Attention queue: preserve legibility for longer next-action notes */
+.attention-panel td:nth-child(4) {
+  min-width: 210px;
+  max-width: 290px;
+  white-space: normal;
+}
+.attention-panel td:nth-child(4) .cell-secondary {
+  max-width: 270px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+}
