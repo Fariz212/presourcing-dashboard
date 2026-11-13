@@ -430,9 +430,9 @@ def test_workflow_overview_returns_role_level_mi_and_lp_queues(make_client):
     assert "WITH active_lp AS" in query
     assert "COUNT(*)::int AS active_total" in query
     # Ordered CASE branches ensure one free-text assignment maps to one LP lane.
-    assert query.index("LIKE '%junior manager%'") < query.index("LIKE '%senior manager%'")
-    assert query.index("LIKE '%senior manager%'") < query.index("LIKE '%general manager%'")
-    assert query.index("LIKE '%general manager%'") < query.index("LIKE '%director%'")
+    assert query.index("POSITION('junior manager'") < query.index("POSITION('senior manager'")
+    assert query.index("POSITION('senior manager'") < query.index("POSITION('general manager'")
+    assert query.index("POSITION('general manager'") < query.index("POSITION('director'")
 
 
 def test_workflow_overview_returns_service_unavailable_on_db_error(make_client):
@@ -457,7 +457,11 @@ def test_khs_register_filters_lp_queue_by_waiting_role(make_client):
         assert "register.lp_circulation_start_date IS NOT NULL" in query
         assert "register.lp_completion_date IS NULL" in query
         assert "CASE" in query
-        assert "lower(trim(COALESCE(register.waiting_for, ''))) LIKE '%director%'" in query
+        assert "POSITION('director' IN lower(trim(COALESCE(register.waiting_for, '')))) > 0" in query
+        # Literal percent characters break psycopg's placeholder parsing when
+        # the statement also includes %s parameters. The role classifier uses
+        # POSITION instead, leaving placeholders unambiguous.
+        assert "%" not in query
     assert pool.queries[0][1] == ["director"]
     assert pool.queries[1][1][-3:] == ["director", 25, 0]
 
