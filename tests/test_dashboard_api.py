@@ -431,3 +431,27 @@ def test_workflow_overview_returns_service_unavailable_on_db_error(make_client):
 
     assert response.status_code == 503
     assert response.get_json()["code"] == "WORKFLOW_OVERVIEW_UNAVAILABLE"
+
+
+
+def test_khs_register_filters_lp_queue_by_waiting_role(make_client):
+    pool = RegisterFakePool(rows=[], total=2)
+
+    response = make_client(pool).get("/api/dashboard/khs?waiting_role=director")
+
+    assert response.status_code == 200
+    count_query, _ = pool.queries[0]
+    data_query, _ = pool.queries[1]
+    for query in (count_query, data_query):
+        assert "register.lp_circulation_start_date IS NOT NULL" in query
+        assert "register.lp_completion_date IS NULL" in query
+        assert "lower(trim(COALESCE(register.waiting_for, ''))) LIKE '%director%'" in query
+
+
+def test_khs_register_rejects_unknown_waiting_role_without_query(make_client):
+    pool = RegisterFakePool()
+    response = make_client(pool).get("/api/dashboard/khs?waiting_role=vice_president")
+
+    assert response.status_code == 400
+    assert response.get_json()["code"] == "INVALID_WAITING_ROLE"
+    assert pool.queries == []
