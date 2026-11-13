@@ -873,6 +873,244 @@ def khs_register():
     }), 200
 
 
+@dashboard_bp.get("/lp-circulation")
+def lp_circulation_register():
+    """Return all KHS records with an LP milestone, including legacy partial histories."""
+    try:
+        page = _register_positive_int("page", 1)
+        per_page = _register_positive_int("per_page", 25, maximum=100)
+    except ValueError as exc:
+        return jsonify(success=False, code="INVALID_PAGINATION", message=str(exc)), 400
+
+    search = request.args.get("q", "").strip()
+    if len(search) > 100:
+        return jsonify(success=False, code="INVALID_SEARCH", message="Search query must not exceed 100 characters."), 400
+
+    stage = request.args.get("stage", "").strip().lower()
+    if stage and stage not in LP_STAGE_FILTERS:
+        return jsonify(success=False, code="INVALID_LP_STAGE", message="Unsupported LP circulation stage."), 400
+
+    lp_record_condition = """
+        (
+            register.lp_circulation_start_date IS NOT NULL
+            OR register.lp_contract_team_completion_date IS NOT NULL
+            OR register.lp_junior_manager_approval_date IS NOT NULL
+            OR register.lp_senior_manager_approval_date IS NOT NULL
+            OR register.lp_gm_scm_approval_date IS NOT NULL
+            OR register.lp_completion_date IS NOT NULL
+        )
+    """
+    filters = [lp_record_condition]
+    params = []
+    if stage:
+        filters.append("register.lp_stage_key = %s")
+        params.append(stage)
+    if search:
+        filters.append("""
+            (
+                register.khs_id ILIKE %s
+                OR register.request_id ILIKE %s
+                OR register.vendor_name ILIKE %s
+                OR COALESCE(register.request_subject, '') ILIKE %s
+            )
+        """)
+        params.extend([f"%{search}%"] * 4)
+
+    where_sql = "WHERE " + " AND ".join(filters)
+    offset = (page - 1) * per_page
+
+    count_query = f"""
+        SELECT COUNT(*) AS total
+        FROM ({REGISTER_BASE_QUERY}) AS register
+        {where_sql}
+    """
+    data_query = f"""
+        SELECT *
+        FROM ({REGISTER_BASE_QUERY}) AS register
+        {where_sql}
+        ORDER BY
+            CASE register.lp_stage_key
+                WHEN 'legacy_incomplete' THEN 0
+                WHEN 'contract_team' THEN 1
+                WHEN 'junior_manager' THEN 2
+                WHEN 'senior_manager' THEN 3
+                WHEN 'general_manager' THEN 4
+                WHEN 'director' THEN 5
+                WHEN 'completed' THEN 6
+                ELSE 7
+            END,
+            register.lp_circulation_start_date ASC NULLS FIRST,
+            register.khs_id
+        LIMIT %s OFFSET %s
+    """
+    summary_query = f"""
+        SELECT register.lp_stage_key, COUNT(*)::int AS total
+        FROM ({REGISTER_BASE_QUERY}) AS register
+        WHERE {lp_record_condition}
+        GROUP BY register.lp_stage_key
+    """
+
+    try:
+        with get_db_pool().connection() as conn:
+            with conn.cursor(row_factory=dict_row) as cursor:
+                cursor.execute(count_query, params)
+                total = cursor.fetchone()["total"]
+                cursor.execute(data_query, [*params, per_page, offset])
+                rows = cursor.fetchall()
+                cursor.execute(summary_query)
+                summary_rows = cursor.fetchall()
+
+        stage_counts = {key: 0 for key in LP_STAGE_FILTERS}
+        for row in summary_rows:
+            stage_counts[row["lp_stage_key"]] = row["total"]
+        legacy_count = sum(
+            1 for row in rows if _lp_timeline_summary(row)["lp_timeline_has_gaps"]
+        )
+        total_pages = (total + per_page - 1) // per_page if total else 0
+        return jsonify(
+            success=True,
+            data=[_register_enriched(row) for row in rows],
+            summary={
+                "total_lp_records": total,
+                "by_stage": stage_counts,
+                "legacy_incomplete_on_page": legacy_count,
+            },
+            pagination={
+                "page": page,
+                "per_page": per_page,
+                "total_records": total,
+                "total_pages": total_pages,
+                "has_previous": page > 1,
+                "has_next": page < total_pages,
+            },
+        ), 200
+    except Exception:
+        current_app.logger.exception("LP circulation register query failed.")
+        return jsonify(
+            success=False,
+            code="LP_CIRCULATION_UNAVAILABLE",
+            message="LP circulation data is temporarily unavailable.",
+        ), 503
+
+
+@dashboard_bp.get("/contracts/lifecycle")
+def contract_lifecycle_register():
+    """Monitor expiry only after a KHS has been fully injected."""
+    try:
+        page = _register_positive_int("page", 1)
+        per_page = _register_positive_int("per_page", 25, maximum=100)
+    except ValueError as exc:
+        return jsonify(success=False, code="INVALID_PAGINATION", message=str(exc)), 400
+
+    search = request.args.get("q", "").strip()
+    if len(search) > 100:
+        return jsonify(success=False, code="INVALID_SEARCH", message="Search query must not exceed 100 characters."), 400
+
+    status = request.args.get("status", "").strip().lower()
+    allowed_statuses = set(CONTRACT_ALERT_LABELS) - {"not_fully_injected"}
+    if status and status not in allowed_statuses:
+        return jsonify(success=False, code="INVALID_CONTRACT_ALERT", message="Unsupported contract alert filter."), 400
+
+    today = _jakarta_today()
+    try:
+        with get_db_pool().connection() as conn:
+            with conn.cursor(row_factory=dict_row) as cursor:
+                cursor.execute(
+                    """
+                    SELECT
+                        k.khs_id,
+                        k.request_id,
+                        r.request_subject,
+                        k.vendor_name,
+                        k.executor_code,
+                        e.display_name AS executor_name,
+                        k.contract_start_date,
+                        k.contract_end_date,
+                        k.khs_inject_completion_date
+                    FROM khs_items k
+                    JOIN khs_requests r ON r.request_id = k.request_id
+                    LEFT JOIN khs_executors e ON e.executor_code = k.executor_code
+                    WHERE k.khs_inject_completion_date IS NOT NULL
+                    ORDER BY k.contract_end_date ASC NULLS FIRST, k.khs_id
+                    """
+                )
+                source_rows = cursor.fetchall()
+
+        records = []
+        for row in source_rows:
+            record = _row_dict(row)
+            record.update(_contract_lifecycle_data(row, today))
+            records.append(record)
+
+        counts = {
+            key: sum(1 for row in records if row["contract_lifecycle_status"] == key)
+            for key in allowed_statuses
+        }
+        expiring_6m = {"prep_6m", "watch_3m", "urgent_1m", "urgent_14d", "critical_7d"}
+        expiring_3m = {"watch_3m", "urgent_1m", "urgent_14d", "critical_7d"}
+        expiring_1m = {"urgent_1m", "urgent_14d", "critical_7d"}
+        summary = {
+            "as_of_date": today.isoformat(),
+            "total_fully_injected": len(records),
+            "expiring_within_6_months": sum(counts[key] for key in expiring_6m),
+            "expiring_within_3_months": sum(counts[key] for key in expiring_3m),
+            "expiring_within_1_month": sum(counts[key] for key in expiring_1m),
+            "urgent_within_14_days": counts["urgent_14d"] + counts["critical_7d"],
+            "critical_within_7_days": counts["critical_7d"],
+            "expired": counts["expired"],
+            "missing_contract_dates": counts["missing_dates"] + counts["invalid_dates"],
+            "active_over_6_months": counts["active"],
+            "by_status": counts,
+        }
+
+        filtered = records
+        if status:
+            filtered = [row for row in filtered if row["contract_lifecycle_status"] == status]
+        if search:
+            needle = search.casefold()
+            filtered = [
+                row for row in filtered
+                if needle in str(row.get("khs_id") or "").casefold()
+                or needle in str(row.get("request_id") or "").casefold()
+                or needle in str(row.get("request_subject") or "").casefold()
+                or needle in str(row.get("vendor_name") or "").casefold()
+            ]
+
+        priority = {
+            "expired": 0, "critical_7d": 1, "urgent_14d": 2, "urgent_1m": 3,
+            "watch_3m": 4, "prep_6m": 5, "missing_dates": 6,
+            "invalid_dates": 7, "active": 8,
+        }
+        filtered.sort(key=lambda row: (
+            priority.get(row["contract_lifecycle_status"], 9),
+            row.get("contract_end_date") or "9999-12-31",
+            row.get("khs_id") or "",
+        ))
+        total = len(filtered)
+        total_pages = (total + per_page - 1) // per_page if total else 0
+        start = (page - 1) * per_page
+        return jsonify(
+            success=True,
+            data=filtered[start:start + per_page],
+            summary=summary,
+            pagination={
+                "page": page,
+                "per_page": per_page,
+                "total_records": total,
+                "total_pages": total_pages,
+                "has_previous": page > 1,
+                "has_next": page < total_pages,
+            },
+        ), 200
+    except Exception:
+        current_app.logger.exception("Contract lifecycle query failed.")
+        return jsonify(
+            success=False,
+            code="CONTRACT_LIFECYCLE_UNAVAILABLE",
+            message="Contract lifecycle data is temporarily unavailable.",
+        ), 503
+
+
 # ----------------------- Operational management API -----------------------
 
 REQUEST_FIELDS = {"request_date", "request_subject", "requester_owner"}
@@ -1172,6 +1410,17 @@ def create_khs():
                 return jsonify(success=False,code="INVALID_EXECUTOR",message="Select an active executor."),422
             if data.get("lp_circulation_start_date") and not data.get("mi_gm_approval_date"):
                 return jsonify(success=False,code="MI_GM_REQUIRED",message="LP circulation cannot start before GM SCM MI approval."),422
+            intermediate_lp_dates = (
+                "lp_contract_team_completion_date",
+                "lp_junior_manager_approval_date",
+                "lp_senior_manager_approval_date",
+                "lp_gm_scm_approval_date",
+            )
+            if any(data.get(field) for field in intermediate_lp_dates) and not data.get("lp_circulation_start_date"):
+                return jsonify(success=False,code="LP_START_REQUIRED",message="LP milestone dates require an LP circulation start date."),422
+            out_of_order_lp_field = _lp_date_order_error(data)
+            if out_of_order_lp_field:
+                return jsonify(success=False,code="LP_MILESTONE_CHRONOLOGY",message=f"{out_of_order_lp_field} cannot precede an earlier LP milestone."),422
             if data.get("lp_completion_date") and not data.get("lp_circulation_start_date"):
                 return jsonify(success=False,code="LP_START_REQUIRED",message="LP completion requires circulation start."),422
             if data.get("lp_completion_date") and data.get("lp_circulation_start_date") and data["lp_completion_date"] < data["lp_circulation_start_date"]:
@@ -1397,6 +1646,17 @@ def update_khs(khs_id):
             gm_approval_cleared = ("mi_gm_approval_date" in data and data["mi_gm_approval_date"] is None)
             if merged.get("lp_circulation_start_date") and not merged.get("mi_gm_approval_date") and (not historic_lp_exception or lp_start_changed or gm_approval_cleared):
                 return jsonify(success=False,code="MI_GM_REQUIRED",message="LP circulation cannot start before GM SCM MI approval."),422
+            intermediate_lp_dates = (
+                "lp_contract_team_completion_date",
+                "lp_junior_manager_approval_date",
+                "lp_senior_manager_approval_date",
+                "lp_gm_scm_approval_date",
+            )
+            if any(merged.get(field) for field in intermediate_lp_dates) and not merged.get("lp_circulation_start_date"):
+                return jsonify(success=False,code="LP_START_REQUIRED",message="LP milestone dates require an LP circulation start date."),422
+            out_of_order_lp_field = _lp_date_order_error(merged)
+            if out_of_order_lp_field:
+                return jsonify(success=False,code="LP_MILESTONE_CHRONOLOGY",message=f"{out_of_order_lp_field} cannot precede an earlier LP milestone."),422
             if merged.get("lp_completion_date") and not merged.get("lp_circulation_start_date"):
                 return jsonify(success=False,code="LP_START_REQUIRED",message="LP completion requires circulation start."),422
             if merged.get("lp_completion_date") and merged.get("lp_circulation_start_date") and merged["lp_completion_date"]<merged["lp_circulation_start_date"]:
