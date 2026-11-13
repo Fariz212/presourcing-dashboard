@@ -8,6 +8,7 @@ from app.routes.dashboard import (
     _contract_lifecycle_data,
     _contract_term,
     _lp_timeline_summary,
+    _jakarta_today,
     dashboard_bp,
 )
 
@@ -134,7 +135,7 @@ def test_dashboard_summary_returns_json_when_database_fails(make_client):
 
 
 from contextlib import contextmanager
-from datetime import date
+from datetime import date, timedelta
 
 
 class RegisterFakeCursor:
@@ -480,3 +481,194 @@ def test_khs_register_rejects_unknown_waiting_role_without_query(make_client):
     assert response.status_code == 400
     assert response.get_json()["code"] == "INVALID_WAITING_ROLE"
     assert pool.queries == []
+
+
+def test_lp_timeline_derives_stage_age_and_preserves_missing_legacy_dates():
+    today = date(2026, 11, 13)
+    current = _lp_timeline_summary({
+        "lp_circulation_start_date": date(2026, 11, 3),
+        "lp_contract_team_completion_date": None,
+        "lp_junior_manager_approval_date": None,
+        "lp_senior_manager_approval_date": None,
+        "lp_gm_scm_approval_date": None,
+        "lp_completion_date": None,
+    }, today=today)
+
+    assert current["lp_stage_key"] == "contract_team"
+    assert current["lp_stage_label"] == "Tim Kontrak"
+    assert current["lp_stage_age_days"] == 10
+    assert current["lp_timeline_has_gaps"] is False
+
+    legacy = _lp_timeline_summary({
+        "lp_circulation_start_date": date(2026, 11, 1),
+        "lp_contract_team_completion_date": None,
+        "lp_junior_manager_approval_date": date(2026, 11, 8),
+        "lp_senior_manager_approval_date": None,
+        "lp_gm_scm_approval_date": None,
+        "lp_completion_date": None,
+    }, today=today)
+
+    assert legacy["lp_stage_key"] == "contract_team"
+    assert legacy["lp_stage_age_days"] == 7
+    assert legacy["lp_timeline_has_gaps"] is True
+    assert legacy["lp_timeline_gaps"] == ["lp_contract_team_completion_date"]
+    assert legacy["lp_timeline_data_status"] == "legacy_incomplete"
+
+
+def test_lp_completed_legacy_record_keeps_intermediate_gaps_visible():
+    timeline = _lp_timeline_summary({
+        "lp_circulation_start_date": date(2026, 10, 1),
+        "lp_contract_team_completion_date": None,
+        "lp_junior_manager_approval_date": date(2026, 10, 5),
+        "lp_senior_manager_approval_date": date(2026, 10, 6),
+        "lp_gm_scm_approval_date": date(2026, 10, 7),
+        "lp_completion_date": date(2026, 10, 8),
+    }, today=date(2026, 11, 13))
+
+    assert timeline["lp_stage_key"] == "completed"
+    assert timeline["lp_timeline_has_gaps"] is True
+    assert timeline["lp_timeline_gaps"] == ["lp_contract_team_completion_date"]
+    assert timeline["lp_timeline_data_status"] == "legacy_incomplete"
+
+
+def test_contract_expiry_uses_calendar_month_and_day_thresholds():
+    today = date(2026, 11, 13)
+
+    def status_for(end_date):
+        return _contract_lifecycle_data({
+            "khs_inject_completion_date": date(2026, 10, 1),
+            "contract_start_date": date(2026, 1, 1),
+            "contract_end_date": end_date,
+        }, today=today)["contract_lifecycle_status"]
+
+    from app.routes.dashboard import _add_calendar_months
+
+    assert status_for(_add_calendar_months(today, 6)) == "prep_6m"
+    assert status_for(_add_calendar_months(today, 3)) == "watch_3m"
+    assert status_for(_add_calendar_months(today, 1)) == "urgent_1m"
+    assert status_for(today + timedelta(days=14)) == "urgent_14d"
+    assert status_for(today + timedelta(days=7)) == "critical_7d"
+    assert status_for(today) == "critical_7d"
+    assert status_for(today - timedelta(days=1)) == "expired"
+
+
+def test_contract_lifecycle_requires_injection_and_complete_valid_dates():
+    today = date(2026, 11, 13)
+    not_injected = _contract_lifecycle_data({
+        "khs_inject_completion_date": None,
+        "contract_start_date": date(2025, 1, 1),
+        "contract_end_date": date(2025, 12, 31),
+    }, today=today)
+    missing_dates = _contract_lifecycle_data({
+        "khs_inject_completion_date": date(2026, 10, 1),
+        "contract_start_date": date(2025, 1, 1),
+        "contract_end_date": None,
+    }, today=today)
+    invalid_dates = _contract_lifecycle_data({
+        "khs_inject_completion_date": date(2026, 10, 1),
+        "contract_start_date": date(2026, 2, 1),
+        "contract_end_date": date(2026, 1, 31),
+    }, today=today)
+
+    assert not_injected["contract_lifecycle_status"] == "not_fully_injected"
+    assert missing_dates["contract_lifecycle_status"] == "missing_dates"
+    assert invalid_dates["contract_lifecycle_status"] == "invalid_dates"
+
+
+def test_contract_term_reports_calendar_year_and_inclusive_days():
+    days, label = _contract_term(date(2027, 1, 1), date(2027, 12, 31))
+    assert days == 365
+    assert label == "1 year"
+
+
+def test_lp_circulation_endpoint_returns_stage_counts_and_age(make_client):
+    today = _jakarta_today()
+    row = {
+        "khs_id": "KHS-2026-0012",
+        "request_id": "REQ-2026-006",
+        "request_subject": "Annual support contract",
+        "vendor_name": "PT Test Vendor",
+        "contract_start_date": None,
+        "contract_end_date": None,
+        "khs_inject_completion_date": None,
+        "lp_circulation_start_date": today - timedelta(days=10),
+        "lp_contract_team_completion_date": None,
+        "lp_junior_manager_approval_date": None,
+        "lp_senior_manager_approval_date": None,
+        "lp_gm_scm_approval_date": None,
+        "lp_completion_date": None,
+        "lp_stage_key": "contract_team",
+        "lp_status": "in_progress",
+        "workflow_status": "in_progress",
+        "current_stage_code": "LP_CIRCULATION",
+        "current_stage_name": "LP Circulation",
+        "waiting_for": "Tim Kontrak",
+        "waiting_reason": "Complete legal review",
+        "updated_at": None,
+    }
+    pool = RegisterFakePool(
+        rows=[row],
+        total=1,
+        stage_summary_rows=[{"lp_stage_key": "contract_team", "total": 1}],
+    )
+
+    response = make_client(pool).get("/api/dashboard/lp-circulation?stage=contract_team")
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["summary"]["total_lp_records"] == 1
+    assert payload["summary"]["by_stage"]["contract_team"] == 1
+    assert payload["data"][0]["lp_stage_key"] == "contract_team"
+    assert payload["data"][0]["lp_stage_age_days"] == 10
+    assert payload["data"][0]["contract_lifecycle"]["contract_lifecycle_status"] == "not_fully_injected"
+    assert len(pool.queries) == 3
+    assert pool.queries[0][1] == ["contract_team"]
+
+
+def test_contract_lifecycle_endpoint_summarizes_fully_injected_records(make_client):
+    today = _jakarta_today()
+    rows = [
+        {
+            "khs_id": "KHS-2026-0010",
+            "request_id": "REQ-2026-010",
+            "request_subject": "Critical contract",
+            "vendor_name": "PT Critical",
+            "executor_code": "ALW",
+            "executor_name": "Executor A",
+            "khs_inject_completion_date": today,
+            "contract_start_date": today - timedelta(days=300),
+            "contract_end_date": today + timedelta(days=5),
+        },
+        {
+            "khs_id": "KHS-2026-0011",
+            "request_id": "REQ-2026-011",
+            "request_subject": "Expired contract",
+            "vendor_name": "PT Expired",
+            "executor_code": "ALW",
+            "executor_name": "Executor A",
+            "khs_inject_completion_date": today,
+            "contract_start_date": today - timedelta(days=400),
+            "contract_end_date": today - timedelta(days=1),
+        },
+        {
+            "khs_id": "KHS-2026-0013",
+            "request_id": "REQ-2026-013",
+            "request_subject": "Missing dates",
+            "vendor_name": "PT Missing",
+            "executor_code": "ALW",
+            "executor_name": "Executor A",
+            "khs_inject_completion_date": today,
+            "contract_start_date": None,
+            "contract_end_date": None,
+        },
+    ]
+    response = make_client(RegisterFakePool(rows=rows)).get("/api/dashboard/contracts/lifecycle")
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["summary"]["total_fully_injected"] == 3
+    assert payload["summary"]["critical_within_7_days"] == 1
+    assert payload["summary"]["expired"] == 1
+    assert payload["summary"]["missing_contract_dates"] == 1
+    assert payload["data"][0]["contract_lifecycle_status"] == "expired"
+    assert any(item["contract_lifecycle_status"] == "missing_dates" for item in payload["data"])
