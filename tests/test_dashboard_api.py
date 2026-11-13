@@ -807,3 +807,26 @@ def test_contract_lifecycle_endpoint_summarizes_fully_injected_records(make_clie
     assert payload["summary"]["missing_contract_dates"] == 1
     assert payload["data"][0]["contract_lifecycle_status"] == "expired"
     assert any(item["contract_lifecycle_status"] == "missing_dates" for item in payload["data"])
+
+def test_contract_operational_status_distinguishes_upcoming_active_and_expired():
+    today = date(2026, 11, 13)
+
+    def lifecycle(start_date, end_date):
+        return _contract_lifecycle_data({
+            "khs_inject_completion_date": date(2026, 10, 1),
+            "contract_start_date": start_date,
+            "contract_end_date": end_date,
+        }, today=today)
+
+    upcoming = lifecycle(today + timedelta(days=30), today + timedelta(days=365))
+    active = lifecycle(today - timedelta(days=1), today + timedelta(days=365))
+    expired = lifecycle(today - timedelta(days=365), today - timedelta(days=1))
+
+    assert upcoming["contract_operational_status"] == "upcoming"
+    assert upcoming["contract_operational_status_label"] == "Upcoming"
+    assert upcoming["contract_renewal_alert_status"] == "prep_6m"
+    assert active["contract_operational_status"] == "active"
+    assert active["contract_renewal_alert_status"] == "prep_6m"
+    assert expired["contract_operational_status"] == "expired"
+    assert expired["contract_renewal_alert_status"] == "expired"
+
