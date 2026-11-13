@@ -1,5 +1,6 @@
+import calendar
 import csv
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 import hashlib
 from io import StringIO
 import mimetypes
@@ -250,6 +251,10 @@ SELECT
     k.mi_gm_approval_date,
     k.legal_submission_date,
     k.lp_circulation_start_date,
+    k.lp_contract_team_completion_date,
+    k.lp_junior_manager_approval_date,
+    k.lp_senior_manager_approval_date,
+    k.lp_gm_scm_approval_date,
     k.lp_completion_date,
     k.khs_inject_start_date,
     k.khs_inject_completion_date,
@@ -264,6 +269,7 @@ SELECT
     derived.workflow_status,
     derived.current_stage_code,
     stage.stage_name AS current_stage_name,
+    derived.lp_stage_key,
 
     (
         k.lp_circulation_start_date IS NOT NULL
@@ -331,7 +337,31 @@ CROSS JOIN LATERAL (
             WHEN r.request_date IS NOT NULL
                 THEN 'DISPATCH'
             ELSE 'REQUEST_RECEIVED'
-        END AS current_stage_code
+        END AS current_stage_code,
+
+        CASE
+            WHEN k.lp_completion_date IS NOT NULL
+                THEN 'completed'
+            WHEN k.lp_circulation_start_date IS NULL
+              AND (
+                    k.lp_contract_team_completion_date IS NOT NULL
+                 OR k.lp_junior_manager_approval_date IS NOT NULL
+                 OR k.lp_senior_manager_approval_date IS NOT NULL
+                 OR k.lp_gm_scm_approval_date IS NOT NULL
+              )
+                THEN 'legacy_incomplete'
+            WHEN k.lp_circulation_start_date IS NULL
+                THEN 'not_started'
+            WHEN k.lp_contract_team_completion_date IS NULL
+                THEN 'contract_team'
+            WHEN k.lp_junior_manager_approval_date IS NULL
+                THEN 'junior_manager'
+            WHEN k.lp_senior_manager_approval_date IS NULL
+                THEN 'senior_manager'
+            WHEN k.lp_gm_scm_approval_date IS NULL
+                THEN 'general_manager'
+            ELSE 'director'
+        END AS lp_stage_key
 ) AS derived
 
 LEFT JOIN khs_stage_config stage
@@ -422,6 +452,209 @@ def _register_json_safe(row):
         )
         for key, value in row.items()
     }
+
+
+LP_MILESTONE_ORDER = (
+    ("lp_circulation_start_date", "LP Submitted by User"),
+    ("lp_contract_team_completion_date", "Tim Kontrak Completed"),
+    ("lp_junior_manager_approval_date", "Junior Manager Approved"),
+    ("lp_senior_manager_approval_date", "Senior Manager Approved"),
+    ("lp_gm_scm_approval_date", "GM SCM Approved"),
+    ("lp_completion_date", "Director Signed"),
+)
+LP_STAGE_LABELS = {
+    "not_started": "Not Started",
+    "legacy_incomplete": "Legacy Timeline Incomplete",
+    "contract_team": "Tim Kontrak",
+    "junior_manager": "Junior Manager",
+    "senior_manager": "Senior Manager",
+    "general_manager": "GM SCM",
+    "director": "Director / Direktur",
+    "completed": "LP Completed",
+}
+LP_STAGE_FILTERS = set(LP_STAGE_LABELS) - {"not_started"}
+
+
+def _date_only(value):
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str) and value:
+        try:
+            return date.fromisoformat(value[:10])
+        except ValueError:
+            return None
+    return None
+
+
+def _jakarta_today():
+    return datetime.now(ZoneInfo("Asia/Jakarta")).date()
+
+
+def _lp_timeline_summary(record, today=None):
+    """Derive the next LP step while preserving gaps in legacy history."""
+    today = today or _jakarta_today()
+    values = [_date_only(record.get(field)) for field, _ in LP_MILESTONE_ORDER]
+    populated = [index for index, value in enumerate(values) if value is not None]
+    last_populated = max(populated) if populated else -1
+    gaps = [
+        LP_MILESTONE_ORDER[index][0]
+        for index in range(last_populated + 1)
+        if values[index] is None
+    ]
+    has_gaps = bool(gaps)
+    start_date = values[0]
+    completion_date = values[-1]
+
+    if completion_date is not None:
+        stage_key = "completed"
+        stage_started = None
+        stage_age = None
+    elif start_date is None:
+        stage_key = "legacy_incomplete" if last_populated > 0 else "not_started"
+        stage_started = None
+        stage_age = None
+    else:
+        next_index = next(
+            (index for index in range(1, len(values)) if values[index] is None),
+            len(values) - 1,
+        )
+        stage_keys = (
+            None,
+            "contract_team",
+            "junior_manager",
+            "senior_manager",
+            "general_manager",
+            "director",
+        )
+        stage_key = stage_keys[next_index]
+        prior_dates = [value for value in values[:next_index] if value is not None]
+        stage_started = prior_dates[-1] if prior_dates else start_date
+        stage_age = max((today - stage_started).days, 0) if stage_started else None
+
+    if has_gaps:
+        data_status = "legacy_incomplete"
+    elif stage_key == "completed":
+        data_status = "complete"
+    elif stage_key == "not_started":
+        data_status = "not_started"
+    else:
+        data_status = "in_progress"
+
+    return {
+        "lp_stage_key": stage_key,
+        "lp_stage_label": LP_STAGE_LABELS[stage_key],
+        "lp_stage_started_date": stage_started.isoformat() if stage_started else None,
+        "lp_stage_age_days": stage_age,
+        "lp_timeline_has_gaps": has_gaps,
+        "lp_timeline_gaps": gaps,
+        "lp_timeline_data_status": data_status,
+    }
+
+
+def _add_calendar_months(value, months):
+    month_index = value.month - 1 + months
+    year = value.year + month_index // 12
+    month = month_index % 12 + 1
+    day = min(value.day, calendar.monthrange(year, month)[1])
+    return date(year, month, day)
+
+
+def _contract_term(start, end):
+    if not start or not end or end < start:
+        return None, None
+    duration_days = (end - start).days + 1
+    exclusive_end = end + timedelta(days=1)
+    months = (exclusive_end.year - start.year) * 12 + exclusive_end.month - start.month
+    while months > 0 and _add_calendar_months(start, months) > exclusive_end:
+        months -= 1
+    while _add_calendar_months(start, months + 1) <= exclusive_end:
+        months += 1
+    remaining_days = (exclusive_end - _add_calendar_months(start, months)).days
+    years, month_remainder = divmod(months, 12)
+    parts = []
+    if years:
+        parts.append(f"{years} year" + ("s" if years != 1 else ""))
+    if month_remainder:
+        parts.append(f"{month_remainder} month" + ("s" if month_remainder != 1 else ""))
+    if remaining_days:
+        parts.append(f"{remaining_days} day" + ("s" if remaining_days != 1 else ""))
+    return duration_days, " ".join(parts) or "1 day"
+
+
+CONTRACT_ALERT_LABELS = {
+    "missing_dates": "Missing Contract Dates",
+    "invalid_dates": "Invalid Contract Dates",
+    "expired": "Expired",
+    "critical_7d": "Final Warning · 7 Days",
+    "urgent_14d": "Urgent · 14 Days",
+    "urgent_1m": "Action Required · 1 Month",
+    "watch_3m": "Renewal Watch · 3 Months",
+    "prep_6m": "Renewal Preparation · 6 Months",
+    "active": "Active",
+    "not_fully_injected": "Not Fully Injected",
+}
+
+
+def _contract_lifecycle_data(record, today=None):
+    today = today or _jakarta_today()
+    fully_injected = _date_only(record.get("khs_inject_completion_date"))
+    start = _date_only(record.get("contract_start_date"))
+    end = _date_only(record.get("contract_end_date"))
+
+    if not fully_injected:
+        status = "not_fully_injected"
+    elif start is None or end is None:
+        status = "missing_dates"
+    elif end < start:
+        status = "invalid_dates"
+    elif end < today:
+        status = "expired"
+    else:
+        days_remaining = (end - today).days
+        if days_remaining <= 7:
+            status = "critical_7d"
+        elif days_remaining <= 14:
+            status = "urgent_14d"
+        elif end <= _add_calendar_months(today, 1):
+            status = "urgent_1m"
+        elif end <= _add_calendar_months(today, 3):
+            status = "watch_3m"
+        elif end <= _add_calendar_months(today, 6):
+            status = "prep_6m"
+        else:
+            status = "active"
+
+    duration_days, duration_label = _contract_term(start, end)
+    days_remaining = (end - today).days if end else None
+    return {
+        "contract_lifecycle_status": status,
+        "contract_lifecycle_label": CONTRACT_ALERT_LABELS[status],
+        "contract_days_remaining": days_remaining,
+        "contract_duration_days": duration_days,
+        "contract_duration_label": duration_label,
+        "contract_lifecycle_as_of": today.isoformat(),
+    }
+
+
+def _register_enriched(row):
+    record = _register_json_safe(row)
+    record.update(_lp_timeline_summary(row))
+    record["contract_lifecycle"] = _contract_lifecycle_data(row)
+    return record
+
+
+def _lp_date_order_error(record):
+    populated = [
+        (field, _date_only(record.get(field)))
+        for field, _ in LP_MILESTONE_ORDER
+        if _date_only(record.get(field)) is not None
+    ]
+    for previous, current in zip(populated, populated[1:]):
+        if current[1] < previous[1]:
+            return current[0]
+    return None
 
 
 @dashboard_bp.get("/khs")
@@ -619,7 +852,7 @@ def khs_register():
 
     return jsonify({
         "success": True,
-        "data": [_register_json_safe(row) for row in rows],
+        "data": [_register_enriched(row) for row in rows],
         "pagination": {
             "page": page,
             "per_page": per_page,
@@ -648,7 +881,9 @@ ITEM_FIELDS = {
     "dispatch_date", "contract_start_date", "contract_end_date",
     "boq_confirmation_date", "negotiation_date", "final_negotiation_date",
     "mi_head_approval_date", "mi_sm_approval_date", "mi_gm_approval_date",
-    "legal_submission_date", "lp_circulation_start_date", "lp_completion_date",
+    "legal_submission_date", "lp_circulation_start_date",
+    "lp_contract_team_completion_date", "lp_junior_manager_approval_date",
+    "lp_senior_manager_approval_date", "lp_gm_scm_approval_date", "lp_completion_date",
     "khs_inject_start_date", "khs_inject_completion_date",
     "waiting_for", "waiting_reason", "last_updated_date", "remarks",
 }
@@ -656,7 +891,9 @@ DATE_FIELDS = {
     "request_date", "dispatch_date", "contract_start_date", "contract_end_date",
     "boq_confirmation_date", "negotiation_date", "final_negotiation_date",
     "mi_head_approval_date", "mi_sm_approval_date", "mi_gm_approval_date",
-    "legal_submission_date", "lp_circulation_start_date", "lp_completion_date",
+    "legal_submission_date", "lp_circulation_start_date",
+    "lp_contract_team_completion_date", "lp_junior_manager_approval_date",
+    "lp_senior_manager_approval_date", "lp_gm_scm_approval_date", "lp_completion_date",
     "khs_inject_start_date", "khs_inject_completion_date",
     "last_updated_date",
 }
@@ -1000,7 +1237,7 @@ def khs_detail(khs_id):
 
         return jsonify(
             success=True,
-            data=_row_dict(item),
+            data=_register_enriched(item),
             history=[_row_dict(x) for x in history],
             documents=document_rows,
         ), 200
@@ -1374,7 +1611,11 @@ def export_khs_csv():
         ("final_negotiation_date", "Final Negotiation"), ("mi_head_approval_date", "MI Head Approval"),
         ("mi_sm_approval_date", "MI SM Approval"), ("mi_gm_approval_date", "MI GM Approval"),
         ("legal_submission_date", "Legal Submission"), ("lp_circulation_start_date", "LP Circulation Start"),
-        ("lp_completion_date", "LP Completion"),
+        ("lp_contract_team_completion_date", "LP Contract Team Completion"),
+        ("lp_junior_manager_approval_date", "LP Junior Manager Approval"),
+        ("lp_senior_manager_approval_date", "LP Senior Manager Approval"),
+        ("lp_gm_scm_approval_date", "LP GM SCM Approval"),
+        ("lp_completion_date", "LP Director Sign-off"),
         ("khs_inject_start_date", "KHS Injection Start"),
         ("khs_inject_completion_date", "KHS Fully Injected"),
         ("workflow_status", "Workflow Status"),
