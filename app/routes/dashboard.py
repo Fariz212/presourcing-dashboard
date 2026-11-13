@@ -460,6 +460,17 @@ def khs_register():
             "message": "Unsupported workflow stage filter.",
         }), 400
 
+    waiting_role = request.args.get("waiting_role", "").strip().lower()
+    allowed_waiting_roles = {
+        "junior_manager", "senior_manager", "general_manager", "director"
+    }
+    if waiting_role and waiting_role not in allowed_waiting_roles:
+        return jsonify({
+            "success": False,
+            "code": "INVALID_WAITING_ROLE",
+            "message": "Unsupported LP approval role filter.",
+        }), 400
+
     waiting_for = request.args.get("waiting_for", "").strip()
     if len(waiting_for) > 100:
         return jsonify({
@@ -500,6 +511,36 @@ def khs_register():
     if stage:
         filters.append("register.current_stage_code = %s")
         params.append(stage)
+
+    waiting_role_conditions = {
+        "junior_manager": """
+            (
+                lower(trim(COALESCE(register.waiting_for, ''))) LIKE '%junior manager%'
+                OR lower(trim(COALESCE(register.waiting_for, ''))) LIKE '%jm vendor%'
+            )
+        """,
+        "senior_manager": """
+            lower(trim(COALESCE(register.waiting_for, ''))) LIKE '%senior manager%'
+        """,
+        "general_manager": """
+            (
+                lower(trim(COALESCE(register.waiting_for, ''))) LIKE '%general manager%'
+                OR lower(trim(COALESCE(register.waiting_for, ''))) LIKE '%gm scm%'
+            )
+        """,
+        "director": """
+            (
+                lower(trim(COALESCE(register.waiting_for, ''))) LIKE '%director%'
+                OR lower(trim(COALESCE(register.waiting_for, ''))) LIKE '%direktur%'
+            )
+        """,
+    }
+    if waiting_role:
+        filters.append(
+            "(register.lp_circulation_start_date IS NOT NULL "
+            "AND register.lp_completion_date IS NULL "
+            "AND " + waiting_role_conditions[waiting_role] + ")"
+        )
 
     if waiting_for:
         filters.append("register.waiting_for = %s")
@@ -581,6 +622,7 @@ def khs_register():
             "subtype": subtype or None,
             "stage": stage or None,
             "waiting_for": waiting_for or None,
+            "waiting_role": waiting_role or None,
         },
     }), 200
 
