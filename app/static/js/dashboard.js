@@ -288,6 +288,29 @@ async function ensureFilters() {
   if (!state.filters) await loadFilters();
 }
 
+function renderVendorPortfolio(record) {
+  const vendors = Array.isArray(record.vendors)
+    ? record.vendors.filter((name) => typeof name === "string" && name.trim())
+    : [];
+  if (!vendors.length) {
+    return '<span class="vendor-empty">No vendors yet</span>';
+  }
+
+  const count = vendors.length;
+  const label = count + (count === 1 ? " vendor" : " vendors");
+  const names = vendors.map((name) =>
+    '<span class="vendor-name-chip">' + esc(name) + '</span>'
+  ).join("");
+
+  return '<div class="vendor-summary">' +
+    '<span class="vendor-count-badge">' + label + '</span>' +
+    '<details class="vendor-details">' +
+    '<summary aria-label="View ' + count + ' vendors">View list</summary>' +
+    '<div class="vendor-detail-list" aria-label="Vendor list for ' + esc(record.request_id) + '">' +
+    names +
+    '</div></details></div>';
+}
+
 async function loadRequests() {
   const q = state.requestQuery ? "&q=" + encodeURIComponent(state.requestQuery) : "";
   const result = await api("/api/dashboard/requests?page=" + state.requestPage + "&per_page=25" + q);
@@ -298,7 +321,7 @@ async function loadRequests() {
   else body.innerHTML = state.requests.map((r) =>
     "<tr><td><span class=\"cell-primary\">" + esc(r.request_subject) + "</span>" +
     "<span class=\"cell-secondary\">" + esc(r.request_id) + "</span></td>" +
-    "<td>" + esc(r.vendor_summary || "No KHS items yet") + "</td>" +
+    "<td>" + renderVendorPortfolio(r) + "</td>" +
     "<td>" + esc(fmt(r.request_date)) + "</td><td>" + esc(r.requester_owner || "—") +
     "</td><td>" + esc(r.total_khs) + "</td><td>" + esc(r.completed_khs) +
     "</td><td><button class=\"view-button\" data-edit-request=\"" + esc(r.request_id) + "\">Edit</button> " +
