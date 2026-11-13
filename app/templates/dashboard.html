@@ -167,6 +167,7 @@
       <input id="contractSearch" type="search" placeholder="Search KHS, request, vendor…">
       <select id="contractStatusFilter">
         <option value="">All lifecycle statuses</option>
+        <option value="upcoming">Upcoming contract</option>
         <option value="within_6m">Expiring within 6 months</option>
         <option value="within_3m">Expiring within 3 months</option>
         <option value="within_1m">Expiring within 1 month</option>
@@ -179,7 +180,7 @@
       </select>
       <button type="button" class="reset-button" id="contractReset">Reset</button>
     </div>
-    <div class="table-wrap"><table><thead><tr><th>KHS / VENDOR</th><th>REQUEST</th><th>FULLY INJECTED</th><th>CONTRACT PERIOD</th><th>TERM</th><th>TIME REMAINING</th><th>LIFECYCLE STATUS</th><th></th></tr></thead><tbody id="contractBody"><tr><td colspan="8" class="table-message">Loading contracts…</td></tr></tbody></table></div>
+    <div class="table-wrap"><table><thead><tr><th>KHS / VENDOR</th><th>REQUEST</th><th>FULLY INJECTED</th><th>CONTRACT PERIOD</th><th>TERM</th><th>TIME REMAINING</th><th>CONTRACT STATUS</th><th>RENEWAL ALERT</th><th></th></tr></thead><tbody id="contractBody"><tr><td colspan="9" class="table-message">Loading contracts…</td></tr></tbody></table></div>
     <div class="register-footer"><span id="contractPagination">—</span><div class="pagination"><button id="contractPrevious" type="button">‹</button><button id="contractNext" type="button">›</button></div></div>
   </article>
   <p class="lifecycle-footnote">Alert stages are calculated from Contract End Date using Jakarta local date. Monitoring is in-app; email and WhatsApp notifications are not enabled.</p>
