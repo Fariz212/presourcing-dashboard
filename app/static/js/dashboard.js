@@ -432,6 +432,8 @@ async function loadLPCirculation() {
   set("lpCountSenior", byStage.senior_manager || 0);
   set("lpCountGm", byStage.general_manager || 0);
   set("lpCountDirector", byStage.director || 0);
+  set("lpCountCompleted", byStage.completed || 0);
+  set("lpCountLegacy", byStage.legacy_incomplete || 0);
 
   const body = $("lpBody");
   if (!body) return;
