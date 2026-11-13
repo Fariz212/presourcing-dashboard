@@ -24,7 +24,7 @@ REQUEST_HEADERS = [
 ]
 
 
-def build_workbook(item_overrides=None, extra_items=None):
+def build_workbook(item_overrides=None, extra_items=None, legacy_v22=False):
     wb = Workbook()
 
     request_ws = wb.active
@@ -52,6 +52,14 @@ def build_workbook(item_overrides=None, extra_items=None):
         khs_ws.append([])
 
     headers = list(KHS_HEADERS)
+    if legacy_v22:
+        legacy_only_headers = {
+            "LP Contract Team Completion Date",
+            "LP Junior Manager Approval Date",
+            "LP Senior Manager Approval Date",
+            "LP GM SCM Approval Date",
+        }
+        headers = [header for header in headers if header not in legacy_only_headers]
     khs_ws.append(headers)
 
     item = {
@@ -123,7 +131,7 @@ def test_valid_template_parses_successfully():
 
 def test_legacy_v22_workbook_remains_supported():
     result = parse_khs_workbook(
-        build_workbook(),
+        build_workbook(legacy_v22=True),
         known_executors={"ALW", "AME"},
         known_requests={},
     )
@@ -131,7 +139,7 @@ def test_legacy_v22_workbook_remains_supported():
     assert result["template_version"] == "2.2-compatible"
 
 
-def test_current_v23_workbook_round_trips_khs_inject_dates():
+def test_current_v24_workbook_round_trips_lp_and_khs_inject_dates():
     workbook = build_current_khs_workbook(
         requests=[{
             "request_id": "REQ-2026-001",
@@ -154,9 +162,13 @@ def test_current_v23_workbook_round_trips_khs_inject_dates():
             "subtype": "Renewal",
             "dispatch_date": date(2026, 11, 2),
             "lp_circulation_start_date": date(2026, 11, 10),
-            "lp_completion_date": date(2026, 11, 12),
-            "khs_inject_start_date": date(2026, 11, 13),
-            "khs_inject_completion_date": date(2026, 11, 14),
+            "lp_contract_team_completion_date": date(2026, 11, 11),
+            "lp_junior_manager_approval_date": date(2026, 11, 12),
+            "lp_senior_manager_approval_date": date(2026, 11, 13),
+            "lp_gm_scm_approval_date": date(2026, 11, 14),
+            "lp_completion_date": date(2026, 11, 15),
+            "khs_inject_start_date": date(2026, 11, 16),
+            "khs_inject_completion_date": date(2026, 11, 17),
         }],
         executors=[{"executor_code": "ALW", "display_name": "Executor A"}],
         subtypes=["Renewal", "Kontrak Baru"],
@@ -174,11 +186,15 @@ def test_current_v23_workbook_round_trips_khs_inject_dates():
         },
     )
 
-    assert result["template_version"] == "2.3"
+    assert result["template_version"] == "2.4"
     assert result["summary"]["can_import"] is True
     item = result["items"][0]
-    assert item["khs_inject_start_date"] == date(2026, 11, 13)
-    assert item["khs_inject_completion_date"] == date(2026, 11, 14)
+    assert item["lp_contract_team_completion_date"] == date(2026, 11, 11)
+    assert item["lp_junior_manager_approval_date"] == date(2026, 11, 12)
+    assert item["lp_senior_manager_approval_date"] == date(2026, 11, 13)
+    assert item["lp_gm_scm_approval_date"] == date(2026, 11, 14)
+    assert item["khs_inject_start_date"] == date(2026, 11, 16)
+    assert item["khs_inject_completion_date"] == date(2026, 11, 17)
 
 
 def test_khs_only_partial_workbook_can_reference_existing_request():
@@ -463,3 +479,39 @@ def test_generated_workbook_stores_untrusted_text_as_plain_excel_text():
         assert subject_cell.data_type == "s"
     finally:
         output.close()
+
+
+def test_lp_milestone_chronology_is_validated():
+    workbook = build_current_khs_workbook(
+        requests=[{
+            "request_id": "REQ-2026-001",
+            "request_date": date(2026, 11, 1),
+            "request_subject": "Annual maintenance contract",
+        }],
+        items=[{
+            "khs_id": "KHS-2026-0001",
+            "request_id": "REQ-2026-001",
+            "request_date": date(2026, 11, 1),
+            "request_subject": "Annual maintenance contract",
+            "vendor_name": "PT Test Vendor",
+            "executor_code": "ALW",
+            "subtype": "Renewal",
+            "lp_circulation_start_date": date(2026, 11, 10),
+            "lp_contract_team_completion_date": date(2026, 11, 12),
+            "lp_junior_manager_approval_date": date(2026, 11, 11),
+        }],
+        executors=[{"executor_code": "ALW", "display_name": "Executor A"}],
+    )
+    result = parse_khs_workbook(
+        workbook,
+        known_executors={"ALW"},
+        known_requests={
+            "REQ-2026-001": {
+                "request_date": date(2026, 11, 1),
+                "request_subject": "Annual maintenance contract",
+            }
+        },
+    )
+    codes = {issue["code"] for issue in result["issues"]}
+    assert result["summary"]["can_import"] is False
+    assert "LP_MILESTONE_CHRONOLOGY" in codes
