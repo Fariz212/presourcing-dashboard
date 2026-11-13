@@ -25,7 +25,7 @@ def test_root_serves_dashboard_and_static_assets(monkeypatch, tmp_path):
 
     assert response.status_code == 200
     assert response.content_type.startswith("text/html")
-    assert b"Contract Monitoring & Tracking" in response.data
+    assert b"Contract Monitoring &amp; Tracking" in response.data
     assert b"dashboard.css" in response.data
     assert b"dashboard-premium.css" in response.data
     assert b"dashboard.js" in response.data
@@ -41,7 +41,7 @@ def test_root_serves_dashboard_and_static_assets(monkeypatch, tmp_path):
     # The dashboard also has a dedicated, direct URL.
     dashboard_response = client.get("/dashboard")
     assert dashboard_response.status_code == 200
-    assert b"Contract Monitoring & Tracking" in dashboard_response.data
+    assert b"Contract Monitoring &amp; Tracking" in dashboard_response.data
 
     css = client.get("/static/css/dashboard.css")
     assert css.status_code == 200
@@ -92,7 +92,7 @@ def test_dashboard_contains_separate_operational_modules(monkeypatch, tmp_path):
         'data-page="activity"',
     ):
         assert module in body
-    assert "Contract Monitoring & Tracking" in body
+    assert "Contract Monitoring &amp; Tracking" in body
     assert "LP Circulation" in body
     assert "Contract Lifecycle" in body
     assert "Approval Timeline" in body
