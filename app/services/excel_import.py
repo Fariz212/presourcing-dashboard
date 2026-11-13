@@ -747,8 +747,19 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None, k
 
             start_date = effective_dates["contract_start_date"]
             end_date = effective_dates["contract_end_date"]
+            contract_date_fields = ("contract_start_date", "contract_end_date")
+            contract_dates_changed = any(
+                dates.get(field) is not None
+                and dates.get(field) != (existing_item or {}).get(field)
+                for field in contract_date_fields
+            )
 
-            if start_date and end_date and end_date < start_date:
+            if (
+                start_date
+                and end_date
+                and end_date < start_date
+                and contract_dates_changed
+            ):
                 _add_issue(
                     issues,
                     "ERROR",
@@ -788,7 +799,25 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None, k
                 "lp_senior_manager_approval_date",
                 "lp_gm_scm_approval_date",
             )
-            if any(effective_dates.get(field) for field in lp_milestone_fields) and not lp_start:
+            all_lp_date_fields = (
+                "lp_circulation_start_date",
+                *lp_milestone_fields,
+                "lp_completion_date",
+            )
+            # Empty Excel cells and columns absent from legacy v2.2/v2.3
+            # workbooks mean "no change". Validate chronology only when an LP
+            # milestone is actually being added or changed, so old partial
+            # histories do not block unrelated updates.
+            lp_milestones_changed = any(
+                dates.get(field) is not None
+                and dates.get(field) != (existing_item or {}).get(field)
+                for field in all_lp_date_fields
+            )
+            if (
+                any(effective_dates.get(field) for field in lp_milestone_fields)
+                and not lp_start
+                and lp_milestones_changed
+            ):
                 _add_issue(
                     issues,
                     "ERROR",
@@ -801,14 +830,13 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None, k
 
             populated_lp_dates = [
                 effective_dates.get(field)
-                for field in (
-                    "lp_circulation_start_date",
-                    *lp_milestone_fields,
-                    "lp_completion_date",
-                )
+                for field in all_lp_date_fields
                 if effective_dates.get(field) is not None
             ]
-            if populated_lp_dates != sorted(populated_lp_dates):
+            if (
+                populated_lp_dates != sorted(populated_lp_dates)
+                and lp_milestones_changed
+            ):
                 _add_issue(
                     issues,
                     "ERROR",
@@ -821,6 +849,11 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None, k
 
             inject_start = effective_dates["khs_inject_start_date"]
             inject_completion = effective_dates["khs_inject_completion_date"]
+            inject_dates_changed = any(
+                dates.get(field) is not None
+                and dates.get(field) != (existing_item or {}).get(field)
+                for field in ("khs_inject_start_date", "khs_inject_completion_date")
+            )
             mi_gm = effective_dates["mi_gm_approval_date"]
 
             if lp_start and not mi_gm:
@@ -846,7 +879,7 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None, k
                     "LP circulation date precedes MI GM approval.",
                 )
 
-            if lp_completion and not lp_start:
+            if lp_completion and not lp_start and lp_milestones_changed:
                 _add_issue(
                     issues,
                     "ERROR",
@@ -857,7 +890,12 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None, k
                     "LP completion requires a circulation start date.",
                 )
 
-            elif lp_completion and lp_start and lp_completion < lp_start:
+            elif (
+                lp_completion
+                and lp_start
+                and lp_completion < lp_start
+                and lp_milestones_changed
+            ):
                 _add_issue(
                     issues,
                     "ERROR",
@@ -868,7 +906,7 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None, k
                     "LP completion date cannot precede LP start date.",
                 )
 
-            if inject_start and not lp_completion:
+            if inject_start and not lp_completion and inject_dates_changed:
                 _add_issue(
                     issues,
                     "ERROR",
@@ -879,7 +917,12 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None, k
                     "KHS Inject can only start after LP completion.",
                 )
 
-            elif inject_start and lp_completion and inject_start < lp_completion:
+            elif (
+                inject_start
+                and lp_completion
+                and inject_start < lp_completion
+                and inject_dates_changed
+            ):
                 _add_issue(
                     issues,
                     "ERROR",
@@ -890,7 +933,7 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None, k
                     "KHS Inject start date cannot precede LP completion.",
                 )
 
-            if inject_completion and not inject_start:
+            if inject_completion and not inject_start and inject_dates_changed:
                 _add_issue(
                     issues,
                     "ERROR",
@@ -901,7 +944,12 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None, k
                     "KHS Inject completion requires an Inject start date.",
                 )
 
-            elif inject_completion and inject_start and inject_completion < inject_start:
+            elif (
+                inject_completion
+                and inject_start
+                and inject_completion < inject_start
+                and inject_dates_changed
+            ):
                 _add_issue(
                     issues,
                     "ERROR",
