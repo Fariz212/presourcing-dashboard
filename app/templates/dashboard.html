@@ -38,6 +38,45 @@
 <article class="kpi-card"><span class="kpi-label">Needs Attention</span><strong class="kpi-value" id="attentionCount">—</strong><small>Waiting / exception records</small></article>
 <article class="kpi-card"><span class="kpi-label">Fully Injected</span><strong class="kpi-value" id="injectCompleted">—</strong><small><span id="completionRate">0%</span> of all KHS records</small></article>
 </div>
+
+<section class="approval-command" aria-labelledby="approvalCommandTitle">
+  <div class="approval-command-heading">
+    <div>
+      <div class="eyebrow">LIVE WORKFLOW QUEUE</div>
+      <h2 id="approvalCommandTitle">Approval Pipeline</h2>
+      <p>Every active approval queue, grouped by process and decision level.</p>
+    </div>
+    <span class="queue-live-tag"><span class="online-dot"></span> Live from register</span>
+  </div>
+  <div class="approval-lanes">
+    <article class="approval-lane memo-lane">
+      <div class="approval-lane-heading">
+        <div class="lane-icon lane-icon-memo" aria-hidden="true">MI</div>
+        <div><h3>Memo Internal</h3><p>Pending management approvals</p></div>
+        <div class="lane-total"><strong id="miQueueTotal">—</strong><span>in queue</span></div>
+      </div>
+      <div class="queue-steps queue-steps-three">
+        <div class="queue-step"><span class="queue-step-index">01</span><span class="queue-step-label">Junior Manager</span><strong id="miJuniorCount">—</strong><small>Awaiting Head approval</small></div>
+        <div class="queue-step"><span class="queue-step-index">02</span><span class="queue-step-label">Senior Manager</span><strong id="miSeniorCount">—</strong><small>Awaiting SM approval</small></div>
+        <div class="queue-step"><span class="queue-step-index">03</span><span class="queue-step-label">General Manager</span><strong id="miGeneralCount">—</strong><small>Awaiting GM approval</small></div>
+      </div>
+    </article>
+    <article class="approval-lane lp-lane">
+      <div class="approval-lane-heading">
+        <div class="lane-icon lane-icon-lp" aria-hidden="true">LP</div>
+        <div><h3>LP Circulation</h3><p>Active sign-off route</p></div>
+        <div class="lane-total"><strong id="lpQueueTotal">—</strong><span>in circulation</span></div>
+      </div>
+      <div class="queue-steps queue-steps-four">
+        <div class="queue-step"><span class="queue-step-index">01</span><span class="queue-step-label">Junior Manager</span><strong id="lpJuniorCount">—</strong><small>Pending sign-off</small></div>
+        <div class="queue-step"><span class="queue-step-index">02</span><span class="queue-step-label">Senior Manager</span><strong id="lpSeniorCount">—</strong><small>Pending sign-off</small></div>
+        <div class="queue-step"><span class="queue-step-index">03</span><span class="queue-step-label">General Manager</span><strong id="lpGeneralCount">—</strong><small>Pending sign-off</small></div>
+        <div class="queue-step"><span class="queue-step-index">04</span><span class="queue-step-label">Director</span><strong id="lpDirectorCount">—</strong><small>Final sign-off</small></div>
+      </div>
+      <div class="queue-reconciliation"><span>Unassigned / other</span><strong id="lpOtherCount">—</strong><span class="queue-reconciliation-note" id="lpQueueNote">LP roles follow the current Waiting For value.</span></div>
+    </article>
+  </div>
+</section>
 <div class="overview-grid">
 <article class="panel"><div class="panel-heading"><div><div class="eyebrow">LIFECYCLE</div><h2>LP Circulation Progress</h2></div><span class="subtle-tag" id="lpTotalTag">— KHS</span></div>
 <div class="progress-summary"><strong class="progress-primary" id="progressPrimary">—</strong><strong class="progress-rate" id="progressRate">0%</strong></div>
@@ -46,7 +85,7 @@
 <article class="panel"><div class="panel-heading"><div><div class="eyebrow">PROCESS CHECKPOINTS</div><h2>Workflow Overview</h2></div></div>
 <div class="workflow-list"><div class="workflow-item"><span>MI GM approved</span><b id="miGmCount">—</b><div class="mini-track"><i id="miGmBar"></i></div></div><div class="workflow-item"><span>Legal submitted</span><b id="legalCount">—</b><div class="mini-track"><i id="legalBar"></i></div></div><div class="workflow-item"><span>LP started</span><b id="lpStartedCount">—</b><div class="mini-track"><i id="lpStartedBar"></i></div></div></div></article>
 </div>
-<article class="panel attention-panel"><div class="panel-heading"><div><div class="eyebrow">ACTION REQUIRED</div><h2>Needs Attention</h2><p>Records with a waiting party, missing prerequisite, or unresolved next step.</p></div><button class="text-button" data-go="register">View all →</button></div>
+<article class="panel attention-panel"><div class="panel-heading"><div><div class="eyebrow">ACTION REQUIRED</div><h2>KHS Atensi</h2><p>KHS records waiting on action, carrying an unresolved next step, or requiring prerequisite review.</p></div><button class="text-button" data-go="register">Open attention queue →</button></div>
 <div class="table-wrap"><table><thead><tr><th>REQUEST SUBJECT</th><th>VENDOR</th><th>NEXT WORKFLOW STAGE</th><th>WAITING FOR</th><th>LAST UPDATED</th><th></th></tr></thead><tbody id="attentionBody"><tr><td colspan="6" class="table-message">Loading…</td></tr></tbody></table></div></article>
 <article class="quality-alert" id="qualityAlert" hidden><strong>Data quality alert</strong><span id="qualityCount">0</span> record(s) show LP circulation without GM MI approval. <button class="text-button" data-go="register">Review records</button></article>
 </section>
