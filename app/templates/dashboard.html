@@ -33,8 +33,20 @@
 <header class="topbar"><div class="breadcrumbs"><span>Operations</span><span>/</span><strong id="breadcrumbCurrent">Overview</strong></div>
 <div class="topbar-actions"><div class="system-status" id="systemStatus"><span class="online-dot"></span><span id="systemStatusText">Ready</span></div><button class="refresh-button" id="refreshButton" type="button">↻ Refresh</button><button class="primary-button" id="quickAddKhs" type="button">+ Add KHS</button></div></header>
 <section class="page-view active" id="page-overview" data-title="Contract Monitoring &amp; Tracking">
-<div class="page-heading"><div><div class="eyebrow">CONTRACT OPERATIONS</div><h1>Contract Monitoring &amp; Tracking</h1><p>Monitor contract execution, LP progression, and upcoming expirations in one workspace.</p></div><div class="heading-meta"><span class="meta-label">LAST UPDATED</span><strong id="lastUpdated">—</strong></div></div>
-<div class="action-strip"><button class="primary-button" id="newRequestButton">+ New Request</button><button class="secondary-button" id="overviewAddKhs">+ Add KHS Item</button><button class="secondary-button" data-go="imports">Import Excel</button></div>
+<div class="page-heading overview-page-heading">
+  <div class="overview-heading-copy">
+    <div class="eyebrow">CONTRACT OPERATIONS / PORTFOLIO OVERVIEW</div>
+    <h1>Contract Monitoring &amp; Tracking</h1>
+    <p>One place to move each request from intake to LP sign-off, injection, and renewal.</p>
+  </div>
+  <div class="overview-heading-actions">
+    <div class="heading-meta"><span class="meta-label">LAST UPDATED</span><strong id="lastUpdated">—</strong></div>
+    <div class="action-strip">
+      <button class="primary-button" id="newRequestButton">+ New Request</button>
+      <button class="secondary-button" data-go="imports">Import Excel</button>
+    </div>
+  </div>
+</div>
 <div class="kpi-grid">
 <article class="kpi-card"><span class="kpi-label">Total Requests</span><strong class="kpi-value" id="totalRequests">—</strong><small>Parent requests</small></article>
 <article class="kpi-card"><span class="kpi-label">Total KHS</span><strong class="kpi-value" id="totalKhs">—</strong><small>Contract records</small></article>
@@ -42,9 +54,9 @@
 <article class="kpi-card"><span class="kpi-label">Fully Injected</span><strong class="kpi-value" id="injectCompleted">—</strong><small><span id="completionRate">0%</span> of all KHS records</small></article>
 </div>
 
-<article class="panel attention-panel"><div class="panel-heading"><div><div class="eyebrow">ACTION REQUIRED</div><h2>KHS Atensi</h2><p>KHS records waiting on action, carrying an unresolved next step, or requiring prerequisite review.</p></div><button class="text-button" data-go="register" data-attention-only="true">Open attention queue →</button></div>
-<div class="table-wrap"><table><thead><tr><th>REQUEST SUBJECT</th><th>VENDOR</th><th>NEXT WORKFLOW STAGE</th><th>WAITING FOR / NEXT ACTION</th><th>LAST UPDATED</th><th></th></tr></thead><tbody id="attentionBody"><tr><td colspan="6" class="table-message">Loading…</td></tr></tbody></table></div></article>
-<article class="quality-alert" id="qualityAlert" hidden><strong>Data quality alert</strong><span id="qualityCount">0</span> record(s) show LP circulation without GM MI approval. <button class="text-button" data-go="register">Review records</button></article>
+<article class="panel attention-panel"><div class="panel-heading"><div><div class="eyebrow">ACTION REQUIRED</div><h2>Priority action queue</h2><p>Records awaiting approval, owner follow-up, or prerequisite review.</p></div><button class="text-button" data-go="register" data-attention-only="true">View attention queue →</button></div>
+<div class="table-wrap"><table><thead><tr><th>REQUEST / KHS</th><th>VENDOR</th><th>CURRENT STAGE</th><th>WAITING FOR / NEXT ACTION</th><th>UPDATED</th><th>ACTION</th></tr></thead><tbody id="attentionBody"><tr><td colspan="6" class="table-message">Loading…</td></tr></tbody></table></div></article>
+<article class="quality-alert" id="qualityAlert" hidden><strong>Data quality flag</strong><span id="qualityCount">0</span> LP record(s) have started without a recorded GM MI approval. <button class="text-button" data-go="register">Review records</button></article>
 
 
 <section class="approval-command" aria-labelledby="approvalCommandTitle">
@@ -204,7 +216,7 @@
 <div class="page-heading"><div><div class="eyebrow">DATA MANAGEMENT / TRACEABILITY</div><h1>Activity & Audit Log</h1><p>Manual edits and Excel imports are recorded for traceability. Manual edits are labelled manual-entry until sign-in is introduced.</p></div><button class="secondary-button" id="activityRefresh">Refresh</button></div>
 <article class="panel"><div class="table-wrap"><table><thead><tr><th>WHEN</th><th>ENTITY</th><th>RECORD ID</th><th>ACTION</th><th>ACTOR</th><th>CHANGES</th></tr></thead><tbody id="activityBody"><tr><td colspan="6" class="table-message">Loading…</td></tr></tbody></table></div><div class="register-footer"><span id="activityPagination">—</span><div class="pagination"><button id="activityPrevious">‹</button><button id="activityNext">›</button></div></div></article>
 </section>
-<footer class="main-footer"><span>KHS Contract Creation Management</span><span>Operational workspace · v2.1</span></footer>
+<footer class="main-footer"><span>KHS Contract Operations</span><span>Contract Monitoring &amp; Tracking · Internal workspace</span></footer>
 </main></div>
 <dialog id="recordDialog" class="record-dialog"><form id="recordForm" method="dialog"><div class="dialog-header"><div><div class="eyebrow" id="dialogEyebrow">NEW RECORD</div><h2 id="dialogTitle">Create record</h2></div><button type="button" class="dialog-close" id="closeRecordDialog">×</button></div><div id="dialogFields" class="form-grid"></div><div id="dialogHint" class="form-hint"></div><div class="dialog-footer"><button type="button" class="secondary-button" id="cancelRecord">Cancel</button><button type="submit" class="primary-button" id="saveRecord">Save record</button></div></form></dialog>
 <dialog id="detailDialog" class="detail-dialog"><div class="dialog-header"><div><div class="eyebrow">KHS RECORD</div><h2 id="detailTitle">KHS Details</h2><p class="detail-subtitle" id="detailSubtitle"></p></div><button class="dialog-close" id="closeDialog">×</button></div><div id="detailStatus" class="dialog-status-row"></div>

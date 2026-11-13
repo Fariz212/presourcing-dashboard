@@ -52,12 +52,15 @@ def test_root_serves_dashboard_and_static_assets(monkeypatch, tmp_path):
     assert premium_css.status_code == 200
     assert b".import-guide" in premium_css.data
     assert b".nav-icon" in premium_css.data
-
     refresh_css = client.get("/static/css/dashboard-refresh.css")
     assert refresh_css.status_code == 200
-    assert b".app-shell" in refresh_css.data
-    assert b".attention-panel" in refresh_css.data
+    assert b"grid-template-columns: 252px minmax(0, 1fr)" in refresh_css.data
+    assert b"width: auto" in refresh_css.data
+    assert b"margin: 0" in refresh_css.data
     assert b"@media (max-width: 680px)" in refresh_css.data
+    assert b".app-shell { display: block; grid-template-columns: 1fr; }" in refresh_css.data
+    assert b"table-layout: fixed" in refresh_css.data
+
 
     javascript = client.get("/static/js/dashboard.js")
     assert javascript.status_code == 200
@@ -87,7 +90,8 @@ def test_dashboard_contains_separate_operational_modules(monkeypatch, tmp_path):
         "DATABASE_URL": "postgresql://test:test@localhost/test",
         "UPLOAD_DIR": tmp_path / "uploads",
     })
-    response = flask_app.test_client().get("/dashboard")
+    client = flask_app.test_client()
+    response = client.get("/dashboard")
     assert response.status_code == 200
     body = response.data.decode("utf-8")
     for module in (
@@ -102,6 +106,14 @@ def test_dashboard_contains_separate_operational_modules(monkeypatch, tmp_path):
     ):
         assert module in body
     assert "Contract Monitoring &amp; Tracking" in body
+    assert 'id="quickAddKhs"' in body
+    assert 'id="overviewAddKhs"' not in body
+    assert "Priority action queue" in body
+    assert "REQUEST / KHS" in body
+    attention_js = client.get("/static/js/dashboard.js")
+    assert attention_js.status_code == 200
+    assert b'data-label=\\"REQUEST / KHS\\"' in attention_js.data
+    assert b'aria-label=\\"Open KHS ' in attention_js.data
     assert "LP Circulation" in body
     assert "Contract Lifecycle" in body
     assert "Approval Timeline" in body
