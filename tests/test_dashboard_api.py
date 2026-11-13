@@ -107,6 +107,13 @@ def test_dashboard_summary_returns_expected_kpis(make_client):
     )
 
     assert "FROM khs_items" in pool.connection_object.executed_query
+    for milestone in (
+        "lp_contract_team_completion_date",
+        "lp_junior_manager_approval_date",
+        "lp_senior_manager_approval_date",
+        "lp_gm_scm_approval_date",
+    ):
+        assert milestone in pool.connection_object.executed_query
 
 
 def test_dashboard_summary_handles_empty_database(make_client):
@@ -317,6 +324,28 @@ def test_khs_register_returns_service_unavailable_on_db_error(make_client):
         response.get_json()["code"]
         == "KHS_REGISTER_UNAVAILABLE"
     )
+
+
+
+def test_khs_register_query_includes_every_lp_milestone(make_client):
+    pool = RegisterFakePool(rows=[], total=0)
+    response = make_client(pool).get("/api/dashboard/khs")
+
+    assert response.status_code == 200
+    count_query, _ = pool.queries[0]
+    data_query, _ = pool.queries[1]
+    for query in (count_query, data_query):
+        for milestone in (
+            "lp_circulation_start_date",
+            "lp_contract_team_completion_date",
+            "lp_junior_manager_approval_date",
+            "lp_senior_manager_approval_date",
+            "lp_gm_scm_approval_date",
+            "lp_completion_date",
+        ):
+            assert milestone in query
+        assert "lp_timeline_has_gaps" in query
+
 
 def test_khs_register_attention_filter_excludes_completed_and_includes_next_action(make_client):
     pool = RegisterFakePool(rows=[], total=0)
