@@ -112,7 +112,7 @@ def test_dashboard_contains_separate_operational_modules(monkeypatch, tmp_path):
     assert 'id="page-lp"' in body
     assert 'id="page-contracts"' in body
     assert "Approval Pipeline" in body
-    assert body.index('class="attention-panel"') < body.index('class="approval-command"')
+    assert body.index('class="panel attention-panel"') < body.index('class="approval-command"')
     assert body.index('id="qualityAlert"') < body.index('class="approval-command"')
     assert "Memo Internal" in body
     assert "LP Circulation" in body
