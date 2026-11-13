@@ -61,11 +61,6 @@ def test_root_serves_dashboard_and_static_assets(monkeypatch, tmp_path):
     assert b".app-shell { display: block; grid-template-columns: 1fr; }" in refresh_css.data
     assert b"table-layout: fixed" in refresh_css.data
 
-    refresh_css = client.get("/static/css/dashboard-refresh.css")
-    assert refresh_css.status_code == 200
-    assert b".app-shell" in refresh_css.data
-    assert b".attention-panel" in refresh_css.data
-    assert b"@media (max-width: 680px)" in refresh_css.data
 
     javascript = client.get("/static/js/dashboard.js")
     assert javascript.status_code == 200
@@ -114,6 +109,10 @@ def test_dashboard_contains_separate_operational_modules(monkeypatch, tmp_path):
     assert 'id="overviewAddKhs"' not in body
     assert "Priority action queue" in body
     assert "REQUEST / KHS" in body
+    attention_js = client.get("/static/js/dashboard.js")
+    assert attention_js.status_code == 200
+    assert b'data-label=\\"REQUEST / KHS\\"' in attention_js.data
+    assert b'aria-label=\\"Open KHS ' in attention_js.data
     assert "LP Circulation" in body
     assert "Contract Lifecycle" in body
     assert "Approval Timeline" in body
