@@ -417,6 +417,184 @@ async function loadWorkflow() {
   if (!result.data || !result.data.length) wrap.textContent = "No workflow stage data.";
 }
 
+async function loadLPCirculation() {
+  const params = new URLSearchParams({ page: String(state.lpPage), per_page: String(state.perPage) });
+  const q = $("lpSearch") ? $("lpSearch").value.trim() : "";
+  const stage = $("lpStageFilter") ? $("lpStageFilter").value : "";
+  if (q) params.set("q", q);
+  if (stage) params.set("stage", stage);
+  const result = await api("/api/dashboard/lp-circulation?" + params.toString());
+  const summary = result.summary || {};
+  const byStage = summary.by_stage || {};
+  set("lpTotalRecords", summary.total_lp_records || 0);
+  set("lpCountContractTeam", byStage.contract_team || 0);
+  set("lpCountJunior", byStage.junior_manager || 0);
+  set("lpCountSenior", byStage.senior_manager || 0);
+  set("lpCountGm", byStage.general_manager || 0);
+  set("lpCountDirector", byStage.director || 0);
+
+  const body = $("lpBody");
+  if (!body) return;
+  if (!result.data.length) {
+    emptyRow("lpBody", 8, "No LP records match the selected stage.");
+  } else {
+    body.innerHTML = result.data.map((r) => {
+      const age = r.lp_stage_age_days == null ? "—" : r.lp_stage_age_days + " days";
+      const history = r.lp_timeline_has_gaps
+        ? '<span class="status-badge status-warning">Partial history</span>'
+        : '<span class="status-badge status-completed">Recorded</span>';
+      return "<tr><td><span class=\"cell-primary\">" + esc(r.khs_id) + "</span>" +
+        "<span class=\"cell-secondary\">" + esc(r.vendor_name) + "</span></td>" +
+        "<td><span class=\"cell-primary\">" + esc(r.request_subject || "Untitled request") + "</span>" +
+        "<span class=\"cell-secondary\">" + esc(r.request_id) + "</span></td>" +
+        "<td><span class=\"cell-primary\">" + esc(r.lp_stage_label || "—") + "</span>" +
+        (r.waiting_for ? "<span class=\"cell-secondary\">Waiting for " + esc(r.waiting_for) + "</span>" : "") + "</td>" +
+        "<td>" + esc(age) + "</td><td>" + esc(fmt(r.lp_circulation_start_date)) + "</td>" +
+        "<td>" + esc(r.waiting_reason || "—") + "</td><td>" + history + "</td>" +
+        "<td><button type=\"button\" class=\"view-button\" data-view-khs=\"" + esc(r.khs_id) + "\">Details</button></td></tr>";
+    }).join("");
+  }
+  const p = result.pagination || {};
+  set("lpPagination", "Page " + p.page + " of " + p.total_pages + " · " + p.total_records + " LP records");
+  $("lpPrevious").disabled = !p.has_previous;
+  $("lpNext").disabled = !p.has_next;
+}
+
+function lifecycleStatusLabel(status) {
+  const labels = {
+    missing_dates: "Missing contract dates",
+    invalid_dates: "Invalid contract dates",
+    expired: "Expired",
+    critical_7d: "Final warning · 7 days",
+    urgent_14d: "Urgent · 14 days",
+    urgent_1m: "Action required · 1 month",
+    watch_3m: "Renewal watch · 3 months",
+    prep_6m: "Renewal preparation · 6 months",
+    active: "Active · over 6 months",
+    not_fully_injected: "Not fully injected"
+  };
+  return labels[status] || status || "—";
+}
+
+function lifecycleBadgeClass(status) {
+  if (status === "expired" || status === "critical_7d") return "status-danger";
+  if (status === "urgent_14d" || status === "urgent_1m") return "status-warning";
+  if (status === "watch_3m" || status === "prep_6m") return "status-in_progress";
+  if (status === "active") return "status-completed";
+  return "status-neutral";
+}
+
+function timeRemainingLabel(days) {
+  if (days == null) return "Dates required";
+  if (days < 0) return Math.abs(days) + " days overdue";
+  if (days === 0) return "Expires today";
+  return days + " days remaining";
+}
+
+async function loadContractLifecycle() {
+  const params = new URLSearchParams({ page: String(state.contractPage), per_page: String(state.perPage) });
+  const q = $("contractSearch") ? $("contractSearch").value.trim() : "";
+  const status = $("contractStatusFilter") ? $("contractStatusFilter").value : "";
+  if (q) params.set("q", q);
+  if (status) params.set("status", status);
+  const result = await api("/api/dashboard/contracts/lifecycle?" + params.toString());
+  const summary = result.summary || {};
+  set("contractTotal", summary.total_fully_injected || 0);
+  set("contractSixMonths", summary.expiring_within_6_months || 0);
+  set("contractThreeMonths", summary.expiring_within_3_months || 0);
+  set("contractOneMonth", summary.expiring_within_1_month || 0);
+  set("contractExpired", summary.expired || 0);
+  set("contractMissingDates", summary.missing_contract_dates || 0);
+
+  const body = $("contractBody");
+  if (!body) return;
+  if (!result.data.length) {
+    emptyRow("contractBody", 8, "No fully injected contracts match this lifecycle filter.");
+  } else {
+    body.innerHTML = result.data.map((r) => {
+      const statusValue = r.contract_lifecycle_status;
+      const badge = lifecycleBadgeClass(statusValue);
+      return "<tr><td><span class=\"cell-primary\">" + esc(r.khs_id) + "</span>" +
+        "<span class=\"cell-secondary\">" + esc(r.vendor_name) + "</span></td>" +
+        "<td><span class=\"cell-primary\">" + esc(r.request_subject || "Untitled request") + "</span>" +
+        "<span class=\"cell-secondary\">" + esc(r.request_id) + "</span></td>" +
+        "<td>" + esc(fmt(r.khs_inject_completion_date)) + "</td>" +
+        "<td>" + esc(fmt(r.contract_start_date)) + " – " + esc(fmt(r.contract_end_date)) + "</td>" +
+        "<td>" + esc(r.contract_duration_label || "—") + "</td>" +
+        "<td><span class=\"cell-primary\">" + esc(timeRemainingLabel(r.contract_days_remaining)) + "</span>" +
+        (r.contract_days_remaining != null && r.contract_days_remaining >= 0 && r.contract_days_remaining <= 30
+          ? "<span class=\"cell-secondary\">Renewal action due</span>" : "") + "</td>" +
+        "<td><span class=\"status-badge " + badge + "\">" + esc(lifecycleStatusLabel(statusValue)) + "</span></td>" +
+        "<td><button type=\"button\" class=\"view-button\" data-view-khs=\"" + esc(r.khs_id) + "\">Details</button></td></tr>";
+    }).join("");
+  }
+  const p = result.pagination || {};
+  set("contractPagination", "Page " + p.page + " of " + p.total_pages + " · " + p.total_records + " contracts");
+  $("contractPrevious").disabled = !p.has_previous;
+  $("contractNext").disabled = !p.has_next;
+}
+
+function renderLPTimeline(record) {
+  const container = $("lpTimeline");
+  if (!container) return;
+  const stages = [
+    ["lp_circulation_start_date", "User submitted", "LP circulation started"],
+    ["lp_contract_team_completion_date", "Tim Kontrak", "Contract team completed"],
+    ["lp_junior_manager_approval_date", "Junior Manager", "Vendor Management approval"],
+    ["lp_senior_manager_approval_date", "Senior Manager", "Strategic Sourcing approval"],
+    ["lp_gm_scm_approval_date", "GM SCM", "Management approval"],
+    ["lp_completion_date", "Director / Direktur", "Final LP sign-off"]
+  ];
+  const currentField = {
+    contract_team: "lp_contract_team_completion_date",
+    junior_manager: "lp_junior_manager_approval_date",
+    senior_manager: "lp_senior_manager_approval_date",
+    general_manager: "lp_gm_scm_approval_date",
+    director: "lp_completion_date"
+  }[record.lp_stage_key];
+  container.innerHTML = stages.map((stage, index) => {
+    const dateValue = record[stage[0]];
+    const done = !!dateValue;
+    const current = !done && stage[0] === currentField;
+    const stateClass = done ? "done" : current ? "current" : "upcoming";
+    const stateLabel = done ? "Completed" : current ? "Current stage" : "Upcoming";
+    return '<div class="lp-timeline-item ' + stateClass + '">' +
+      '<span class="lp-timeline-marker">' + (done ? "✓" : String(index + 1).padStart(2, "0")) + "</span>" +
+      '<div class="lp-timeline-content"><div class="lp-timeline-meta"><strong>' + esc(stage[1]) +
+      '</strong><span class="lp-timeline-state">' + stateLabel + "</span></div>" +
+      "<small>" + esc(stage[2]) + "</small><time>" + esc(done ? fmt(dateValue) : current ? "In progress" : "Not recorded") + "</time></div></div>";
+  }).join("");
+  set("lpTimelineStage", record.lp_stage_label || "LP not started");
+  const notice = $("lpTimelineNotice");
+  if (notice) {
+    notice.hidden = !record.lp_timeline_has_gaps;
+    notice.textContent = "Legacy timeline: one or more intermediate milestones were not recorded in the previous workflow. Existing dates have been preserved; missing dates are not inferred.";
+  }
+}
+
+function renderContractDetail(record) {
+  const summary = record.contract_lifecycle || {};
+  const status = summary.contract_lifecycle_status || "not_fully_injected";
+  const badge = $("contractDetailStatus");
+  if (badge) {
+    badge.className = "status-badge " + lifecycleBadgeClass(status);
+    badge.textContent = lifecycleStatusLabel(status);
+  }
+  const items = [
+    ["Contract start", record.contract_start_date],
+    ["Contract end", record.contract_end_date],
+    ["Contract term", summary.contract_duration_label],
+    ["Time remaining", timeRemainingLabel(summary.contract_days_remaining)],
+    ["Fully injected", record.khs_inject_completion_date]
+  ];
+  const grid = $("contractDetailGrid");
+  if (grid) {
+    grid.innerHTML = items.map((item) =>
+      '<div class="contract-detail-item"><span>' + esc(item[0]) + '</span><strong>' + esc(fmt(item[1])) + "</strong></div>"
+    ).join("");
+  }
+}
+
 async function loadActivity() {
   const result = await api("/api/dashboard/activity?page=" + state.activityPage + "&per_page=25");
   const body = $("activityBody");
