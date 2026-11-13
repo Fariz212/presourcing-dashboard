@@ -486,6 +486,25 @@ function lifecycleBadgeClass(status) {
   return "status-neutral";
 }
 
+function contractOperationalStatusLabel(status) {
+  const labels = {
+    upcoming: "Upcoming",
+    active: "Active",
+    expired: "Expired",
+    missing_dates: "Missing dates",
+    invalid_dates: "Invalid dates",
+    not_fully_injected: "Not fully injected"
+  };
+  return labels[status] || status || "—";
+}
+
+function contractOperationalBadgeClass(status) {
+  if (status === "expired") return "status-danger";
+  if (status === "upcoming") return "status-in_progress";
+  if (status === "active") return "status-completed";
+  return "status-neutral";
+}
+
 function timeRemainingLabel(days) {
   if (days == null) return "Dates required";
   if (days < 0) return Math.abs(days) + " days overdue";
@@ -511,11 +530,13 @@ async function loadContractLifecycle() {
   const body = $("contractBody");
   if (!body) return;
   if (!result.data.length) {
-    emptyRow("contractBody", 8, "No fully injected contracts match this lifecycle filter.");
+    emptyRow("contractBody", 9, "No fully injected contracts match this lifecycle filter.");
   } else {
     body.innerHTML = result.data.map((r) => {
-      const statusValue = r.contract_lifecycle_status;
+      const statusValue = r.contract_renewal_alert_status || r.contract_lifecycle_status;
       const badge = lifecycleBadgeClass(statusValue);
+      const operationalStatus = r.contract_operational_status;
+      const operationalBadge = contractOperationalBadgeClass(operationalStatus);
       return "<tr><td><span class=\"cell-primary\">" + esc(r.khs_id) + "</span>" +
         "<span class=\"cell-secondary\">" + esc(r.vendor_name) + "</span></td>" +
         "<td><span class=\"cell-primary\">" + esc(r.request_subject || "Untitled request") + "</span>" +
@@ -526,6 +547,7 @@ async function loadContractLifecycle() {
         "<td><span class=\"cell-primary\">" + esc(timeRemainingLabel(r.contract_days_remaining)) + "</span>" +
         (r.contract_days_remaining != null && r.contract_days_remaining >= 0 && r.contract_days_remaining <= 30
           ? "<span class=\"cell-secondary\">Renewal action due</span>" : "") + "</td>" +
+        "<td><span class=\"status-badge " + operationalBadge + "\">" + esc(contractOperationalStatusLabel(operationalStatus)) + "</span></td>" +
         "<td><span class=\"status-badge " + badge + "\">" + esc(lifecycleStatusLabel(statusValue)) + "</span></td>" +
         "<td><button type=\"button\" class=\"view-button\" data-view-khs=\"" + esc(r.khs_id) + "\">Details</button></td></tr>";
     }).join("");
@@ -576,13 +598,15 @@ function renderLPTimeline(record) {
 
 function renderContractDetail(record) {
   const summary = record.contract_lifecycle || {};
-  const status = summary.contract_lifecycle_status || "not_fully_injected";
+  const operationalStatus = summary.contract_operational_status || "not_fully_injected";
   const badge = $("contractDetailStatus");
   if (badge) {
-    badge.className = "status-badge " + lifecycleBadgeClass(status);
-    badge.textContent = lifecycleStatusLabel(status);
+    badge.className = "status-badge " + contractOperationalBadgeClass(operationalStatus);
+    badge.textContent = contractOperationalStatusLabel(operationalStatus);
   }
   const items = [
+    ["Contract status", summary.contract_operational_status_label || contractOperationalStatusLabel(operationalStatus)],
+    ["Renewal alert", summary.contract_renewal_alert_label || summary.contract_lifecycle_label],
     ["Contract start", record.contract_start_date],
     ["Contract end", record.contract_end_date],
     ["Contract term", summary.contract_duration_label],
