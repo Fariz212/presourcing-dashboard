@@ -167,7 +167,7 @@ class RegisterFakeCursor:
 
         if "SELECT COUNT(*) AS total" in query:
             self.result = {"total": self.pool.total}
-        elif "SELECT register.lp_stage_key" in query:
+        elif "GROUP BY register.lp_stage_key" in query:
             self.rows = self.pool.stage_summary_rows
         else:
             self.rows = self.pool.rows
