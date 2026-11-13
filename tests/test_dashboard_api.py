@@ -309,15 +309,19 @@ def test_khs_register_returns_service_unavailable_on_db_error(make_client):
         == "KHS_REGISTER_UNAVAILABLE"
     )
 
-def test_khs_register_attention_filter_is_parameterized_and_applied(make_client):
+def test_khs_register_attention_filter_excludes_completed_and_includes_next_action(make_client):
     pool = RegisterFakePool(rows=[], total=0)
     response = make_client(pool).get("/api/dashboard/khs?attention=true")
     assert response.status_code == 200
     count_query, _ = pool.queries[0]
     data_query, _ = pool.queries[1]
-    expected = "(register.waiting_for IS NOT NULL OR register.lp_started_without_mi_gm_approval IS TRUE)"
-    assert expected in count_query
-    assert expected in data_query
+
+    for query in (count_query, data_query):
+        assert "register.workflow_status <> 'completed'" in query
+        assert "NULLIF(BTRIM(COALESCE(register.waiting_for, '')), '') IS NOT NULL" in query
+        assert "NULLIF(BTRIM(COALESCE(register.waiting_reason, '')), '') IS NOT NULL" in query
+        assert "register.lp_started_without_mi_gm_approval IS TRUE" in query
+
     assert "LEFT JOIN khs_executors" in data_query
 
 class ExportCursor:
@@ -422,6 +426,13 @@ def test_workflow_overview_returns_role_level_mi_and_lp_queues(make_client):
     assert "mi_sm_approval_date" in query
     assert "mi_gm_approval_date" in query
     assert "waiting_for" in query
+    assert query.count("ELSE 'unassigned_or_other'") == 1
+    assert "WITH active_lp AS" in query
+    assert "COUNT(*)::int AS active_total" in query
+    # Ordered CASE branches ensure one free-text assignment maps to one LP lane.
+    assert query.index("LIKE '%junior manager%'") < query.index("LIKE '%senior manager%'")
+    assert query.index("LIKE '%senior manager%'") < query.index("LIKE '%general manager%'")
+    assert query.index("LIKE '%general manager%'") < query.index("LIKE '%director%'")
 
 
 def test_workflow_overview_returns_service_unavailable_on_db_error(make_client):
@@ -445,7 +456,10 @@ def test_khs_register_filters_lp_queue_by_waiting_role(make_client):
     for query in (count_query, data_query):
         assert "register.lp_circulation_start_date IS NOT NULL" in query
         assert "register.lp_completion_date IS NULL" in query
+        assert "CASE" in query
         assert "lower(trim(COALESCE(register.waiting_for, ''))) LIKE '%director%'" in query
+    assert pool.queries[0][1] == ["director"]
+    assert pool.queries[1][1][-3:] == ["director", 25, 0]
 
 
 def test_khs_register_rejects_unknown_waiting_role_without_query(make_client):
