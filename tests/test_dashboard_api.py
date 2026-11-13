@@ -4,7 +4,12 @@ from io import BytesIO
 import pytest
 from flask import Flask
 
-from app.routes.dashboard import dashboard_bp
+from app.routes.dashboard import (
+    _contract_lifecycle_data,
+    _contract_term,
+    _lp_timeline_summary,
+    dashboard_bp,
+)
 
 
 class FakeCursor:
@@ -153,6 +158,8 @@ class RegisterFakeCursor:
 
         if "SELECT COUNT(*) AS total" in query:
             self.result = {"total": self.pool.total}
+        elif "SELECT register.lp_stage_key" in query:
+            self.rows = self.pool.stage_summary_rows
         else:
             self.rows = self.pool.rows
 
@@ -174,10 +181,11 @@ class RegisterFakeConnection:
 
 
 class RegisterFakePool:
-    def __init__(self, rows=None, total=0, error=None):
+    def __init__(self, rows=None, total=0, error=None, stage_summary_rows=None):
         self.rows = rows or []
         self.total = total
         self.error = error
+        self.stage_summary_rows = stage_summary_rows or []
         self.queries = []
 
     @contextmanager
