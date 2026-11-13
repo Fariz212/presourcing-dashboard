@@ -27,11 +27,22 @@ SELECT
 
     COUNT(*) FILTER (WHERE lp_completion_date IS NOT NULL) AS lp_completed,
     COUNT(*) FILTER (
-        WHERE lp_circulation_start_date IS NOT NULL
-          AND lp_completion_date IS NULL
+        WHERE lp_completion_date IS NULL
+          AND (
+                lp_circulation_start_date IS NOT NULL
+             OR lp_contract_team_completion_date IS NOT NULL
+             OR lp_junior_manager_approval_date IS NOT NULL
+             OR lp_senior_manager_approval_date IS NOT NULL
+             OR lp_gm_scm_approval_date IS NOT NULL
+          )
     ) AS lp_in_progress,
     COUNT(*) FILTER (
         WHERE lp_circulation_start_date IS NULL
+          AND lp_contract_team_completion_date IS NULL
+          AND lp_junior_manager_approval_date IS NULL
+          AND lp_senior_manager_approval_date IS NULL
+          AND lp_gm_scm_approval_date IS NULL
+          AND lp_completion_date IS NULL
     ) AS lp_not_started,
 
     COUNT(*) FILTER (
@@ -56,6 +67,11 @@ SELECT
     COUNT(*) FILTER (
         WHERE mi_gm_approval_date IS NOT NULL
           AND lp_circulation_start_date IS NULL
+          AND lp_contract_team_completion_date IS NULL
+          AND lp_junior_manager_approval_date IS NULL
+          AND lp_senior_manager_approval_date IS NULL
+          AND lp_gm_scm_approval_date IS NULL
+          AND lp_completion_date IS NULL
     ) AS awaiting_lp_circulation
 
 FROM khs_items;
@@ -290,6 +306,10 @@ CROSS JOIN LATERAL (
             WHEN k.lp_completion_date IS NOT NULL
                 THEN 'completed'
             WHEN k.lp_circulation_start_date IS NOT NULL
+              OR k.lp_contract_team_completion_date IS NOT NULL
+              OR k.lp_junior_manager_approval_date IS NOT NULL
+              OR k.lp_senior_manager_approval_date IS NOT NULL
+              OR k.lp_gm_scm_approval_date IS NOT NULL
                 THEN 'in_progress'
             ELSE 'not_started'
         END AS lp_status,
@@ -306,6 +326,10 @@ CROSS JOIN LATERAL (
               OR k.mi_gm_approval_date IS NOT NULL
               OR k.legal_submission_date IS NOT NULL
               OR k.lp_circulation_start_date IS NOT NULL
+              OR k.lp_contract_team_completion_date IS NOT NULL
+              OR k.lp_junior_manager_approval_date IS NOT NULL
+              OR k.lp_senior_manager_approval_date IS NOT NULL
+              OR k.lp_gm_scm_approval_date IS NOT NULL
               OR k.lp_completion_date IS NOT NULL
                 THEN 'in_progress'
             ELSE 'not_started'
@@ -317,6 +341,10 @@ CROSS JOIN LATERAL (
             WHEN k.lp_completion_date IS NOT NULL
                 THEN 'KHS_INJECTION'
             WHEN k.lp_circulation_start_date IS NOT NULL
+              OR k.lp_contract_team_completion_date IS NOT NULL
+              OR k.lp_junior_manager_approval_date IS NOT NULL
+              OR k.lp_senior_manager_approval_date IS NOT NULL
+              OR k.lp_gm_scm_approval_date IS NOT NULL
                 THEN 'LP_CIRCULATION'
             WHEN k.legal_submission_date IS NOT NULL
                 THEN 'LEGAL_PROCESSING'
@@ -342,13 +370,31 @@ CROSS JOIN LATERAL (
         CASE
             WHEN k.lp_completion_date IS NOT NULL
                 THEN 'completed'
-            WHEN k.lp_circulation_start_date IS NULL
-              AND (
-                    k.lp_contract_team_completion_date IS NOT NULL
-                 OR k.lp_junior_manager_approval_date IS NOT NULL
-                 OR k.lp_senior_manager_approval_date IS NOT NULL
-                 OR k.lp_gm_scm_approval_date IS NOT NULL
-              )
+            WHEN (
+            (k.lp_circulation_start_date IS NULL AND (
+                k.lp_contract_team_completion_date IS NOT NULL
+                OR k.lp_junior_manager_approval_date IS NOT NULL
+                OR k.lp_senior_manager_approval_date IS NOT NULL
+                OR k.lp_gm_scm_approval_date IS NOT NULL
+                OR k.lp_completion_date IS NOT NULL
+            ))
+            OR (k.lp_contract_team_completion_date IS NULL AND (
+                k.lp_junior_manager_approval_date IS NOT NULL
+                OR k.lp_senior_manager_approval_date IS NOT NULL
+                OR k.lp_gm_scm_approval_date IS NOT NULL
+                OR k.lp_completion_date IS NOT NULL
+            ))
+            OR (k.lp_junior_manager_approval_date IS NULL AND (
+                k.lp_senior_manager_approval_date IS NOT NULL
+                OR k.lp_gm_scm_approval_date IS NOT NULL
+                OR k.lp_completion_date IS NOT NULL
+            ))
+            OR (k.lp_senior_manager_approval_date IS NULL AND (
+                k.lp_gm_scm_approval_date IS NOT NULL
+                OR k.lp_completion_date IS NOT NULL
+            ))
+            OR (k.lp_gm_scm_approval_date IS NULL AND k.lp_completion_date IS NOT NULL)
+        )
                 THEN 'legacy_incomplete'
             WHEN k.lp_circulation_start_date IS NULL
                 THEN 'not_started'
@@ -361,7 +407,33 @@ CROSS JOIN LATERAL (
             WHEN k.lp_gm_scm_approval_date IS NULL
                 THEN 'general_manager'
             ELSE 'director'
-        END AS lp_stage_key
+        END AS lp_stage_key,
+
+        (
+            (k.lp_circulation_start_date IS NULL AND (
+                k.lp_contract_team_completion_date IS NOT NULL
+                OR k.lp_junior_manager_approval_date IS NOT NULL
+                OR k.lp_senior_manager_approval_date IS NOT NULL
+                OR k.lp_gm_scm_approval_date IS NOT NULL
+                OR k.lp_completion_date IS NOT NULL
+            ))
+            OR (k.lp_contract_team_completion_date IS NULL AND (
+                k.lp_junior_manager_approval_date IS NOT NULL
+                OR k.lp_senior_manager_approval_date IS NOT NULL
+                OR k.lp_gm_scm_approval_date IS NOT NULL
+                OR k.lp_completion_date IS NOT NULL
+            ))
+            OR (k.lp_junior_manager_approval_date IS NULL AND (
+                k.lp_senior_manager_approval_date IS NOT NULL
+                OR k.lp_gm_scm_approval_date IS NOT NULL
+                OR k.lp_completion_date IS NOT NULL
+            ))
+            OR (k.lp_senior_manager_approval_date IS NULL AND (
+                k.lp_gm_scm_approval_date IS NOT NULL
+                OR k.lp_completion_date IS NOT NULL
+            ))
+            OR (k.lp_gm_scm_approval_date IS NULL AND k.lp_completion_date IS NOT NULL)
+        ) AS lp_timeline_has_gaps
 ) AS derived
 
 LEFT JOIN khs_stage_config stage
@@ -511,8 +583,14 @@ def _lp_timeline_summary(record, today=None):
         stage_key = "completed"
         stage_started = None
         stage_age = None
+    elif has_gaps:
+        # A later milestone exists after a missing earlier date. The current
+        # owner/stage cannot be inferred reliably from milestone dates alone.
+        stage_key = "legacy_incomplete"
+        stage_started = None
+        stage_age = None
     elif start_date is None:
-        stage_key = "legacy_incomplete" if last_populated > 0 else "not_started"
+        stage_key = "not_started"
         stage_started = None
         stage_age = None
     else:
@@ -773,7 +851,11 @@ def khs_register():
 
     if waiting_role:
         filters.append(
-            "(register.lp_circulation_start_date IS NOT NULL "
+            "((register.lp_circulation_start_date IS NOT NULL "
+            "OR register.lp_contract_team_completion_date IS NOT NULL "
+            "OR register.lp_junior_manager_approval_date IS NOT NULL "
+            "OR register.lp_senior_manager_approval_date IS NOT NULL "
+            "OR register.lp_gm_scm_approval_date IS NOT NULL) "
             "AND register.lp_completion_date IS NULL "
             "AND " + _waiting_role_case_sql("register.waiting_for") + " = %s)"
         )
@@ -902,7 +984,11 @@ def lp_circulation_register():
     """
     filters = [lp_record_condition]
     params = []
-    if stage:
+    if stage == "legacy_incomplete":
+        # This is a history-quality filter, not an operational stage. Include
+        # completed legacy records whose intermediate dates were never captured.
+        filters.append("register.lp_timeline_has_gaps IS TRUE")
+    elif stage:
         filters.append("register.lp_stage_key = %s")
         params.append(stage)
     if search:
@@ -944,7 +1030,10 @@ def lp_circulation_register():
         LIMIT %s OFFSET %s
     """
     summary_query = f"""
-        SELECT register.lp_stage_key, COUNT(*)::int AS total
+        SELECT
+            register.lp_stage_key,
+            COUNT(*)::int AS total,
+            COUNT(*) FILTER (WHERE register.lp_timeline_has_gaps)::int AS timeline_gaps
         FROM ({REGISTER_BASE_QUERY}) AS register
         WHERE {lp_record_condition}
         GROUP BY register.lp_stage_key
@@ -963,9 +1052,10 @@ def lp_circulation_register():
         stage_counts = {key: 0 for key in LP_STAGE_FILTERS}
         for row in summary_rows:
             stage_counts[row["lp_stage_key"]] = row["total"]
-        legacy_count = sum(
-            1 for row in rows if _lp_timeline_summary(row)["lp_timeline_has_gaps"]
-        )
+        # Count every timeline with missing historical milestones, including
+        # completed records. This is a data-quality overlay, not a workflow stage.
+        legacy_count = sum(row["timeline_gaps"] for row in summary_rows)
+        stage_counts["legacy_incomplete"] = legacy_count
         total_pages = (total + per_page - 1) // per_page if total else 0
         return jsonify(
             success=True,
@@ -973,7 +1063,7 @@ def lp_circulation_register():
             summary={
                 "total_lp_records": total,
                 "by_stage": stage_counts,
-                "legacy_incomplete_on_page": legacy_count,
+                "legacy_timeline_gaps": legacy_count,
             },
             pagination={
                 "page": page,
@@ -1736,8 +1826,14 @@ WORKFLOW_OVERVIEW_QUERY = f"""
 WITH active_lp AS (
     SELECT {_waiting_role_case_sql("waiting_for")} AS approval_role
     FROM khs_items
-    WHERE lp_circulation_start_date IS NOT NULL
-      AND lp_completion_date IS NULL
+    WHERE lp_completion_date IS NULL
+      AND (
+            lp_circulation_start_date IS NOT NULL
+         OR lp_contract_team_completion_date IS NOT NULL
+         OR lp_junior_manager_approval_date IS NOT NULL
+         OR lp_senior_manager_approval_date IS NOT NULL
+         OR lp_gm_scm_approval_date IS NOT NULL
+      )
 ),
 mi_queue AS (
     SELECT
