@@ -85,9 +85,9 @@
     <button type="button" class="text-button" data-go="contracts">Open contract lifecycle →</button>
   </div>
   <div class="contract-watch-grid">
-    <button type="button" class="contract-watch-card watch-six" data-contract-status="prep_6m"><span>Renewal preparation</span><strong id="overviewExpiring6m">—</strong><small>Within 6 months</small></button>
-    <button type="button" class="contract-watch-card watch-three" data-contract-status="watch_3m"><span>Renewal watch</span><strong id="overviewExpiring3m">—</strong><small>Within 3 months</small></button>
-    <button type="button" class="contract-watch-card watch-one" data-contract-status="urgent_1m"><span>Action required</span><strong id="overviewExpiring1m">—</strong><small>Within 1 month</small></button>
+    <button type="button" class="contract-watch-card watch-six" data-contract-status="within_6m"><span>Renewal preparation</span><strong id="overviewExpiring6m">—</strong><small>Within 6 months</small></button>
+    <button type="button" class="contract-watch-card watch-three" data-contract-status="within_3m"><span>Renewal watch</span><strong id="overviewExpiring3m">—</strong><small>Within 3 months</small></button>
+    <button type="button" class="contract-watch-card watch-one" data-contract-status="within_1m"><span>Action required</span><strong id="overviewExpiring1m">—</strong><small>Within 1 month</small></button>
     <button type="button" class="contract-watch-card watch-expired" data-contract-status="expired"><span>Expired</span><strong id="overviewExpiredContracts">—</strong><small>Past contract end date</small></button>
     <button type="button" class="contract-watch-card watch-missing" data-contract-status="missing_dates"><span>Missing dates</span><strong id="overviewMissingContractDates">—</strong><small>Fully injected · incomplete period</small></button>
   </div>
@@ -125,6 +125,8 @@
     <button type="button" class="lp-stage-card" data-lp-stage="senior_manager"><span>Senior Manager</span><strong id="lpCountSenior">—</strong><small>Awaiting approval</small></button>
     <button type="button" class="lp-stage-card" data-lp-stage="general_manager"><span>GM SCM</span><strong id="lpCountGm">—</strong><small>Awaiting approval</small></button>
     <button type="button" class="lp-stage-card" data-lp-stage="director"><span>Director</span><strong id="lpCountDirector">—</strong><small>Final sign-off</small></button>
+    <button type="button" class="lp-stage-card" data-lp-stage="completed"><span>LP Completed</span><strong id="lpCountCompleted">—</strong><small>Director signed</small></button>
+    <button type="button" class="lp-stage-card" data-lp-stage="legacy_incomplete"><span>Legacy / Incomplete</span><strong id="lpCountLegacy">—</strong><small>Historical gaps</small></button>
   </div>
   <article class="panel">
     <div class="filter-toolbar lp-filter-toolbar">
@@ -165,9 +167,9 @@
       <input id="contractSearch" type="search" placeholder="Search KHS, request, vendor…">
       <select id="contractStatusFilter">
         <option value="">All lifecycle statuses</option>
-        <option value="prep_6m">Renewal preparation · 6 months</option>
-        <option value="watch_3m">Renewal watch · 3 months</option>
-        <option value="urgent_1m">Action required · 1 month</option>
+        <option value="within_6m">Expiring within 6 months</option>
+        <option value="within_3m">Expiring within 3 months</option>
+        <option value="within_1m">Expiring within 1 month</option>
         <option value="urgent_14d">Urgent · 14 days</option>
         <option value="critical_7d">Final warning · 7 days</option>
         <option value="expired">Expired</option>
