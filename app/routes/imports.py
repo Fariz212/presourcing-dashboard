@@ -381,7 +381,7 @@ def preview_import():
         preview_field_sets = {
             "REQUEST": ("request_date", "request_subject", "requester_owner"),
             "KHS_ITEM": (
-                "request_id", "source_row_no", "dispatch_date", "executor_code",
+                "request_id", "dispatch_date", "executor_code",
                 "subtype", "vendor_name", "contract_start_date", "contract_end_date",
                 "boq_confirmation_date", "negotiation_date", "final_negotiation_date",
                 "mi_head_approval_date", "mi_sm_approval_date", "mi_gm_approval_date",
@@ -389,7 +389,7 @@ def preview_import():
                 "lp_contract_team_completion_date", "lp_junior_manager_approval_date",
                 "lp_senior_manager_approval_date", "lp_gm_scm_approval_date",
                 "lp_completion_date", "khs_inject_start_date", "khs_inject_completion_date",
-                "waiting_for", "waiting_reason", "last_updated_date", "remarks",
+                "waiting_for", "waiting_reason", "remarks",
             ),
         }
         for entity, sheet, record in staged_records:
