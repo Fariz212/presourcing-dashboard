@@ -431,6 +431,12 @@ class WorkflowRowsCursor:
     def __init__(self, rows):
         self.rows = rows
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        return False
+
     def execute(self, query):
         self.query = query
 
