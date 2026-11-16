@@ -64,9 +64,9 @@
     <div>
       <div class="eyebrow">LIVE WORKFLOW QUEUE</div>
       <h2 id="approvalCommandTitle">Approval Pipeline</h2>
-      <p>Every active approval queue, grouped by process and decision level.</p>
+      <p>Next approver is calculated from the recorded milestone dates, not the optional Waiting For field.</p>
     </div>
-    <span class="queue-live-tag"><span class="online-dot"></span> Live from register</span>
+    <span class="queue-live-tag"><span class="online-dot"></span> Milestone-derived</span>
   </div>
   <div class="approval-lanes">
     <article class="approval-lane memo-lane">
@@ -84,16 +84,22 @@
     <article class="approval-lane lp-lane">
       <div class="approval-lane-heading">
         <div class="lane-icon lane-icon-lp" aria-hidden="true">LP</div>
-        <div><h3>LP Circulation</h3><p>Active sign-off route · grouped by Waiting For</p></div>
-        <div class="lane-total"><strong id="lpQueueTotal">—</strong><span>in circulation</span></div>
+        <div><h3>LP Circulation</h3><p>Fixed six-step sign-off route</p></div>
+        <div class="lane-total"><strong id="lpQueueTotal">—</strong><span>in normal queue</span></div>
       </div>
-      <div class="queue-steps queue-steps-four">
-        <button type="button" class="queue-step queue-step-button" data-queue-role="junior_manager"><span class="queue-step-index">01</span><span class="queue-step-label">Junior Manager</span><strong id="lpJuniorCount">—</strong><small>Pending sign-off</small></button>
-        <button type="button" class="queue-step queue-step-button" data-queue-role="senior_manager"><span class="queue-step-index">02</span><span class="queue-step-label">Senior Manager</span><strong id="lpSeniorCount">—</strong><small>Pending sign-off</small></button>
-        <button type="button" class="queue-step queue-step-button" data-queue-role="general_manager"><span class="queue-step-index">03</span><span class="queue-step-label">General Manager</span><strong id="lpGeneralCount">—</strong><small>Pending sign-off</small></button>
-        <button type="button" class="queue-step queue-step-button" data-queue-role="director"><span class="queue-step-index">04</span><span class="queue-step-label">Director / Direktur</span><strong id="lpDirectorCount">—</strong><small>Final sign-off</small></button>
+      <div class="queue-steps queue-steps-five">
+        <button type="button" class="queue-step queue-step-button" data-lp-queue-stage="contract_team"><span class="queue-step-index">01</span><span class="queue-step-label">Tim Kontrak</span><strong id="lpContractTeamCount">—</strong><small>Initial review</small></button>
+        <button type="button" class="queue-step queue-step-button" data-lp-queue-stage="junior_manager"><span class="queue-step-index">02</span><span class="queue-step-label">Junior Manager</span><strong id="lpJuniorCount">—</strong><small>Vendor Management</small></button>
+        <button type="button" class="queue-step queue-step-button" data-lp-queue-stage="senior_manager"><span class="queue-step-index">03</span><span class="queue-step-label">Senior Manager</span><strong id="lpSeniorCount">—</strong><small>Strategic Sourcing</small></button>
+        <button type="button" class="queue-step queue-step-button" data-lp-queue-stage="general_manager"><span class="queue-step-index">04</span><span class="queue-step-label">GM SCM</span><strong id="lpGeneralCount">—</strong><small>Management approval</small></button>
+        <button type="button" class="queue-step queue-step-button" data-lp-queue-stage="director"><span class="queue-step-index">05</span><span class="queue-step-label">Director</span><strong id="lpDirectorCount">—</strong><small>Final sign-off</small></button>
       </div>
-      <div class="queue-reconciliation"><span>Unassigned / other</span><strong id="lpOtherCount">—</strong><span class="queue-reconciliation-note" id="lpQueueNote">LP roles follow the current Waiting For value.</span></div>
+      <div class="queue-reconciliation">
+        <button type="button" class="queue-exception-link" data-lp-queue-stage="prerequisite_exception">MI GM prerequisite <strong id="lpPrerequisiteCount">—</strong></button>
+        <button type="button" class="queue-exception-link" data-lp-queue-stage="legacy_unverified">Legacy stage unverified <strong id="lpLegacyUnverifiedCount">—</strong></button>
+        <button type="button" class="queue-exception-link" data-lp-queue-stage="legacy_incomplete">Timeline gaps <strong id="lpTimelineGapsCount">—</strong></button>
+        <span class="queue-reconciliation-note" id="lpQueueNote">Records requiring reconciliation are kept outside normal approval lanes.</span>
+      </div>
     </article>
   </div>
 </section>
@@ -143,14 +149,18 @@
     <button type="button" class="lp-stage-card" data-lp-stage="general_manager"><span>GM SCM</span><strong id="lpCountGm">—</strong><small>Awaiting approval</small></button>
     <button type="button" class="lp-stage-card" data-lp-stage="director"><span>Director</span><strong id="lpCountDirector">—</strong><small>Final sign-off</small></button>
     <button type="button" class="lp-stage-card" data-lp-stage="completed"><span>LP Completed</span><strong id="lpCountCompleted">—</strong><small>Director signed</small></button>
-    <button type="button" class="lp-stage-card" data-lp-stage="legacy_incomplete"><span>Legacy / Incomplete</span><strong id="lpCountLegacy">—</strong><small>Historical gaps</small></button>
+    <button type="button" class="lp-stage-card" data-lp-stage="prerequisite_exception"><span>MI GM Exceptions</span><strong id="lpCountPrerequisite">—</strong><small>LP gate not met</small></button>
+    <button type="button" class="lp-stage-card" data-lp-stage="legacy_unverified"><span>Legacy Unverified</span><strong id="lpCountLegacyUnverified">—</strong><small>Director sign-off unverified</small></button>
+    <button type="button" class="lp-stage-card" data-lp-stage="legacy_incomplete"><span>Timeline Gaps</span><strong id="lpCountLegacy">—</strong><small>Missing historical dates</small></button>
   </div>
   <article class="panel">
     <div class="filter-toolbar lp-filter-toolbar">
       <input id="lpSearch" type="search" placeholder="Search KHS, request, vendor…">
       <select id="lpStageFilter">
         <option value="">All LP stages</option>
-        <option value="legacy_incomplete">Legacy timeline incomplete</option>
+        <option value="prerequisite_exception">MI GM prerequisite exception</option>
+        <option value="legacy_unverified">Legacy stage unverified</option>
+        <option value="legacy_incomplete">Timeline gaps</option>
         <option value="contract_team">Tim Kontrak</option>
         <option value="junior_manager">Junior Manager</option>
         <option value="senior_manager">Senior Manager</option>
@@ -206,7 +216,19 @@
 <div class="page-heading"><div><div class="eyebrow">DATA MANAGEMENT / WORKBOOK WORKSPACE</div><h1>Excel Import / Export</h1><p>Download the latest database workbook, edit existing records by ID, then preview and confirm the changes. Legacy v2.2 and v2.3 workbooks remain supported.</p></div><div class="heading-actions"><button class="secondary-button" id="downloadCurrentWorkbookButton">↓ Download current Excel</button><button class="secondary-button" id="exportKhsButton">↓ Export KHS CSV</button></div></div>
 <article class="panel import-workspace"><div class="import-guide" aria-label="Workbook workflow"><div class="import-guide-step"><span class="guide-number">01</span><div><strong>Download the live workbook</strong><small>Start with the latest database snapshot</small></div></div><span class="guide-connector" aria-hidden="true"></span><div class="import-guide-step"><span class="guide-number">02</span><div><strong>Update in Excel</strong><small>Keep record IDs unchanged</small></div></div><span class="guide-connector" aria-hidden="true"></span><div class="import-guide-step"><span class="guide-number">03</span><div><strong>Validate & confirm</strong><small>Review changes before they are saved</small></div></div></div><div class="upload-card" role="region" aria-label="Excel workbook upload area"><div><strong>Upload edited KHS workbook</strong><p>Use the current workbook download for updates. Keep Request ID and KHS ID unchanged. Blank cells preserve existing database values; removed rows do not delete records. <span class="drop-hint">You can also drag and drop an .xlsx file here.</span></p></div><div class="upload-actions"><label class="file-select-button" for="importFile">Choose file</label><input id="importFile" type="file" accept=".xlsx"><span id="importFileName" class="selected-file" role="status" aria-live="polite">No file selected</span><button class="primary-button" id="previewImportButton" type="button" disabled>Validate workbook</button></div></div>
 <div id="importFeedback" class="import-feedback" hidden role="status"></div><div id="importPreview" class="import-preview" hidden><div class="preview-heading"><div><div class="eyebrow">VALIDATION RESULT</div><h3 id="previewTitle">Workbook preview</h3><p id="previewDescription"></p></div><span id="previewBadge" class="import-status">PREVIEWED</span></div>
-<div class="import-metrics"><div class="import-metric"><span>Total rows</span><strong id="previewTotal">—</strong></div><div class="import-metric"><span>Valid rows</span><strong id="previewValid">—</strong></div><div class="import-metric"><span>Warnings</span><strong id="previewWarnings">—</strong></div><div class="import-metric"><span>Errors</span><strong id="previewErrors">—</strong></div></div><div class="preview-eligibility" id="previewEligibility"></div><div class="issues-section" id="issuesSection" hidden><div class="issues-heading"><strong>Validation issues</strong><span id="issuesCount"></span></div><div class="table-wrap"><table><thead><tr><th>SEVERITY</th><th>ENTITY</th><th>SHEET / ROW</th><th>DETAIL</th></tr></thead><tbody id="issuesBody"></tbody></table></div><p id="issuesTruncated" hidden>Additional issues are not displayed.</p></div>
+<div class="import-metrics"><div class="import-metric"><span>Total rows</span><strong id="previewTotal">—</strong></div><div class="import-metric"><span>Valid rows</span><strong id="previewValid">—</strong></div><div class="import-metric"><span>Warnings</span><strong id="previewWarnings">—</strong></div><div class="import-metric"><span>Errors</span><strong id="previewErrors">—</strong></div></div>
+<div class="change-plan" id="changePlan" hidden>
+  <div class="issues-heading"><strong>Changes to be applied</strong><span id="changePlanCount"></span></div>
+  <div class="import-metrics change-plan-metrics">
+    <div class="import-metric"><span>New records</span><strong id="planNew">—</strong></div>
+    <div class="import-metric"><span>Updated records</span><strong id="planUpdated">—</strong></div>
+    <div class="import-metric"><span>Unchanged records</span><strong id="planUnchanged">—</strong></div>
+    <div class="import-metric"><span>Changed fields</span><strong id="planFields">—</strong></div>
+  </div>
+  <div class="table-wrap"><table><thead><tr><th>RECORD</th><th>OPERATION</th><th>FIELDS TO CHANGE</th></tr></thead><tbody id="changePlanBody"></tbody></table></div>
+  <p class="muted">The preview is calculated against the current database values. Blank cells remain no-change; no records are written until Confirm Import.</p>
+</div>
+<div class="preview-eligibility" id="previewEligibility"></div><div class="issues-section" id="issuesSection" hidden><div class="issues-heading"><strong>Validation issues</strong><span id="issuesCount"></span></div><div class="table-wrap"><table><thead><tr><th>SEVERITY</th><th>ENTITY</th><th>SHEET / ROW</th><th>DETAIL</th></tr></thead><tbody id="issuesBody"></tbody></table></div><p id="issuesTruncated" hidden>Additional issues are not displayed.</p></div>
 <div class="confirmation-area"><label id="warningAckWrap" hidden><input type="checkbox" id="acceptWarnings"> I have reviewed and acknowledge the warnings.</label><div class="confirmation-actions"><span id="confirmationHint">Review validation result.</span><button class="primary-button" id="confirmImportButton" type="button" disabled>Confirm import</button></div></div></div>
 <div class="history-heading"><div><div class="eyebrow">AUDIT TRAIL</div><h2>Import History</h2></div><button class="secondary-button" id="refreshHistoryButton">Refresh history</button></div>
 <div class="table-wrap"><table><thead><tr><th>BATCH</th><th>WORKBOOK</th><th>STATUS</th><th>ROWS</th><th>INSERTED</th><th>UPDATED</th><th>UNCHANGED</th><th>UPLOADED</th></tr></thead><tbody id="importHistoryBody"><tr><td colspan="8" class="table-message">Not loaded.</td></tr></tbody></table></div>
