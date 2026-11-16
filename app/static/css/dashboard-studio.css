@@ -4086,3 +4086,21 @@ button:disabled {
   .workflow-empty-toggle { align-self: flex-start; }
   #workflowCards .workflow-stage { min-height: 88px; padding: 12px; }
 }
+
+
+/* Stage age is a separate signal from record count; keep both legible. */
+#workflowCards .workflow-stage-bottom {
+  align-items: baseline;
+  column-gap: 12px;
+  row-gap: 5px;
+}
+#workflowCards .workflow-stage-age {
+  color: var(--muted);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+}
+#workflowCards .workflow-stage-action { margin-left: auto; }
+@media (max-width: 680px) {
+  #workflowCards .workflow-stage-bottom { align-items: flex-start; }
+  #workflowCards .workflow-stage-action { margin-left: auto; }
+}
