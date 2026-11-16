@@ -58,6 +58,7 @@ KHS_HEADERS = [
     "Legacy Detailed Status",
     "Original Source Column S (Audit Copy - LP Circulation Start Date)",
     "Migration Review",
+    "LP Next Approver",
 ]
 
 MASTER_HEADERS = ["Executor", "Executor Name", "Subtype", "Waiting For"]
@@ -357,13 +358,13 @@ def build_current_khs_workbook(requests, items, executors, subtypes=None, waitin
     master_header_row = 5
     for col, header in enumerate(MASTER_HEADERS, start=1):
         _write_cell(master_ws.cell(master_header_row, col), header)
-    max_rows = max(len(executors), len(subtypes or []), len(waiting_for or []), 1)
+    max_rows = max(len(executors), len(subtypes or []), len(waiting_options), 1)
     for index in range(max_rows):
         values = [
             executors[index].get("executor_code") if index < len(executors) else None,
             executors[index].get("display_name") if index < len(executors) else None,
             (subtypes or [])[index] if index < len(subtypes or []) else None,
-            (waiting_for or [])[index] if index < len(waiting_for or []) else None,
+            waiting_options[index] if index < len(waiting_options) else None,
         ]
         master_ws.append([None] * len(MASTER_HEADERS))
         for col, value in enumerate(values, start=1):
@@ -395,9 +396,20 @@ def build_current_khs_workbook(requests, items, executors, subtypes=None, waitin
         khs_ws.add_data_validation(validation)
         validation.add(f"I{khs_header_row + 1}:I1048576")
 
+    waiting_options = sorted({
+        "Requester / User",
+        "Tim Kontrak",
+        "Junior Manager Vendor Management",
+        "Senior Manager Strategic Sourcing",
+        "GM SCM",
+        "Director / Direktur",
+        "Legal",
+        "Executor",
+        *[str(value).strip() for value in (waiting_for or []) if value and str(value).strip()],
+    })
     waiting_values = [
         str(value).replace('"', '""')
-        for value in (waiting_for or [])
+        for value in waiting_options
         if value and "," not in str(value)
     ]
     if waiting_values and len(",".join(waiting_values)) <= 240:
@@ -407,7 +419,8 @@ def build_current_khs_workbook(requests, items, executors, subtypes=None, waitin
             allow_blank=True,
         )
         khs_ws.add_data_validation(validation)
-        validation.add(f"AA{khs_header_row + 1}:AA1048576")
+        waiting_col = get_column_letter(KHS_HEADERS.index("Waiting For") + 1)
+        validation.add(f"{waiting_col}{khs_header_row + 1}:{waiting_col}1048576")
 
     output = BytesIO()
     wb.save(output)
