@@ -4,6 +4,7 @@ import re
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from openpyxl import Workbook, load_workbook
+from openpyxl.utils import get_column_letter
 
 from app.services.excel_import import (
     KHS_HEADERS,
@@ -142,7 +143,13 @@ def test_legacy_v22_workbook_remains_supported():
     result = parse_khs_workbook(
         build_workbook(legacy_v22=True),
         known_executors={"ALW", "AME"},
-        known_requests={},
+        known_requests={
+            "REQ-2026-001": {
+                "request_date": date(2026, 11, 1),
+                "request_subject": "KHS Test Request",
+                "requester_owner": "Test User",
+            }
+        },
     )
     assert result["summary"]["can_import"] is True
     assert result["template_version"] == "2.2-compatible"
@@ -152,7 +159,13 @@ def test_legacy_v23_workbook_remains_supported():
     result = parse_khs_workbook(
         build_workbook(legacy_v23=True),
         known_executors={"ALW", "AME"},
-        known_requests={},
+        known_requests={
+            "REQ-2026-001": {
+                "request_date": date(2026, 11, 1),
+                "request_subject": "KHS Test Request",
+                "requester_owner": "Test User",
+            }
+        },
     )
     assert result["summary"]["can_import"] is True
     assert result["template_version"] == "2.3"
@@ -410,7 +423,7 @@ def test_inject_completion_chronology_is_validated():
     assert result["summary"]["can_import"] is False
     assert "INJECT_COMPLETION_BEFORE_START" in codes
 
-def test_lp_start_without_mi_gm_generates_warning():
+def test_new_lp_start_without_mi_gm_is_rejected():
     result = parse_khs_workbook(
         build_workbook({
             "LP Circulation Start Date": datetime(2026, 11, 10),
@@ -419,10 +432,42 @@ def test_lp_start_without_mi_gm_generates_warning():
         known_executors={"ALW"},
     )
 
-    codes = {issue["code"] for issue in result["issues"]}
+    issue = next(
+        issue for issue in result["issues"]
+        if issue["code"] == "LP_START_WITHOUT_MI_GM_DATE"
+    )
+    assert issue["severity"] == "ERROR"
+    assert result["summary"]["can_import"] is False
 
+
+def test_unchanged_historic_lp_prerequisite_remains_warning_for_metadata_update():
+    workbook = build_workbook({"Remarks": "Updated note"})
+    result = parse_khs_workbook(
+        workbook,
+        known_executors={"ALW"},
+        known_requests={
+            "REQ-2026-001": {
+                "request_date": date(2026, 11, 1),
+                "request_subject": "KHS Test Request",
+            }
+        },
+        known_items={
+            "KHS-2026-0001": {
+                "khs_id": "KHS-2026-0001",
+                "request_id": "REQ-2026-001",
+                "vendor_name": "PT Test Vendor",
+                "lp_circulation_start_date": date(2026, 10, 20),
+                "mi_gm_approval_date": None,
+            }
+        },
+    )
+
+    issue = next(
+        issue for issue in result["issues"]
+        if issue["code"] == "LP_START_WITHOUT_MI_GM_DATE"
+    )
+    assert issue["severity"] == "WARNING"
     assert result["summary"]["can_import"] is True
-    assert "LP_START_WITHOUT_MI_GM_DATE" in codes
 
 
 def test_lp_completion_before_start_is_rejected():
@@ -479,6 +524,96 @@ def test_duplicate_khs_id_is_rejected():
 
     assert result["summary"]["can_import"] is False
     assert "DUPLICATE_KHS_ID" in codes
+
+
+def test_khs_row_with_data_but_missing_id_is_rejected():
+    workbook = build_workbook()
+    source = load_workbook(workbook)
+    ws = source["02 - KHS Tracking"]
+    header = {cell.value: cell.column for cell in ws[4]}
+    ws.cell(5, header["KHS ID"]).value = None
+    output = BytesIO()
+    source.save(output)
+    source.close()
+    output.seek(0)
+
+    result = parse_khs_workbook(output, known_executors={"ALW", "AME"})
+    assert result["summary"]["can_import"] is False
+    assert any(
+        issue["code"] == "MISSING_KHS_ID"
+        and issue["severity"] == "ERROR"
+        for issue in result["issues"]
+    )
+
+
+def test_formula_in_input_date_column_is_rejected():
+    workbook = build_workbook()
+    source = load_workbook(workbook)
+    ws = source["02 - KHS Tracking"]
+    header = {cell.value: cell.column for cell in ws[4]}
+    ws.cell(5, header["Dispatch Date"]).value = "=TODAY()"
+    output = BytesIO()
+    source.save(output)
+    source.close()
+    output.seek(0)
+
+    result = parse_khs_workbook(output, known_executors={"ALW", "AME"})
+    assert result["summary"]["can_import"] is False
+    assert any(
+        issue["code"] == "INVALID_DATE"
+        and issue["field"] == "Dispatch Date"
+        for issue in result["issues"]
+    )
+
+
+def test_current_workbook_calculated_columns_recalculate_and_waiting_dropdown_is_aligned():
+    workbook = build_current_khs_workbook(
+        requests=[{
+            "request_id": "REQ-2026-001",
+            "request_date": date(2026, 11, 1),
+            "request_subject": "Test request",
+            "total_khs": 1,
+            "completed_khs": 0,
+            "open_khs": 1,
+            "request_status": "In Progress",
+        }],
+        items=[{
+            "khs_id": "KHS-2026-0001",
+            "request_id": "REQ-2026-001",
+            "request_date": date(2026, 11, 1),
+            "request_subject": "Test request",
+            "vendor_name": "PT Test Vendor",
+            "lp_circulation_start_date": date(2026, 11, 10),
+            "mi_gm_approval_date": date(2026, 11, 9),
+        }],
+        executors=[{"executor_code": "ALW", "display_name": "Executor A"}],
+        subtypes=["Renewal"],
+    )
+    output = load_workbook(workbook, data_only=False)
+    try:
+        request_ws = output["01 - Request Register"]
+        request_headers = {cell.value: cell.column for cell in request_ws[5]}
+        assert request_ws.cell(6, request_headers["Total KHS"]).data_type == "f"
+        assert request_ws.cell(6, request_headers["Request Status"]).data_type == "f"
+
+        khs_ws = output["02 - KHS Tracking"]
+        khs_headers = {cell.value: cell.column for cell in khs_ws[5]}
+        for header in ("MI Status", "LP Status", "Workflow Status", "Current Stage", "LP Next Approver"):
+            assert khs_ws.cell(6, khs_headers[header]).data_type == "f", header
+
+        waiting_column = khs_headers["Waiting For"]
+        expected_range = f"{get_column_letter(waiting_column)}6:{get_column_letter(waiting_column)}1048576"
+        ranges = [
+            str(validation.sqref)
+            for validation in khs_ws.data_validations.dataValidation
+        ]
+        assert expected_range in ranges
+        assert "AA6:AA1048576" not in ranges
+
+        assert output.calculation.fullCalcOnLoad is True
+        assert output.calculation.forceFullCalc is True
+    finally:
+        output.close()
 
 
 def test_parser_supports_missing_worksheet_dimensions():
