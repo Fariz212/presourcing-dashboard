@@ -19,7 +19,6 @@ REQUEST_FIELDS = (
 
 ITEM_FIELDS = (
     "request_id",
-    "source_row_no",
     "dispatch_date",
     "executor_code",
     "subtype",
@@ -43,12 +42,7 @@ ITEM_FIELDS = (
     "khs_inject_completion_date",
     "waiting_for",
     "waiting_reason",
-    "last_updated_date",
     "remarks",
-    "legacy_overall_status",
-    "legacy_detailed_status",
-    "source_col_s_audit_date",
-    "migration_review",
     "lp_timeline_source",
 )
 
@@ -72,8 +66,6 @@ DATE_FIELDS = {
     "lp_completion_date",
     "khs_inject_start_date",
     "khs_inject_completion_date",
-    "last_updated_date",
-    "source_col_s_audit_date",
 }
 
 TABLE_CONFIG = {
