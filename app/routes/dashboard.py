@@ -908,6 +908,15 @@ def khs_register():
             "message": "Unsupported workflow stage filter.",
         }), 400
 
+    lp_stage = request.args.get("lp_stage", "").strip().lower()
+    allowed_lp_stages = set(LP_STAGE_FILTERS) | {"prerequisite_exception"}
+    if lp_stage and lp_stage not in allowed_lp_stages:
+        return jsonify({
+            "success": False,
+            "code": "INVALID_LP_STAGE",
+            "message": "Unsupported LP workflow stage filter.",
+        }), 400
+
     waiting_role = request.args.get("waiting_role", "").strip().lower()
     allowed_waiting_roles = {
         "junior_manager", "senior_manager", "general_manager", "director"
