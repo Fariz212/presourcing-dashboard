@@ -1,8 +1,9 @@
 name: KHS application checks
 
 on:
+  workflow_dispatch:
   push:
-    branches: [khs, 'design/khs-atelier-ux']
+    branches: [khs]
   pull_request:
     branches: [khs]
     types: [opened, synchronize, reopened, ready_for_review]
