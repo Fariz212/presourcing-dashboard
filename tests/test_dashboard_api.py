@@ -427,51 +427,45 @@ def test_document_upload_rejects_unsupported_file_extensions(make_client):
 
 
 
-def test_workflow_overview_returns_role_level_mi_and_lp_queues(make_client):
-    pool = FakePool(row=(4, 3, 2, 5, 4, 3, 2, 1, 15))
+def test_workflow_overview_returns_milestone_derived_lp_queues(make_client):
+    pool = FakePool(row=(4, 3, 2, 6, 5, 4, 3, 2, 1, 7, 28))
 
     response = make_client(pool).get("/api/dashboard/workflow/overview")
 
     assert response.status_code == 200
     payload = response.get_json()
     assert payload["success"] is True
-    assert payload["data"]["memo_internal"] == [
-        {
-            "key": "junior_manager",
-            "label": "Junior Manager",
-            "count": 4,
-            "stage_code": "MI_HEAD_APPROVAL",
-        },
-        {
-            "key": "senior_manager",
-            "label": "Senior Manager",
-            "count": 3,
-            "stage_code": "MI_SM_APPROVAL",
-        },
-        {
-            "key": "general_manager",
-            "label": "General Manager",
-            "count": 2,
-            "stage_code": "MI_GM_APPROVAL",
-        },
+    assert [item["count"] for item in payload["data"]["memo_internal"]] == [4, 3, 2]
+    assert [item["key"] for item in payload["data"]["lp"]] == [
+        "contract_team",
+        "junior_manager",
+        "senior_manager",
+        "general_manager",
+        "director",
     ]
-    assert [item["count"] for item in payload["data"]["lp"]] == [5, 4, 3, 2]
-    assert payload["data"]["lp_active_total"] == 15
-    assert payload["data"]["lp_unassigned_or_other"] == 1
+    assert [item["count"] for item in payload["data"]["lp"]] == [6, 5, 4, 3, 2]
+    assert [item["label"] for item in payload["data"]["lp"]] == [
+        "Tim Kontrak",
+        "Junior Manager Vendor Management",
+        "Senior Manager Strategic Sourcing",
+        "GM SCM",
+        "Director / Direktur",
+    ]
+    assert payload["data"]["lp_active_total"] == 28
+    assert payload["data"]["lp_prerequisite_exception"] == 1
+    assert payload["data"]["lp_legacy_unverified"] == 7
+    assert "milestone" in payload["data"]["lp_count_basis"].lower()
     assert "Waiting For" in payload["data"]["lp_count_basis"]
 
     query = pool.connection_object.executed_query
     assert "mi_head_approval_date" in query
     assert "mi_sm_approval_date" in query
     assert "mi_gm_approval_date" in query
-    assert "waiting_for" in query
-    assert query.count("ELSE 'unassigned_or_other'") == 1
-    assert "WITH active_lp AS" in query
-    assert "COUNT(*)::int AS active_total" in query
-    # Ordered CASE branches ensure one free-text assignment maps to one LP lane.
-    assert query.index("POSITION('junior manager'") < query.index("POSITION('senior manager'")
-    assert query.index("POSITION('senior manager'") < query.index("POSITION('general manager'")
-    assert query.index("POSITION('general manager'") < query.index("POSITION('director'")
+    assert "lp_stage_key" in query
+    assert "lp_started_without_mi_gm_approval" in query
+    assert "lp_timeline_source" in query
+    assert "POSITION('junior manager'" not in query
+    assert "unassigned_or_other" not in query
 
 
 def test_workflow_overview_returns_service_unavailable_on_db_error(make_client):
@@ -495,13 +489,37 @@ def test_khs_register_filters_lp_queue_by_waiting_role(make_client):
     for query in (count_query, data_query):
         assert "register.lp_circulation_start_date IS NOT NULL" in query
         assert "register.lp_completion_date IS NULL" in query
-        assert "CASE" in query
         assert "POSITION('director' IN lower(trim(COALESCE(register.waiting_for, '')))) > 0" in query
-        # The role classifier must not add literal LIKE percent patterns
-        # alongside psycopg's %s bind placeholders.
         assert "LIKE '%" not in query
     assert pool.queries[0][1] == ["director"]
     assert pool.queries[1][1][-3:] == ["director", 25, 0]
+
+
+def test_khs_register_filters_lp_queue_by_derived_stage(make_client):
+    pool = RegisterFakePool(rows=[], total=3)
+
+    response = make_client(pool).get("/api/dashboard/khs?lp_stage=contract_team")
+
+    assert response.status_code == 200
+    count_query, _ = pool.queries[0]
+    data_query, _ = pool.queries[1]
+    for query in (count_query, data_query):
+        assert "register.lp_stage_key = %s" in query
+    assert pool.queries[0][1] == ["contract_team"]
+    assert pool.queries[1][1][-3:] == ["contract_team", 25, 0]
+
+
+def test_khs_register_filters_prerequisite_exceptions(make_client):
+    pool = RegisterFakePool(rows=[], total=1)
+
+    response = make_client(pool).get("/api/dashboard/khs?lp_stage=prerequisite_exception")
+
+    assert response.status_code == 200
+    count_query, data_query = pool.queries[0][0], pool.queries[1][0]
+    for query in (count_query, data_query):
+        assert "register.lp_started_without_mi_gm_approval IS TRUE" in query
+    assert pool.queries[0][1] == []
+    assert pool.queries[1][1][-2:] == [25, 0]
 
 
 def test_khs_register_rejects_unknown_waiting_role_without_query(make_client):
@@ -599,6 +617,21 @@ def test_lp_timeline_derives_stage_age_and_preserves_missing_legacy_dates():
     assert legacy["lp_timeline_has_gaps"] is True
     assert legacy["lp_timeline_gaps"] == ["lp_contract_team_completion_date"]
     assert legacy["lp_timeline_data_status"] == "legacy_incomplete"
+
+    legacy_unverified = _lp_timeline_summary({
+        "lp_circulation_start_date": date(2026, 10, 20),
+        "lp_contract_team_completion_date": None,
+        "lp_junior_manager_approval_date": None,
+        "lp_senior_manager_approval_date": None,
+        "lp_gm_scm_approval_date": None,
+        "lp_completion_date": None,
+        "lp_timeline_source": "LEGACY_UNVERIFIED",
+    }, today=today)
+
+    assert legacy_unverified["lp_stage_key"] == "legacy_unverified"
+    assert legacy_unverified["lp_stage_label"] == "Legacy Stage Unverified"
+    assert legacy_unverified["lp_stage_age_days"] is None
+    assert legacy_unverified["lp_timeline_has_gaps"] is True
 
 
 def test_lp_completed_legacy_record_keeps_intermediate_gaps_visible():
