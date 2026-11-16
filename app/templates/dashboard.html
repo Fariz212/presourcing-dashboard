@@ -265,9 +265,33 @@
 </main></div>
 <dialog id="recordDialog" class="record-dialog"><form id="recordForm" method="dialog"><div class="dialog-header"><div><div class="eyebrow" id="dialogEyebrow">NEW RECORD</div><h2 id="dialogTitle">Create record</h2></div><button type="button" class="dialog-close" id="closeRecordDialog">×</button></div><div id="dialogFields" class="form-grid"></div><div id="dialogHint" class="form-hint"></div><div class="dialog-footer"><button type="button" class="secondary-button" id="cancelRecord">Cancel</button><button type="submit" class="primary-button" id="saveRecord">Save record</button></div></form></dialog>
 <dialog id="detailDialog" class="detail-dialog"><div class="dialog-header"><div><div class="eyebrow">KHS RECORD</div><h2 id="detailTitle">KHS Details</h2><p class="detail-subtitle" id="detailSubtitle"></p></div><button class="dialog-close" id="closeDialog">×</button></div><div id="detailStatus" class="dialog-status-row"></div>
-<section class="lp-timeline-section"><div class="lp-timeline-heading"><div><div class="eyebrow">LP CIRCULATION</div><h3>Approval Timeline</h3></div><span id="lpTimelineStage" class="status-badge status-in_progress">—</span></div><div id="lpTimeline" class="lp-timeline"></div><div id="lpTimelineNotice" class="lp-timeline-notice" hidden></div></section>
+<section class="lp-timeline-section" aria-labelledby="lpTimelineTitle">
+  <div class="lp-timeline-heading">
+    <div><div class="eyebrow">LP CIRCULATION</div><h3 id="lpTimelineTitle">Approval journey</h3><p>Evidence-led view of the six LP milestones</p></div>
+    <span id="lpTimelineStage" class="status-badge status-in_progress" aria-live="polite">—</span>
+  </div>
+  <div class="lp-stage-focus" aria-label="Current LP stage summary">
+    <div class="lp-stage-focus-item lp-stage-focus-current">
+      <span class="lp-stage-focus-label">Current Stage</span>
+      <strong id="lpCurrentStage">—</strong>
+      <small id="lpCurrentStageMeta">—</small>
+    </div>
+    <div class="lp-stage-focus-item">
+      <span class="lp-stage-focus-label">Stage Age</span>
+      <strong id="lpStageAge">—</strong>
+      <small id="lpStageAgeMeta">—</small>
+    </div>
+    <div class="lp-stage-focus-item">
+      <span class="lp-stage-focus-label">Upcoming</span>
+      <strong id="lpUpcomingStage">—</strong>
+      <small id="lpUpcomingMeta">—</small>
+    </div>
+  </div>
+  <div id="lpTimeline" class="lp-timeline" role="list" aria-label="LP approval milestones"></div>
+  <div id="lpTimelineNotice" class="lp-timeline-notice" role="note" hidden></div>
+</section>
 <section class="contract-detail-summary"><div class="contract-detail-heading"><div><div class="eyebrow">POST-INJECTION</div><h3>Contract Lifecycle</h3></div><span id="contractDetailStatus" class="status-badge">—</span></div><div id="contractDetailGrid" class="contract-detail-grid"></div></section>
-<div id="detailGrid" class="detail-grid"></div>
+<div id="detailGrid" class="detail-groups"></div>
 <section class="document-section">
   <div class="document-section-heading"><div><h3>Evidence Documents</h3><p class="muted">Supporting files attached to this KHS record.</p></div></div>
   <form id="documentUploadForm" class="document-upload-form" enctype="multipart/form-data">
