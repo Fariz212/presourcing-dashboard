@@ -117,10 +117,19 @@
 <div class="overview-grid">
 <article class="panel"><div class="panel-heading"><div><div class="eyebrow">LIFECYCLE</div><h2>LP Circulation Progress</h2></div><span class="subtle-tag" id="lpTotalTag">— KHS</span></div>
 <div class="progress-summary"><strong class="progress-primary" id="progressPrimary">—</strong><strong class="progress-rate" id="progressRate">0%</strong></div>
-<div class="stacked-progress"><span id="barCompleted" class="segment segment-completed"></span><span id="barInProgress" class="segment segment-progress"></span><span id="barNotStarted" class="segment segment-not-started"></span></div>
-<div class="progress-legend"><span>Completed <b id="legendCompleted">—</b></span><span>In progress <b id="legendInProgress">—</b></span><span>Not started <b id="legendNotStarted">—</b></span></div></article>
+<p class="chart-caption">Portfolio distribution by LP completion status</p>
+<div class="stacked-progress" role="img" aria-label="LP circulation distribution: completed, in progress and not started. Exact counts are listed below."><span id="barCompleted" class="segment segment-completed"></span><span id="barInProgress" class="segment segment-progress"></span><span id="barNotStarted" class="segment segment-not-started"></span></div>
+<div class="progress-legend" aria-label="LP status legend">
+  <span class="legend-item legend-completed"><i aria-hidden="true"></i>Completed <b id="legendCompleted">—</b></span>
+  <span class="legend-item legend-progress"><i aria-hidden="true"></i>In progress <b id="legendInProgress">—</b></span>
+  <span class="legend-item legend-not-started"><i aria-hidden="true"></i>Not started <b id="legendNotStarted">—</b></span>
+</div></article>
 <article class="panel"><div class="panel-heading"><div><div class="eyebrow">PROCESS CHECKPOINTS</div><h2>Workflow Overview</h2></div></div>
-<div class="workflow-list"><div class="workflow-item"><span>MI GM approved</span><b id="miGmCount">—</b><div class="mini-track"><i id="miGmBar"></i></div></div><div class="workflow-item"><span>Legal submitted</span><b id="legalCount">—</b><div class="mini-track"><i id="legalBar"></i></div></div><div class="workflow-item"><span>LP started</span><b id="lpStartedCount">—</b><div class="mini-track"><i id="lpStartedBar"></i></div></div></div></article>
+<div class="workflow-list" aria-label="Workflow checkpoint coverage">
+  <div class="workflow-item checkpoint-mi"><span>MI GM approved</span><b id="miGmCount">—</b><div class="mini-track" role="img" aria-label="Share of KHS records with MI GM approval"><i id="miGmBar" aria-hidden="true"></i></div></div>
+  <div class="workflow-item checkpoint-legal"><span>Legal submitted</span><b id="legalCount">—</b><div class="mini-track" role="img" aria-label="Share of KHS records submitted to Legal"><i id="legalBar" aria-hidden="true"></i></div></div>
+  <div class="workflow-item checkpoint-lp"><span>LP started</span><b id="lpStartedCount">—</b><div class="mini-track" role="img" aria-label="Share of KHS records with LP circulation started"><i id="lpStartedBar" aria-hidden="true"></i></div></div>
+</div></article>
 </div>
 
 
