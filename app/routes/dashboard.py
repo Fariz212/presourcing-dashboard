@@ -1136,6 +1136,9 @@ def lp_circulation_register():
         # This is a history-quality filter, not an operational stage. Include
         # completed legacy records whose intermediate dates were never captured.
         filters.append("register.lp_timeline_has_gaps IS TRUE")
+    elif stage == "prerequisite_exception":
+        # Include Director-signed and active LPs with a missing/late MI GM date.
+        filters.append("register.lp_started_without_mi_gm_approval IS TRUE")
     elif stage:
         filters.append("register.lp_stage_key = %s")
         params.append(stage)
@@ -1181,7 +1184,10 @@ def lp_circulation_register():
         SELECT
             register.lp_stage_key,
             COUNT(*)::int AS total,
-            COUNT(*) FILTER (WHERE register.lp_timeline_has_gaps)::int AS timeline_gaps
+            COUNT(*) FILTER (WHERE register.lp_timeline_has_gaps)::int AS timeline_gaps,
+            COUNT(*) FILTER (
+                WHERE register.lp_started_without_mi_gm_approval IS TRUE
+            )::int AS prerequisite_exceptions
         FROM ({REGISTER_BASE_QUERY}) AS register
         WHERE {lp_record_condition}
         GROUP BY register.lp_stage_key
@@ -1203,6 +1209,7 @@ def lp_circulation_register():
         # Count every timeline with missing historical milestones, including
         # completed records. This is a data-quality overlay, not a workflow stage.
         legacy_count = sum(row["timeline_gaps"] for row in summary_rows)
+        prerequisite_count = sum(row["prerequisite_exceptions"] for row in summary_rows)
         stage_counts["legacy_incomplete"] = legacy_count
         total_pages = (total + per_page - 1) // per_page if total else 0
         return jsonify(
@@ -1212,6 +1219,7 @@ def lp_circulation_register():
                 "total_lp_records": total,
                 "by_stage": stage_counts,
                 "legacy_timeline_gaps": legacy_count,
+                "prerequisite_exceptions": prerequisite_count,
             },
             pagination={
                 "page": page,
