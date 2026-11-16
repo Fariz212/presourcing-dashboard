@@ -437,7 +437,7 @@ async function loadLPCirculation() {
   set("lpCountGm", byStage.general_manager || 0);
   set("lpCountDirector", byStage.director || 0);
   set("lpCountCompleted", byStage.completed || 0);
-  set("lpCountPrerequisite", byStage.prerequisite_exception || 0);
+  set("lpCountPrerequisite", summary.prerequisite_exceptions || 0);
   set("lpCountLegacyUnverified", byStage.legacy_unverified || 0);
   set("lpCountLegacy", byStage.legacy_incomplete || 0);
 
