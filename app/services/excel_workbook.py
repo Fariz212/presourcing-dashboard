@@ -372,7 +372,7 @@ def build_current_khs_workbook(requests, items, executors, subtypes=None, waitin
         name: get_column_letter(KHS_HEADERS.index(name) + 1)
         for name in KHS_HEADERS
     }
-    for row_number in range(khs_header_row + 1, khs_ws.max_row + 1):
+    for row_number, record in enumerate(items, start=khs_header_row + 1):
         c = {name: f"{letter}{row_number}" for name, letter in khs_col.items()}
         source_flag = (
             "LEGACY_UNVERIFIED"
