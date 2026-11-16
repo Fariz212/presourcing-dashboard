@@ -3978,3 +3978,32 @@ button:disabled {
   .overview-heading-actions .action-strip { grid-template-columns: 1fr; }
   .overview-heading-actions .overview-refresh { grid-column: auto; }
 }
+
+
+/* Mobile card width guard: long approval-role names must wrap inside each cell. */
+@media (max-width: 760px) {
+  .register-table-wrap table,
+  .activity-table-wrap table {
+    min-width: 0;
+    width: 100%;
+  }
+  .table-wrap tbody td,
+  .table-wrap tbody td > *,
+  .table-wrap tbody td span,
+  .table-wrap tbody td strong,
+  .table-wrap tbody td small,
+  .table-wrap tbody td a,
+  .table-wrap tbody td button {
+    min-width: 0;
+    max-width: 100%;
+    white-space: normal !important;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+  .table-wrap tbody td .status-badge,
+  .table-wrap tbody td .exception-label {
+    display: inline-flex;
+    width: fit-content;
+    max-width: 100%;
+  }
+}
