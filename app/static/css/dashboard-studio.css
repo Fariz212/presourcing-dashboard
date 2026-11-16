@@ -4028,3 +4028,61 @@ button:disabled {
     font-size: 8px;
   }
 }
+
+
+/* Lean workflow occupancy: default to stages that actually hold work. */
+.workflow-workbench-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 0 0 13px;
+}
+#workflowStageSummary {
+  margin: 0;
+  color: var(--muted-strong);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.workflow-empty-toggle {
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 0 11px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--teal-dark);
+  font-size: 10px;
+  font-weight: 720;
+}
+.workflow-empty-toggle:hover { background: var(--surface-soft); }
+#workflowCards .workflow-stage {
+  min-height: 102px;
+  gap: 8px;
+  padding: 14px 15px;
+}
+#workflowCards .workflow-stage-bottom { align-items: center; }
+#workflowCards .workflow-stage-action {
+  color: var(--teal-dark);
+  font-weight: 760;
+  white-space: nowrap;
+}
+.attention-mobile-hint { display: none; }
+
+@media (max-width: 760px) {
+  .attention-panel tbody tr:nth-child(n+4) { display: none !important; }
+  .attention-mobile-hint {
+    display: block;
+    margin: 11px 2px 0;
+    color: var(--muted);
+    font-size: 9px;
+    line-height: 1.55;
+  }
+  .workflow-workbench-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .workflow-empty-toggle { align-self: flex-start; }
+  #workflowCards .workflow-stage { min-height: 88px; padding: 12px; }
+}
