@@ -1,10 +1,13 @@
 from contextlib import contextmanager
+from datetime import date
 from io import BytesIO
 
 import pytest
 from flask import Flask
 
 from app.routes.dashboard import (
+    REGISTER_BASE_QUERY,
+    _register_enriched,
     _contract_lifecycle_data,
     _contract_term,
     _lp_milestone_update_error,
@@ -425,6 +428,157 @@ def test_document_upload_rejects_unsupported_file_extensions(make_client):
     assert response.status_code == 400
     assert "Supported formats" in response.get_json()["message"]
 
+
+
+
+def test_register_enrichment_calculates_age_for_the_actual_workflow_stage():
+    today = date(2026, 11, 16)
+    base = {
+        "lp_circulation_start_date": None,
+        "lp_contract_team_completion_date": None,
+        "lp_junior_manager_approval_date": None,
+        "lp_senior_manager_approval_date": None,
+        "lp_gm_scm_approval_date": None,
+        "lp_completion_date": None,
+        "mi_gm_approval_date": None,
+        "legacy_overall_status": None,
+        "khs_inject_completion_date": None,
+        "contract_start_date": None,
+        "contract_end_date": None,
+    }
+
+    before_lp = _register_enriched({
+        **base,
+        "current_stage_code": "MI_GM_APPROVAL",
+        "current_stage_name": "MI Approval - GM",
+        "current_stage_started_on": date(2026, 9, 20),
+    }, today=today)
+
+    assert before_lp["current_stage_name"] == "MI Approval - GM"
+    assert before_lp["lp_stage_label"] == "Not Started"
+    assert before_lp["current_stage_started_on"] == "2026-09-20"
+    assert before_lp["current_stage_age_days"] == 57
+    assert before_lp["lp_stage_age_days"] is None
+
+    after_lp = _register_enriched({
+        **base,
+        "current_stage_code": "KHS_INJECTION",
+        "current_stage_name": "KHS Inject",
+        "current_stage_started_on": date(2026, 11, 3),
+        "mi_gm_approval_date": date(2026, 10, 24),
+        "lp_circulation_start_date": date(2026, 10, 25),
+        "lp_contract_team_completion_date": date(2026, 10, 26),
+        "lp_junior_manager_approval_date": date(2026, 10, 27),
+        "lp_senior_manager_approval_date": date(2026, 10, 28),
+        "lp_gm_scm_approval_date": date(2026, 10, 30),
+        "lp_completion_date": date(2026, 11, 3),
+    }, today=today)
+
+    assert after_lp["current_stage_name"] == "KHS Inject"
+    assert after_lp["lp_stage_label"] == "LP Completed"
+    assert after_lp["current_stage_started_on"] == "2026-11-03"
+    assert after_lp["current_stage_age_days"] == 13
+    assert after_lp["lp_stage_age_days"] is None
+
+    in_lp = _register_enriched({
+        **base,
+        "current_stage_code": "LP_CIRCULATION",
+        "current_stage_name": "LP Circulation",
+        "current_stage_started_on": date(2026, 10, 10),
+        "mi_gm_approval_date": date(2026, 9, 30),
+        "lp_circulation_start_date": date(2026, 10, 1),
+        "lp_contract_team_completion_date": date(2026, 10, 5),
+        "lp_junior_manager_approval_date": date(2026, 10, 10),
+    }, today=today)
+
+    assert in_lp["lp_stage_label"] == "Senior Manager"
+    assert in_lp["lp_stage_started_date"] == "2026-10-10"
+    assert in_lp["current_stage_started_on"] == "2026-10-10"
+    assert in_lp["current_stage_age_days"] == 37
+    assert in_lp["lp_stage_age_days"] == 37
+
+
+def test_register_base_query_derives_stage_opening_milestones():
+    expected_fragments = (
+        "WHEN 'MI_GM_APPROVAL' THEN k.mi_sm_approval_date",
+        "WHEN 'LEGAL_PROCESSING' THEN k.legal_submission_date",
+        "WHEN 'KHS_INJECTION' THEN k.lp_completion_date",
+        "WHEN 'senior_manager' THEN k.lp_junior_manager_approval_date",
+        "END AS current_stage_started_on",
+    )
+    for fragment in expected_fragments:
+        assert fragment in REGISTER_BASE_QUERY
+
+
+class WorkflowRowsCursor:
+    def __init__(self, rows):
+        self.rows = rows
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        return False
+
+    def execute(self, query):
+        self.query = query
+
+    def fetchall(self):
+        return self.rows
+
+
+class WorkflowRowsConnection:
+    def __init__(self, rows):
+        self.cursor_object = WorkflowRowsCursor(rows)
+        self.query = None
+
+    def cursor(self, row_factory=None):
+        return self.cursor_object
+
+
+class WorkflowRowsPool:
+    def __init__(self, rows):
+        self.connection_object = WorkflowRowsConnection(rows)
+
+    @contextmanager
+    def connection(self):
+        yield self.connection_object
+
+
+def test_workflow_monitoring_returns_milestone_derived_stage_age(make_client):
+    rows = [
+        {
+            "stage_code": "LP_CIRCULATION",
+            "stage_name": "LP Circulation",
+            "sequence_number": 11,
+            "total": 3,
+            "completed": 0,
+            "oldest_stage_age_days": 42,
+            "stage_age_unavailable": 1,
+        },
+        {
+            "stage_code": "COMPLETED",
+            "stage_name": "Fully Injected",
+            "sequence_number": 13,
+            "total": 2,
+            "completed": 2,
+            "oldest_stage_age_days": None,
+            "stage_age_unavailable": 0,
+        },
+    ]
+    pool = WorkflowRowsPool(rows)
+    response = make_client(pool).get("/api/dashboard/workflow")
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["data"][0]["oldest_stage_age_days"] == 42
+    assert payload["data"][0]["stage_age_unavailable"] == 1
+    assert payload["data"][1]["oldest_stage_age_days"] is None
+    query = pool.connection_object.cursor_object.query
+    assert "WHEN 'contract_team' THEN k.lp_circulation_start_date" in query
+    assert "stage_age_unavailable" in query
+    assert "derived_register.current_stage_started_on AS stage_started_on" in query
+    assert "oldest_stage_age_days" in query
 
 
 def test_workflow_overview_uses_milestone_derived_lp_queues(make_client):

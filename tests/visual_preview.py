@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 from time import time
 
@@ -24,15 +25,45 @@ CAPTURES = [
     ("overview", "tablet", 1024, 900),
     ("overview", "mobile", 390, 844),
     ("requests", "desktop", 1440, 1000),
+    ("requests", "mobile", 390, 844),
     ("register", "desktop", 1440, 1000),
     ("register", "mobile", 390, 844),
     ("lp", "desktop", 1440, 1000),
     ("lp", "mobile", 390, 844),
     ("contracts", "desktop", 1440, 1000),
     ("workflow", "desktop", 1440, 1000),
+    ("workflow", "mobile", 390, 844),
+    ("contracts", "mobile", 390, 844),
     ("imports", "desktop", 1440, 1000),
+    ("imports", "mobile", 390, 844),
     ("activity", "desktop", 1440, 1000),
+    ("activity", "mobile", 390, 844),
 ]
+
+
+
+
+def assert_stage_and_age(page, body_id, khs_id, stage_text, expected_age_text,
+                         stage_cell_index, age_cell_index):
+    row = page.locator(f"#{body_id} tr").filter(has_text=khs_id).first
+    row.wait_for(state="visible", timeout=15_000)
+    cells = row.locator("td")
+    actual_stage = cells.nth(stage_cell_index).inner_text()
+    actual_age = cells.nth(age_cell_index).inner_text()
+    if stage_text not in actual_stage:
+        raise AssertionError(
+            f"{body_id} {khs_id}: expected stage {stage_text!r}, got {actual_stage!r}"
+        )
+    age_match = re.search(r"\b\d+ days? in stage\b", actual_age)
+    if not age_match:
+        raise AssertionError(
+            f"{body_id} {khs_id}: expected a numeric stage age, got {actual_age!r}"
+        )
+    if expected_age_text is not None and age_match.group(0) != expected_age_text:
+        raise AssertionError(
+            f"{body_id} {khs_id}: expected age {expected_age_text!r}, got {age_match.group(0)!r}"
+        )
+    return age_match.group(0)
 
 
 def main() -> int:
@@ -73,6 +104,7 @@ def main() -> int:
             file_name = f"{page_name}-{viewport_name}.png"
             target = OUTPUT_DIR / file_name
             try:
+                page.set_viewport_size({"width": width, "height": height})
                 if current_page is None:
                     response = page.goto(
                         f"{BASE_URL}/dashboard",
@@ -84,6 +116,8 @@ def main() -> int:
                         raise RuntimeError(f"Dashboard returned {status}")
                     current_page = "overview"
                 elif page_name != current_page:
+                    if width <= 760:
+                        page.locator("#mobileNavToggle").click(timeout=10_000)
                     navigation_link = page.locator(
                         f'a.nav-link[data-page="{page_name}"]'
                     ).first
@@ -96,6 +130,14 @@ def main() -> int:
                 page.set_viewport_size({"width": width, "height": height})
                 page.wait_for_timeout(500)
 
+                if page_name == "overview" and viewport_name == "mobile":
+                    total_attention_rows = page.locator("#attentionBody tr").count()
+                    visible_attention_rows = page.locator("#attentionBody tr:visible").count()
+                    if total_attention_rows > 3 and visible_attention_rows != 3:
+                        raise AssertionError(
+                            f"Mobile priority queue should show three rows, found {visible_attention_rows}"
+                        )
+
                 dimensions = page.evaluate(
                     """() => ({
                         viewportWidth: window.innerWidth,
@@ -106,7 +148,14 @@ def main() -> int:
                         documentHeight: Math.max(
                             document.documentElement.scrollHeight,
                             document.body.scrollHeight
-                        )
+                        ),
+                        tableOverflows: Array.from(document.querySelectorAll(".table-wrap"))
+                            .filter((element) => element.scrollWidth > element.clientWidth + 3)
+                            .map((element) => ({
+                                className: element.className,
+                                scrollWidth: element.scrollWidth,
+                                clientWidth: element.clientWidth
+                            }))
                     })"""
                 )
                 overflow = int(dimensions["documentWidth"]) - int(dimensions["viewportWidth"])
@@ -116,6 +165,12 @@ def main() -> int:
                         "viewport": viewport_name,
                         "horizontal_overflow_px": overflow,
                         "dimensions": dimensions,
+                    })
+                if width <= 760 and dimensions.get("tableOverflows"):
+                    overflow_warnings.append({
+                        "page": page_name,
+                        "viewport": viewport_name,
+                        "responsive_table_overflow": dimensions["tableOverflows"],
                     })
 
                 page.screenshot(
@@ -138,13 +193,193 @@ def main() -> int:
                 capture_errors.append(f"{file_name}: {error}")
                 print(f"FAILED {file_name}: {error}")
 
+        # Verify the mobile navigation exposes every page without horizontal menu hunting.
+        try:
+            page.set_viewport_size({"width": 390, "height": 844})
+            page.locator("#mobileNavToggle").click(timeout=10_000)
+            page.locator('#dataSideNav a[data-page="activity"]').wait_for(state="visible", timeout=10_000)
+            page.locator('#primarySideNav a[data-page="workflow"]').wait_for(state="visible", timeout=10_000)
+            page.locator("#mobileNavToggle").click(timeout=10_000)
+            if page.locator("#dataSideNav a[data-page='activity']:visible").count() != 0:
+                raise AssertionError("Mobile navigation did not collapse after closing the menu")
+        except Exception as error:
+            capture_errors.append(f"Mobile navigation interaction: {error}")
+            print(f"FAILED mobile navigation interaction: {error}")
+
+        # Verify workflow stage summaries open the matching KHS Register filter.
+        try:
+            page.set_viewport_size({"width": 390, "height": 844})
+            page.locator("#mobileNavToggle").click(timeout=10_000)
+            page.locator('a.nav-link[data-page="workflow"]').first.click(timeout=10_000)
+            current_page = "workflow"
+            page.locator("#page-workflow.active").wait_for(state="visible", timeout=15_000)
+            default_stage_count = page.locator("#workflowCards [data-workflow-stage]").count()
+            if default_stage_count == 0:
+                raise AssertionError("Workflow should show stages that currently contain records")
+            stage_toggle = page.locator("#workflowEmptyToggle")
+            if stage_toggle.is_visible():
+                default_summary = page.locator("#workflowStageSummary").inner_text()
+                if "stages have records" not in default_summary:
+                    raise AssertionError(f"Workflow occupancy summary is unclear: {default_summary}")
+                stage_toggle.click(timeout=10_000)
+                expanded_stage_count = page.locator("#workflowCards [data-workflow-stage]").count()
+                if expanded_stage_count <= default_stage_count:
+                    raise AssertionError("Showing empty stages did not expand the workflow")
+                if stage_toggle.get_attribute("aria-expanded") != "true":
+                    raise AssertionError("Empty-stage toggle did not expose its expanded state")
+                stage_toggle.click(timeout=10_000)
+                collapsed_stage_count = page.locator("#workflowCards [data-workflow-stage]").count()
+                if collapsed_stage_count != default_stage_count:
+                    raise AssertionError("Workflow empty stages did not collapse back to the occupied stages")
+
+            stage_card = page.locator("#workflowCards [data-workflow-stage]").first
+            stage_card.wait_for(state="visible", timeout=15_000)
+            stage_card.click(timeout=10_000)
+            current_page = "register"
+            page.locator("#page-register.active").wait_for(state="visible", timeout=15_000)
+            page.wait_for_load_state("networkidle", timeout=20_000)
+            page.locator("#registerBody tr").first.wait_for(state="visible", timeout=15_000)
+            page.locator("#activeRegisterFilters:not([hidden])").wait_for(
+                state="visible", timeout=15_000
+            )
+            page.locator("#resetFilters").click(timeout=10_000)
+            page.wait_for_load_state("networkidle", timeout=20_000)
+            page.locator('#registerBody [data-view-khs="KHS-VIS-004"]').wait_for(
+                state="visible", timeout=15_000
+            )
+
+            # The register must show overall workflow stages before LP and
+            # after LP, while retaining the fine-grained LP stage during LP.
+            page.set_viewport_size({"width": 1440, "height": 1000})
+            mi_gm_age = assert_stage_and_age(
+                page, "registerBody", "KHS-VIS-002",
+                "MI Approval - GM", None, 1, 1,
+            )
+            injection_age = assert_stage_and_age(
+                page, "registerBody", "KHS-VIS-009",
+                "KHS Inject", None, 1, 1,
+            )
+
+            # The priority queue must use the same workflow stage and age
+            # derivation, including a record that has completed LP but not injection.
+            page.locator('a.nav-link[data-page="overview"]').first.click(timeout=10_000)
+            current_page = "overview"
+            page.locator("#page-overview.active").wait_for(state="visible", timeout=15_000)
+            page.wait_for_load_state("networkidle", timeout=20_000)
+            assert_stage_and_age(
+                page, "attentionBody", "KHS-VIS-002",
+                "MI Approval - GM", mi_gm_age, 2, 4,
+            )
+            assert_stage_and_age(
+                page, "attentionBody", "KHS-VIS-009",
+                "KHS Inject", injection_age, 2, 4,
+            )
+
+            page.locator('a.nav-link[data-page="register"]').first.click(timeout=10_000)
+            current_page = "register"
+            page.locator("#page-register.active").wait_for(state="visible", timeout=15_000)
+            page.wait_for_load_state("networkidle", timeout=20_000)
+            page.locator('#registerBody [data-view-khs="KHS-VIS-004"]').wait_for(
+                state="visible", timeout=15_000
+            )
+        except Exception as error:
+            capture_errors.append(f"Workflow stage drilldown: {error}")
+            print(f"FAILED workflow stage drilldown: {error}")
+
+        # Capture the interaction surfaces that carry the LP workflow:
+        # the KHS detail journey and the grouped KHS form.
+        try:
+            if current_page != "register":
+                page.locator('a.nav-link[data-page="register"]').first.click(timeout=10_000)
+                current_page = "register"
+            page.locator("#page-register.active").wait_for(state="visible", timeout=15_000)
+            page.wait_for_load_state("networkidle", timeout=20_000)
+
+            # Use a synthetic record with three completed milestones and an
+            # active Senior Manager approval stage, so Current Stage, Stage
+            # Age, and Upcoming are exercised rather than showing a not-started LP.
+            detail_button = page.locator('#registerBody [data-view-khs="KHS-VIS-004"]')
+            detail_button.wait_for(state="visible", timeout=15_000)
+            detail_button.click(timeout=10_000)
+            page.locator("#detailDialog[open]").wait_for(state="visible", timeout=10_000)
+            page.locator("#lpTimeline .lp-timeline-item").first.wait_for(state="visible", timeout=10_000)
+
+            current_stage = page.locator("#lpCurrentStage").inner_text()
+            stage_age = page.locator("#lpStageAge").inner_text()
+            upcoming_stage = page.locator("#lpUpcomingStage").inner_text()
+            if "Senior Manager Strategic Sourcing" not in current_stage:
+                raise AssertionError(f"Unexpected Current Stage: {current_stage}")
+            if "day" not in stage_age.lower():
+                raise AssertionError(f"Stage Age is not displayed: {stage_age}")
+            if "GM SCM" not in upcoming_stage:
+                raise AssertionError(f"Unexpected Upcoming stage: {upcoming_stage}")
+            if page.locator("#lpTimeline .lp-timeline-item.current").count() != 1:
+                raise AssertionError("Expected exactly one current LP stage marker")
+
+            def capture_dialog(name: str, viewport_name: str, width: int, height: int) -> None:
+                page.set_viewport_size({"width": width, "height": height})
+                page.wait_for_timeout(300)
+                file_name = f"{name}-{viewport_name}.png"
+                target = OUTPUT_DIR / file_name
+                page.screenshot(path=str(target), full_page=False, animations="disabled")
+                dimensions = page.evaluate(
+                    """() => ({
+                        viewportWidth: window.innerWidth,
+                        documentWidth: Math.max(
+                            document.documentElement.scrollWidth,
+                            document.body.scrollWidth
+                        ),
+                        documentHeight: Math.max(
+                            document.documentElement.scrollHeight,
+                            document.body.scrollHeight
+                        )
+                    })"""
+                )
+                overflow = int(dimensions["documentWidth"]) - int(dimensions["viewportWidth"])
+                if overflow > 3:
+                    overflow_warnings.append({
+                        "page": name,
+                        "viewport": viewport_name,
+                        "horizontal_overflow_px": overflow,
+                        "dimensions": dimensions,
+                    })
+                captures.append({
+                    "page": name,
+                    "viewport": viewport_name,
+                    "width": width,
+                    "height": height,
+                    "file": file_name,
+                    "document_width": dimensions["documentWidth"],
+                    "document_height": dimensions["documentHeight"],
+                    "horizontal_overflow_px": max(0, overflow),
+                })
+                print(f"Captured {file_name}")
+
+            capture_dialog("khs-detail", "desktop", 1440, 1000)
+            capture_dialog("khs-detail", "mobile", 390, 844)
+            page.locator("#closeDialog").click()
+            page.locator("#detailDialog").wait_for(state="hidden", timeout=10_000)
+
+            page.set_viewport_size({"width": 1440, "height": 1000})
+            page.locator("#createKhsButton").click(timeout=10_000)
+            page.locator("#recordDialog[open]").wait_for(state="visible", timeout=10_000)
+            lp_form_section = page.locator("#dialogFields .form-section-lp-circulation")
+            lp_form_section.wait_for(state="visible", timeout=10_000)
+            lp_form_section.scroll_into_view_if_needed()
+            capture_dialog("khs-form", "desktop", 1440, 1000)
+            capture_dialog("khs-form", "mobile", 390, 844)
+            page.locator("#cancelRecord").click()
+        except Exception as error:
+            capture_errors.append(f"KHS detail/form interaction captures: {error}")
+            print(f"FAILED KHS detail/form interaction captures: {error}")
+
         browser.close()
 
     report = {
         "base_url": BASE_URL,
         "generated_at_unix": int(time()),
         "capture_count": len(captures),
-        "expected_capture_count": len(CAPTURES),
+        "expected_capture_count": len(CAPTURES) + 4,
         "captures": captures,
         "api_failures": api_failures,
         "uncaught_page_errors": page_errors,
@@ -218,7 +453,7 @@ img {{ display: block; width: 100%; height: auto; border: 1px solid #e8e7e0; bor
 
     if api_failures or page_errors or capture_errors:
         return 1
-    if len(captures) != len(CAPTURES):
+    if len(captures) != len(CAPTURES) + 4:
         return 1
     return 0
 

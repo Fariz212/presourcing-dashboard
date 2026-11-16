@@ -3201,3 +3201,906 @@ input:focus,select:focus,textarea:focus { border-color: #8db19a; outline: 3px so
 @media (prefers-reduced-motion: reduce) {
   .stacked-progress .segment,.workflow-item .mini-track i { transition: none; }
 }
+
+
+/* LP-first contract details: prioritize the approval journey over decorative cards. */
+.detail-dialog {
+  width: min(1060px, calc(100vw - 32px));
+  padding: 24px 30px 28px;
+}
+.detail-dialog .dialog-header {
+  margin: -24px -30px 0;
+  padding: 23px 30px 17px;
+  border-bottom: 0;
+}
+.detail-dialog .dialog-status-row {
+  margin: 0;
+  padding: 0 0 16px;
+  border-bottom: 1px solid #e8e9e1;
+}
+.detail-dialog .lp-timeline-section,
+.detail-dialog .contract-detail-summary,
+.detail-dialog .document-section {
+  margin: 0;
+  padding: 24px 0;
+  border: 0;
+  border-bottom: 1px solid #e8e9e1;
+  border-radius: 0;
+  background: transparent;
+}
+.detail-dialog .lp-timeline-heading {
+  align-items: flex-end;
+}
+.detail-dialog .lp-timeline-heading h3,
+.detail-dialog .contract-detail-heading h3 {
+  margin-top: 5px;
+  font-size: 17px;
+  letter-spacing: -.025em;
+}
+.detail-dialog .lp-timeline-heading p {
+  margin: 5px 0 0;
+  color: #829087;
+  font-size: 11px;
+}
+.lp-stage-focus {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, .78fr) minmax(0, .98fr);
+  gap: 0;
+  margin-top: 20px;
+  padding: 17px 20px;
+  border: 1px solid #e6e9dd;
+  border-left: 3px solid #72947b;
+  border-radius: 0 12px 12px 0;
+  background: #f6f7ef;
+}
+.lp-stage-focus-item {
+  display: grid;
+  align-content: start;
+  gap: 5px;
+  min-width: 0;
+  padding: 0 18px;
+}
+.lp-stage-focus-item:first-child { padding-left: 0; }
+.lp-stage-focus-item:last-child { padding-right: 0; }
+.lp-stage-focus-item + .lp-stage-focus-item { border-left: 1px solid #e0e5d9; }
+.lp-stage-focus-label {
+  color: #78877b;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.lp-stage-focus-item strong {
+  color: #294333;
+  font-size: 16px;
+  font-weight: 760;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.lp-stage-focus-current strong { font-size: 19px; }
+.lp-stage-focus-item small {
+  color: #879287;
+  font-size: 10px;
+  line-height: 1.5;
+}
+.detail-dialog .lp-timeline {
+  display: grid;
+  gap: 0;
+  max-width: 760px;
+  margin: 22px 0 0 2px;
+}
+.detail-dialog .lp-timeline-item {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 13px;
+  min-height: 75px;
+}
+.detail-dialog .lp-timeline-item:not(:last-child)::after {
+  top: 29px;
+  bottom: 0;
+  left: 13px;
+  width: 2px;
+  background: #e2e8df;
+}
+.detail-dialog .lp-timeline-item.done:not(:last-child)::after {
+  background: #c4ddcd;
+}
+.detail-dialog .lp-timeline-marker {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #dce3d9;
+  background: #f5f6f1;
+  color: #879187;
+  font-size: 9px;
+}
+.detail-dialog .lp-timeline-item.done .lp-timeline-marker {
+  border-color: #b8d8c2;
+  background: #eaf4eb;
+  color: #37734c;
+}
+.detail-dialog .lp-timeline-item.current .lp-timeline-marker {
+  border: 2px solid #6e9276;
+  background: #edf4e9;
+  color: #315e3e;
+  box-shadow: 0 0 0 4px rgba(103, 145, 112, .11);
+}
+.detail-dialog .lp-timeline-item.gap .lp-timeline-marker,
+.detail-dialog .lp-timeline-item.review .lp-timeline-marker {
+  border-color: #e5cda8;
+  background: #fbf4e8;
+  color: #956b2e;
+}
+.detail-dialog .lp-timeline-content { padding: 1px 0 16px; gap: 3px; }
+.detail-dialog .lp-timeline-meta { justify-content: flex-start; gap: 12px; }
+.detail-dialog .lp-timeline-meta strong { color: #344a3a; font-size: 12px; }
+.detail-dialog .lp-timeline-state {
+  color: #8a968a;
+  font-size: 9px;
+  font-weight: 750;
+}
+.detail-dialog .lp-timeline-item.current .lp-timeline-state { color: #356b46; }
+.detail-dialog .lp-timeline-item.done .lp-timeline-state { color: #47815a; }
+.detail-dialog .lp-timeline-item.gap .lp-timeline-state,
+.detail-dialog .lp-timeline-item.review .lp-timeline-state { color: #956b2e; }
+.detail-dialog .lp-timeline-content small { color: #89958a; font-size: 10px; }
+.detail-dialog .lp-timeline-content time {
+  color: #536957;
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.detail-dialog .lp-timeline-notice {
+  margin-top: 8px;
+  padding: 11px 13px;
+  border: 1px solid #ead8b8;
+  border-radius: 8px;
+  background: #fbf5e9;
+  color: #805c2d;
+  font-size: 10px;
+  line-height: 1.6;
+}
+.detail-dialog .contract-detail-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0 22px;
+  margin-top: 13px;
+}
+.detail-dialog .contract-detail-grid > div {
+  padding: 11px 0;
+  border: 0;
+  border-bottom: 1px solid #eceee7;
+  border-radius: 0;
+  background: transparent;
+}
+.detail-dialog .contract-detail-item span { color: #879287; font-size: 9px; }
+.detail-dialog .contract-detail-item strong { color: #344b39; font-size: 11px; }
+.detail-groups {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px 36px;
+  padding: 24px 0;
+}
+.detail-group { min-width: 0; }
+.detail-group h4 {
+  margin: 0 0 9px;
+  color: #344b39;
+  font-size: 12px;
+  font-weight: 780;
+  letter-spacing: -.01em;
+}
+.detail-group-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 20px;
+}
+.detail-group .detail-item {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  min-width: 0;
+  padding: 9px 0;
+  border: 0;
+  border-bottom: 1px solid #eceee7;
+  border-radius: 0;
+  background: transparent;
+}
+.detail-group .detail-label {
+  color: #879287;
+  font-size: 8px;
+  letter-spacing: .08em;
+}
+.detail-group .detail-value {
+  margin: 0;
+  color: #40564a;
+  font-size: 10px;
+  line-height: 1.55;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.detail-group-wide { grid-column: 1 / -1; }
+.detail-history-list {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.detail-history-list li {
+  display: grid;
+  grid-template-columns: 110px minmax(110px, .7fr) minmax(0, 1.5fr);
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid #eceee7;
+  color: #66766a;
+  font-size: 10px;
+}
+.detail-history-list time { color: #89968b; font-variant-numeric: tabular-nums; }
+.detail-history-list strong { color: #3b5542; font-weight: 750; }
+.detail-dialog .document-section { padding-bottom: 8px; }
+
+/* KHS form: clear work areas, with LP milestones grouped as a single sequence. */
+.record-dialog { width: min(900px, calc(100vw - 28px)); }
+#recordForm { padding: 0 26px 24px; }
+#recordForm .dialog-header {
+  margin: 0 -26px 0;
+  padding: 22px 26px 17px;
+}
+#recordForm .form-hint {
+  margin: 0;
+  padding: 13px 0;
+  border-bottom: 1px solid #e8e9e1;
+  border-radius: 0;
+  background: transparent;
+  color: #7e8c81;
+  font-size: 10px;
+}
+#dialogFields.form-sections { display: block; padding: 0; }
+.form-section {
+  padding: 21px 0;
+  border-bottom: 1px solid #e8e9e1;
+}
+.form-section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+.form-section-heading h3 {
+  margin: 0;
+  color: #304837;
+  font-size: 14px;
+  font-weight: 790;
+  letter-spacing: -.02em;
+}
+.form-section-heading p {
+  margin: 4px 0 0;
+  color: #869287;
+  font-size: 10px;
+  line-height: 1.5;
+}
+.form-section-count {
+  flex: 0 0 auto;
+  padding: 5px 8px;
+  border-radius: 30px;
+  background: #eaf1e8;
+  color: #527259;
+  font-size: 9px;
+  font-weight: 750;
+}
+.form-section-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 13px 18px;
+}
+.form-section-grid .form-field.full { grid-column: 1 / -1; }
+.form-section .form-field label {
+  color: #64766a;
+  font-size: 9px;
+  font-weight: 740;
+}
+.form-section .form-field input,
+.form-section .form-field select,
+.form-section .form-field textarea {
+  min-width: 0;
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid #dfe5da;
+  border-radius: 8px;
+  background: #fff;
+  color: #304637;
+  font-size: 11px;
+}
+.form-section .form-field input:focus,
+.form-section .form-field select:focus,
+.form-section .form-field textarea:focus {
+  outline: 2px solid rgba(92, 132, 99, .2);
+  border-color: #8ca78c;
+}
+.form-section-lp-circulation {
+  margin: 0 -16px;
+  padding: 23px 16px;
+  border-bottom: 0;
+  border-left: 3px solid #789779;
+  border-radius: 0 12px 12px 0;
+  background: #f6f7ef;
+}
+.form-section-lp-circulation .form-section-heading h3 { font-size: 16px; }
+.form-section-lp-circulation .form-section-heading p { max-width: 620px; color: #738477; }
+.lp-form-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 17px 15px; }
+.lp-form-step {
+  display: grid;
+  grid-template-columns: 23px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  min-width: 0;
+}
+.lp-form-step-index {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  margin-top: 2px;
+  border: 1px solid #d8e2d4;
+  border-radius: 50%;
+  background: #fff;
+  color: #68806b;
+  font-size: 8px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.lp-form-step .form-field { min-width: 0; }
+#recordForm .dialog-footer { margin: 0 -26px -24px; padding: 16px 26px 22px; }
+
+@media (max-width: 760px) {
+  .detail-dialog { width: calc(100vw - 18px); padding: 17px 18px 20px; }
+  .detail-dialog .dialog-header { margin: -17px -18px 0; padding: 18px 18px 14px; }
+  .lp-stage-focus { grid-template-columns: 1fr 1fr; row-gap: 15px; padding: 14px; }
+  .lp-stage-focus-item { padding: 0 10px; }
+  .lp-stage-focus-item:first-child { grid-column: 1 / -1; padding: 0 0 13px; border-bottom: 1px solid #e0e5d9; }
+  .lp-stage-focus-item:nth-child(2) { padding-left: 0; }
+  .lp-stage-focus-item strong { font-size: 14px; }
+  .lp-stage-focus-current strong { font-size: 18px; }
+  .detail-groups { grid-template-columns: 1fr; gap: 20px; }
+  .detail-group-wide { grid-column: auto; }
+  .detail-dialog .contract-detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .detail-history-list li { grid-template-columns: 88px minmax(0, .7fr) minmax(0, 1.2fr); gap: 8px; }
+  #recordForm { padding: 0 17px 20px; }
+  #recordForm .dialog-header { margin: 0 -17px; padding: 17px; }
+  .form-section { padding: 18px 0; }
+  .form-section-lp-circulation { margin: 0 -10px; padding: 19px 10px; }
+  .lp-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #recordForm .dialog-footer { margin: 0 -17px -20px; padding: 14px 17px 18px; }
+}
+@media (max-width: 480px) {
+  .lp-stage-focus { grid-template-columns: 1fr; }
+  .lp-stage-focus-item,
+  .lp-stage-focus-item:nth-child(2),
+  .lp-stage-focus-item:last-child { padding: 10px 0 0; border-left: 0; }
+  .lp-stage-focus-item:first-child { padding: 0 0 12px; }
+  .lp-stage-focus-item + .lp-stage-focus-item { border-top: 1px solid #e0e5d9; }
+  .lp-form-grid { grid-template-columns: 1fr; }
+  .form-section-grid { grid-template-columns: 1fr; }
+  .detail-group-fields { grid-template-columns: 1fr; }
+  .detail-history-list li { grid-template-columns: 1fr 1fr; }
+  .detail-history-list li span { grid-column: 1 / -1; }
+}
+
+
+/* --------------------------------------------------------------------------
+   Lean workspace iteration — reduce motion, duplication and input defects.
+   This layer intentionally overrides earlier visual experiments and keeps
+   the established API/data hooks unchanged.
+   -------------------------------------------------------------------------- */
+
+/* Navigation: one clear location for the primary task, no duplicated CTAs. */
+.sidebar-brand-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.mobile-nav-toggle {
+  display: none;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  place-items: center;
+  align-content: center;
+  gap: 4px;
+  border: 1px solid rgba(255,255,255,.18);
+  border-radius: 10px;
+  background: rgba(255,255,255,.07);
+  color: #fff;
+}
+.mobile-nav-toggle span {
+  display: block;
+  width: 16px;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+}
+.refresh-button[hidden] { display: none !important; }
+.overview-refresh { white-space: nowrap; }
+
+/* Overview is an action desk, not a second copy of the detailed modules. */
+.overview-page-heading { margin-bottom: 18px; }
+.overview-heading-actions .action-strip { align-items: center; }
+.attention-panel { margin-top: 18px; }
+.approval-command { margin-top: 18px; }
+.contract-watch { margin-top: 18px; }
+#qualityAlert, .overview-grid { display: none !important; }
+
+/* Compact stage workload buttons make the next action obvious. */
+#workflowCards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+#workflowCards .workflow-stage {
+  display: grid;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .16s ease, background .16s ease, transform .16s ease;
+}
+#workflowCards .workflow-stage:hover {
+  border-color: var(--line-strong);
+  background: var(--surface-soft);
+  transform: translateY(-1px);
+}
+.workflow-stage-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted-strong);
+  font-size: 11px;
+  font-weight: 700;
+}
+.workflow-stage-top strong {
+  color: var(--ink);
+  font-size: 24px;
+  font-variant-numeric: tabular-nums;
+}
+.workflow-stage-bottom {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 10px;
+}
+.workflow-stage-bottom span {
+  color: var(--teal-dark);
+  font-weight: 750;
+}
+.empty-state {
+  padding: 28px 18px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 12px;
+  color: var(--muted);
+  text-align: center;
+}
+
+/* Active register filters stay visible after the More filters disclosure closes. */
+.active-filter-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  padding: 0 0 12px;
+}
+.active-filter-summary[hidden] { display: none !important; }
+.filter-chip, .clear-all-filters {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 27px;
+  padding: 5px 9px;
+  border: 1px solid #dce6dc;
+  border-radius: 20px;
+  background: #f3f7f1;
+  color: #4c6752;
+  font-size: 9px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.filter-chip span:last-child {
+  color: #78907a;
+  font-size: 13px;
+  line-height: 1;
+}
+.clear-all-filters {
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+  text-decoration: underline;
+}
+
+/* Fewer columns in the operational register: identity, stage, status, action. */
+.register-table-wrap table { min-width: 830px; }
+.register-table-wrap th:nth-child(1) { min-width: 210px; }
+.register-table-wrap th:nth-child(2) { min-width: 190px; }
+.register-table-wrap th:nth-child(4) { min-width: 125px; }
+.register-table-wrap th:nth-child(5) { min-width: 175px; }
+.cell-tertiary {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 9px;
+}
+.register-toolbar .register-search { min-width: 250px; }
+.filter-more summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  gap: 6px;
+  cursor: pointer;
+}
+.filter-more summary:focus-visible,
+.filter-chip:focus-visible,
+.clear-all-filters:focus-visible {
+  outline: 3px solid rgba(72,117,163,.22);
+  outline-offset: 2px;
+}
+
+/* Form fields: explicit labels, inline errors, clear group rhythm and safe save. */
+.form-section .form-field label {
+  display: block;
+  margin-bottom: 6px;
+}
+.form-section .form-field input,
+.form-section .form-field select,
+.form-section .form-field textarea {
+  display: block;
+}
+.form-error {
+  margin: 13px 0 0;
+  padding: 11px 13px;
+  border: 1px solid #e9c8c5;
+  border-radius: 9px;
+  background: #fff3f1;
+  color: #944741;
+  font-size: 11px;
+  line-height: 1.55;
+}
+.form-error[hidden] { display: none !important; }
+#recordForm .dialog-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 9px;
+  margin-top: 14px;
+  background: rgba(255,255,255,.96);
+  border-top: 1px solid var(--line);
+  backdrop-filter: blur(12px);
+}
+#recordForm .dialog-footer .primary-button { min-width: 116px; }
+button:disabled {
+  cursor: not-allowed;
+  opacity: .58;
+  transform: none !important;
+}
+
+/* The action is now page-specific; retain a consistent universal refresh only
+   on pages that do not already have their own refresh action. */
+.topbar-actions { gap: 8px; }
+.refresh-button { white-space: nowrap; }
+
+/* Responsive tables become readable record cards on small screens.
+   JS derives the visible labels from each table header, so no column is lost. */
+.table-wrap table { min-width: 820px; }
+.activity-table-wrap table { min-width: 900px; }
+@media (max-width: 920px) {
+  .table-wrap {
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+  .table-wrap table,
+  .table-wrap tbody {
+    display: block;
+    width: 100%;
+    min-width: 0;
+  }
+  .table-wrap thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0,0,0,0);
+    white-space: nowrap;
+    border: 0;
+  }
+  .table-wrap tbody {
+    display: grid;
+    gap: 9px;
+  }
+  .table-wrap tbody tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px 14px;
+    min-width: 0;
+    padding: 13px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--surface);
+    box-shadow: 0 2px 7px rgba(28,47,38,.025);
+  }
+  .table-wrap tbody td {
+    display: grid;
+    align-content: start;
+    gap: 4px;
+    width: auto !important;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    color: var(--ink-soft);
+    font-size: 10px;
+    text-align: left !important;
+    overflow-wrap: anywhere;
+  }
+  .table-wrap tbody td::before {
+    content: attr(data-label);
+    color: var(--muted);
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: .075em;
+    line-height: 1.3;
+    text-transform: uppercase;
+  }
+  .table-wrap tbody td:first-child {
+    grid-column: 1 / -1;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--line);
+  }
+  .table-wrap tbody td:last-child {
+    align-self: end;
+    justify-content: start;
+  }
+  .table-wrap tbody td[colspan] {
+    display: block;
+    grid-column: 1 / -1;
+    padding: 18px 12px;
+    text-align: center !important;
+  }
+  .table-wrap tbody td[colspan]::before { display: none; }
+  .table-wrap .detail-value,
+  .table-wrap .cell-primary { overflow-wrap: anywhere; }
+  .activity-table-wrap tbody td:last-child { grid-column: 1 / -1; }
+  .activity-table-wrap tbody td:last-child::before { margin-bottom: 2px; }
+  .change-plan .table-wrap,
+  .issues-section .table-wrap { overflow: visible; }
+  .register-footer { align-items: flex-start; flex-direction: row; flex-wrap: wrap; }
+  .pagination { margin-left: auto; }
+  #workflowCards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 680px) {
+  .sidebar {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    width: 100%;
+    max-width: none;
+    height: auto;
+    min-height: 0;
+    padding: 9px 13px;
+    border-bottom: 1px solid rgba(255,255,255,.1);
+  }
+  .sidebar-brand-row { min-height: 38px; }
+  .brand { margin: 0; }
+  .mobile-nav-toggle { display: grid; }
+  .sidebar .side-nav { display: none; }
+  .sidebar.nav-open .side-nav {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 5px;
+    overflow: visible;
+    margin-top: 9px;
+    padding: 8px 0 2px;
+    border-top: 1px solid rgba(255,255,255,.12);
+  }
+  .sidebar.nav-open .secondary-caption {
+    display: block;
+    margin: 12px 2px 5px;
+    color: #a6b8d0;
+    font-size: 8px;
+  }
+  .sidebar .nav-link {
+    display: flex;
+    min-width: 0;
+    min-height: 40px;
+    padding: 8px 9px;
+    white-space: normal;
+    font-size: 10px;
+  }
+  .sidebar .nav-link span:nth-child(2) { min-width: 0; }
+  .sidebar-bottom { display: none !important; }
+  .topbar { min-height: 50px; }
+  .breadcrumbs { min-width: 0; }
+  .breadcrumbs strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .page-heading { gap: 9px; }
+  .page-heading .primary-button,
+  .page-heading .secondary-button { min-height: 37px; }
+  .overview-heading-actions .action-strip {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+  .overview-heading-actions .overview-refresh { grid-column: 1 / -1; }
+  .kpi-grid { gap: 8px; }
+  .kpi-card { min-height: 92px; padding: 11px; }
+  .kpi-value { font-size: 24px; }
+  .contract-watch-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .approval-lanes { gap: 9px; }
+  .queue-steps-five { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .register-toolbar { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 8px; }
+  .register-toolbar .register-search { grid-column: 1 / -1; min-width: 0; width: 100%; }
+  .register-toolbar > select { grid-column: 1; width: 100%; }
+  .register-toolbar .filter-more { grid-column: 1 / -1; }
+  .register-toolbar > .reset-button { grid-column: 2; grid-row: 2; align-self: center; }
+  .filter-more-fields { position: static; width: 100%; grid-template-columns: 1fr; box-shadow: none; margin-top: 8px; }
+  .active-filter-summary { padding: 0 0 11px; }
+  #workflowCards { grid-template-columns: 1fr; }
+  .workflow-stage { padding: 13px; }
+  .lp-stage-summary { gap: 7px; }
+  .lp-stage-card { min-height: 70px; padding: 9px; }
+  .lp-stage-card strong { font-size: 19px; }
+  .contract-lifecycle-summary { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .lifecycle-footnote { font-size: 9px; line-height: 1.6; }
+  .import-guide { grid-template-columns: 1fr; }
+  .activity-toolbar { display: grid; grid-template-columns: minmax(0,1fr) auto; }
+  .activity-toolbar input { grid-column: 1 / -1; width: 100%; min-width: 0; }
+  .activity-toolbar select { grid-column: 1; width: 100%; min-width: 0; }
+  .activity-toolbar button { grid-column: 2; }
+  #recordForm .dialog-footer { margin-bottom: -20px; }
+}
+@media (max-width: 420px) {
+  .sidebar.nav-open .side-nav { grid-template-columns: 1fr; }
+  .table-wrap tbody tr { gap: 9px 11px; padding: 11px; }
+  .table-wrap tbody td { font-size: 9px; }
+  .kpi-card { min-height: 86px; }
+  .kpi-value { font-size: 22px; }
+  .contract-watch-grid { grid-template-columns: 1fr 1fr; }
+  .overview-heading-actions .action-strip { grid-template-columns: 1fr; }
+  .overview-heading-actions .overview-refresh { grid-column: auto; }
+}
+
+
+/* Mobile card width guard: long approval-role names must wrap inside each cell. */
+@media (max-width: 760px) {
+  .register-table-wrap table,
+  .activity-table-wrap table {
+    min-width: 0;
+    width: 100%;
+  }
+  .table-wrap tbody td,
+  .table-wrap tbody td > *,
+  .table-wrap tbody td span,
+  .table-wrap tbody td strong,
+  .table-wrap tbody td small,
+  .table-wrap tbody td a,
+  .table-wrap tbody td button {
+    min-width: 0;
+    max-width: 100%;
+    white-space: normal !important;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+  .table-wrap tbody td .status-badge,
+  .table-wrap tbody td .exception-label {
+    display: inline-flex;
+    width: fit-content;
+    max-width: 100%;
+  }
+}
+
+/* Tablet navigation follows the same explicit drawer behavior as mobile. */
+@media (max-width: 920px) {
+  .mobile-nav-toggle { display: grid; }
+  .sidebar .side-nav { display: none; }
+  .sidebar.nav-open .side-nav {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0,1fr));
+    gap: 5px;
+    overflow: visible;
+    margin-top: 9px;
+    padding: 8px 0 2px;
+    border-top: 1px solid rgba(255,255,255,.12);
+  }
+  .sidebar.nav-open .secondary-caption {
+    display: block;
+    margin: 12px 2px 5px;
+    color: #a6b8d0;
+    font-size: 8px;
+  }
+}
+
+
+/* Lean workflow occupancy: default to stages that actually hold work. */
+.workflow-workbench-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 0 0 13px;
+}
+#workflowStageSummary {
+  margin: 0;
+  color: var(--muted-strong);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.workflow-empty-toggle {
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 0 11px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--teal-dark);
+  font-size: 10px;
+  font-weight: 720;
+}
+.workflow-empty-toggle:hover { background: var(--surface-soft); }
+#workflowCards .workflow-stage {
+  min-height: 102px;
+  gap: 8px;
+  padding: 14px 15px;
+}
+#workflowCards .workflow-stage-bottom { align-items: center; }
+#workflowCards .workflow-stage-action {
+  color: var(--teal-dark);
+  font-weight: 760;
+  white-space: nowrap;
+}
+.attention-mobile-hint { display: none; }
+
+@media (max-width: 760px) {
+  .attention-panel tbody tr:nth-child(n+4) { display: none !important; }
+  .attention-mobile-hint {
+    display: block;
+    margin: 11px 2px 0;
+    color: var(--muted);
+    font-size: 9px;
+    line-height: 1.55;
+  }
+  .workflow-workbench-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .workflow-empty-toggle { align-self: flex-start; }
+  #workflowCards .workflow-stage { min-height: 88px; padding: 12px; }
+}
+
+
+/* Stage age is a separate signal from record count; keep both legible. */
+#workflowCards .workflow-stage-bottom {
+  align-items: baseline;
+  column-gap: 12px;
+  row-gap: 5px;
+}
+#workflowCards .workflow-stage-age {
+  color: var(--muted);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+}
+#workflowCards .workflow-stage-action { margin-left: auto; }
+@media (max-width: 680px) {
+  #workflowCards .workflow-stage-bottom { align-items: flex-start; }
+  #workflowCards .workflow-stage-action { margin-left: auto; }
+}

@@ -294,6 +294,30 @@ SELECT
     derived.lp_stage_key,
     derived.lp_timeline_has_gaps,
 
+    CASE derived.current_stage_code
+        WHEN 'REQUEST_RECEIVED' THEN r.request_date
+        WHEN 'DISPATCH' THEN r.request_date
+        WHEN 'BOQ_CONFIRMATION' THEN k.dispatch_date
+        WHEN 'NEGOTIATION' THEN k.boq_confirmation_date
+        WHEN 'FINAL_NEGOTIATION' THEN k.negotiation_date
+        WHEN 'MI_HEAD_APPROVAL' THEN k.final_negotiation_date
+        WHEN 'MI_SM_APPROVAL' THEN k.mi_head_approval_date
+        WHEN 'MI_GM_APPROVAL' THEN k.mi_sm_approval_date
+        WHEN 'LEGAL_SUBMISSION' THEN k.mi_gm_approval_date
+        WHEN 'LEGAL_PROCESSING' THEN k.legal_submission_date
+        WHEN 'LP_CIRCULATION' THEN
+            CASE derived.lp_stage_key
+                WHEN 'contract_team' THEN k.lp_circulation_start_date
+                WHEN 'junior_manager' THEN k.lp_contract_team_completion_date
+                WHEN 'senior_manager' THEN k.lp_junior_manager_approval_date
+                WHEN 'general_manager' THEN k.lp_senior_manager_approval_date
+                WHEN 'director' THEN k.lp_gm_scm_approval_date
+                ELSE NULL
+            END
+        WHEN 'KHS_INJECTION' THEN k.lp_completion_date
+        ELSE NULL
+    END AS current_stage_started_on,
+
     (
         k.lp_circulation_start_date IS NOT NULL
         AND (
@@ -789,10 +813,25 @@ def _contract_lifecycle_data(record, today=None):
     }
 
 
-def _register_enriched(row):
+def _register_enriched(row, today=None):
+    today = today or _jakarta_today()
     record = _register_json_safe(row)
-    record.update(_lp_timeline_summary(row))
-    record["contract_lifecycle"] = _contract_lifecycle_data(row)
+    record.update(_lp_timeline_summary(row, today=today))
+
+    stage_started = (
+        None
+        if row.get("current_stage_code") == "COMPLETED"
+        else _date_only(row.get("current_stage_started_on"))
+    )
+    record["current_stage_started_on"] = (
+        stage_started.isoformat() if stage_started else None
+    )
+    record["current_stage_age_days"] = (
+        (today - stage_started).days
+        if stage_started and stage_started <= today
+        else None
+    )
+    record["contract_lifecycle"] = _contract_lifecycle_data(row, today=today)
     return record
 
 
@@ -1045,6 +1084,7 @@ def khs_register():
         FROM ({REGISTER_BASE_QUERY}) AS register
         {where_sql}
         ORDER BY register.lp_started_without_mi_gm_approval DESC,
+                 register.current_stage_started_on ASC NULLS LAST,
                  (register.waiting_for IS NOT NULL) DESC,
                  register.updated_at ASC NULLS FIRST,
                  register.dispatch_date DESC NULLS LAST,
@@ -1949,17 +1989,42 @@ def update_khs(khs_id):
 
 @dashboard_bp.get("/workflow")
 def workflow_monitoring():
+    # Use the Jakarta-local date so stage age is not affected by the database
+    # server timezone. Each age is anchored to the milestone that opened the
+    # current workflow stage; updated_at is deliberately not used as a proxy.
+    as_of = _jakarta_today().isoformat()
+    as_of_sql = f"DATE '{as_of}'"
     query = """
-        SELECT stage.stage_code, stage.stage_name, stage.sequence_number,
-               COUNT(register.khs_id)::int AS total,
-               COUNT(register.khs_id) FILTER (
-                   WHERE register.workflow_status = 'completed'
-               )::int AS completed
-        FROM khs_stage_config stage
-        LEFT JOIN (
-            SELECT khs_id, current_stage_code, lp_status, workflow_status
+        WITH register_state AS (
+            SELECT
+                derived_register.*,
+                derived_register.current_stage_started_on AS stage_started_on
             FROM (""" + REGISTER_BASE_QUERY + """) AS derived_register
-        ) AS register
+        )
+        SELECT
+            stage.stage_code,
+            stage.stage_name,
+            stage.sequence_number,
+            COUNT(register.khs_id)::int AS total,
+            COUNT(register.khs_id) FILTER (
+                WHERE register.workflow_status = 'completed'
+            )::int AS completed,
+            MAX(
+                CASE
+                    WHEN register.stage_started_on <= """ + as_of_sql + """
+                    THEN """ + as_of_sql + """ - register.stage_started_on
+                    ELSE NULL
+                END
+            )::int AS oldest_stage_age_days,
+            COUNT(register.khs_id) FILTER (
+                WHERE stage.stage_code <> 'COMPLETED'
+                  AND (
+                      register.stage_started_on IS NULL
+                      OR register.stage_started_on > """ + as_of_sql + """
+                  )
+            )::int AS stage_age_unavailable
+        FROM khs_stage_config stage
+        LEFT JOIN register_state AS register
           ON register.current_stage_code = stage.stage_code
         WHERE stage.is_active = TRUE
         GROUP BY stage.stage_code, stage.stage_name, stage.sequence_number
@@ -2133,23 +2198,73 @@ def workflow_overview():
 @dashboard_bp.get("/activity")
 def activity_log():
     try:
-        page=_register_positive_int("page",1)
-        per_page=_register_positive_int("per_page",25,maximum=100)
+        page = _register_positive_int("page", 1)
+        per_page = _register_positive_int("per_page", 25, maximum=100)
     except ValueError as exc:
-        return jsonify(success=False,message=str(exc)),400
+        return jsonify(success=False, message=str(exc)), 400
+
+    search = request.args.get("q", "").strip()
+    if len(search) > 100:
+        return jsonify(success=False, code="INVALID_SEARCH",
+                       message="Activity search must not exceed 100 characters."), 400
+
+    entity_type = request.args.get("entity_type", "").strip().upper()
+    if entity_type and entity_type not in {"REQUEST", "KHS_ITEM"}:
+        return jsonify(success=False, code="INVALID_ENTITY_TYPE",
+                       message="Unsupported activity entity filter."), 400
+
+    filters = []
+    params = []
+    if entity_type:
+        filters.append("entity_type = %s")
+        params.append(entity_type)
+    if search:
+        pattern = f"%{search}%"
+        filters.append("""
+            (
+                entity_id ILIKE %s
+                OR entity_type ILIKE %s
+                OR action ILIKE %s
+                OR actor ILIKE %s
+                OR COALESCE(changes::text, '') ILIKE %s
+            )
+        """)
+        params.extend([pattern] * 5)
+    where_sql = "WHERE " + " AND ".join(filters) if filters else ""
+    offset = (page - 1) * per_page
+
     try:
         with get_db_pool().connection() as conn:
-            total=conn.execute("SELECT COUNT(*) FROM khs_activity_logs").fetchone()[0]
-            rows=conn.execute("""SELECT id,entity_type,entity_id,action,actor,changes,occurred_at
-                                 FROM khs_activity_logs ORDER BY occurred_at DESC,id DESC
-                                 LIMIT %s OFFSET %s""",(per_page,(page-1)*per_page)).fetchall()
-        return jsonify(success=True,data=[_row_dict(dict(zip(
-            ("id","entity_type","entity_id","action","actor","changes","occurred_at"),r))) for r in rows],
-            pagination={"page":page,"per_page":per_page,"total_records":total,
-                        "total_pages":(total+per_page-1)//per_page if total else 0}),200
+            total = conn.execute(
+                f"SELECT COUNT(*) FROM khs_activity_logs {where_sql}",
+                params,
+            ).fetchone()[0]
+            rows = conn.execute(
+                f"""SELECT id, entity_type, entity_id, action, actor, changes, occurred_at
+                    FROM khs_activity_logs
+                    {where_sql}
+                    ORDER BY occurred_at DESC, id DESC
+                    LIMIT %s OFFSET %s""",
+                [*params, per_page, offset],
+            ).fetchall()
+        return jsonify(
+            success=True,
+            data=[_row_dict(dict(zip(
+                ("id", "entity_type", "entity_id", "action", "actor", "changes", "occurred_at"),
+                row,
+            ))) for row in rows],
+            pagination={
+                "page": page,
+                "per_page": per_page,
+                "total_records": total,
+                "total_pages": (total + per_page - 1) // per_page if total else 0,
+                "has_previous": page > 1,
+                "has_next": page < ((total + per_page - 1) // per_page if total else 0),
+            },
+        ), 200
     except Exception:
         current_app.logger.exception("Activity query failed.")
-        return jsonify(success=False,message="Activity log unavailable."),503
+        return jsonify(success=False, message="Activity log unavailable."), 503
 
 
 @dashboard_bp.get("/export")

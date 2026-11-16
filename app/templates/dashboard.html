@@ -10,9 +10,12 @@
 <body>
 <div class="app-shell">
 <aside class="sidebar">
+<div class="sidebar-brand-row">
 <a class="brand" href="#overview" data-go="overview"><span class="brand-mark">K</span><span class="brand-copy"><strong>KHS</strong><small>CONTRACT OPERATIONS</small></span></a>
+<button class="mobile-nav-toggle" id="mobileNavToggle" type="button" aria-expanded="false" aria-controls="primarySideNav dataSideNav" aria-label="Open navigation"><span></span><span></span><span></span></button>
+</div>
 <div class="sidebar-caption">WORKSPACE</div>
-<nav class="side-nav" aria-label="Main navigation">
+<nav class="side-nav" id="primarySideNav" aria-label="Main navigation">
 <a class="nav-link active" href="#overview" data-page="overview"><span class="nav-icon" aria-hidden="true"><svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span><span>Contract Monitoring</span></a>
 <a class="nav-link" href="#requests" data-page="requests"><span class="nav-icon" aria-hidden="true"><svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3.75h7l4 4V20a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4.75a1 1 0 0 1 1-1Z"/><path d="M14 4v4h4M9 13h6M9 17h6"/></svg></span><span>Request Management</span></a>
 <a class="nav-link" href="#register" data-page="register"><span class="nav-icon" aria-hidden="true"><svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 5h12M8 12h12M8 19h12"/><path d="m3 5 1 1 2-2M3 12l1 1 2-2M3 19l1 1 2-2"/></svg></span><span>KHS Register</span><span class="nav-count" id="sidebarTotal">—</span></a>
@@ -21,7 +24,7 @@
 <a class="nav-link" href="#workflow" data-page="workflow"><span class="nav-icon" aria-hidden="true"><svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="5" r="2"/><circle cx="19" cy="19" r="2"/><path d="M7 5h4a4 4 0 0 1 4 4v2a4 4 0 0 0 4 4"/><path d="m15 15 4 4 4-4"/></svg></span><span>Workflow Monitoring</span></a>
 </nav>
 <div class="sidebar-caption secondary-caption">DATA MANAGEMENT</div>
-<nav class="side-nav">
+<nav class="side-nav" id="dataSideNav" aria-label="Data management">
 <a class="nav-link" href="#imports" data-page="imports"><span class="nav-icon" aria-hidden="true"><svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3m0 0L8 7m4-4 4 4"/><path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/></svg></span><span>Excel Import / Export</span></a>
 <a class="nav-link" href="#activity" data-page="activity"><span class="nav-icon" aria-hidden="true"><svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg></span><span>Activity & Audit Log</span></a>
 </nav>
@@ -29,7 +32,7 @@
 </aside>
 <main class="main-content">
 <header class="topbar"><div class="breadcrumbs"><span>Operations</span><span>/</span><strong id="breadcrumbCurrent">Overview</strong></div>
-<div class="topbar-actions"><div class="system-status" id="systemStatus"><span class="online-dot"></span><span id="systemStatusText">Ready</span></div><button class="refresh-button" id="refreshButton" type="button">↻ Refresh</button><button class="primary-button" id="quickAddKhs" type="button">+ Add KHS</button></div></header>
+<div class="topbar-actions"><div class="system-status" id="systemStatus"><span class="online-dot"></span><span id="systemStatusText">Ready</span></div><button class="refresh-button" id="refreshButton" type="button">↻ Refresh</button></div></header>
 <section class="page-view active" id="page-overview" data-title="Contract Monitoring &amp; Tracking">
 <div class="page-heading overview-page-heading">
   <div class="overview-heading-copy">
@@ -40,6 +43,7 @@
   <div class="overview-heading-actions">
     <div class="heading-meta"><span class="meta-label">LAST UPDATED</span><strong id="lastUpdated">—</strong></div>
     <div class="action-strip">
+      <button class="secondary-button overview-refresh" id="overviewRefresh" type="button">↻ Refresh overview</button>
       <button class="primary-button" id="newRequestButton">+ New Request</button>
       <button class="secondary-button" data-go="imports">Import Excel</button>
     </div>
@@ -53,10 +57,7 @@
 </div>
 
 <article class="panel attention-panel"><div class="panel-heading"><div><div class="eyebrow">ACTION REQUIRED</div><h2>Priority action queue</h2><p>Records awaiting approval, owner follow-up, or prerequisite review.</p></div><button class="text-button" data-go="register" data-attention-only="true">View attention queue →</button></div>
-<div class="table-wrap"><table><thead><tr><th>REQUEST / KHS</th><th>VENDOR</th><th>CURRENT STAGE</th><th>WAITING FOR / NEXT ACTION</th><th>UPDATED</th><th>ACTION</th></tr></thead><tbody id="attentionBody"><tr><td colspan="6" class="table-message">Loading…</td></tr></tbody></table></div></article>
-<article class="quality-alert" id="qualityAlert" hidden><strong>Data quality flag</strong><span id="qualityCount">0</span> LP record(s) have started without a recorded GM MI approval. <button class="text-button" data-go="register">Review records</button></article>
-
-
+<div class="table-wrap"><table><thead><tr><th>REQUEST / KHS</th><th>VENDOR</th><th>CURRENT STAGE</th><th>WAITING FOR / NEXT ACTION</th><th>STAGE AGE / UPDATED</th><th>ACTION</th></tr></thead><tbody id="attentionBody"><tr><td colspan="6" class="table-message">Loading…</td></tr></tbody></table></div><p id="attentionMobileHint" class="attention-mobile-hint">Showing the three highest-priority items. Open the full queue to see every outstanding record.</p></article>
 <section class="approval-command" aria-labelledby="approvalCommandTitle">
   <div class="approval-command-heading">
     <div>
@@ -107,36 +108,20 @@
     <button type="button" class="text-button" data-go="contracts">Open contract lifecycle →</button>
   </div>
   <div class="contract-watch-grid">
-    <button type="button" class="contract-watch-card watch-six" data-contract-status="within_6m"><span>Renewal preparation</span><strong id="overviewExpiring6m">—</strong><small>Within 6 months</small></button>
-    <button type="button" class="contract-watch-card watch-three" data-contract-status="within_3m"><span>Renewal watch</span><strong id="overviewExpiring3m">—</strong><small>Within 3 months</small></button>
-    <button type="button" class="contract-watch-card watch-one" data-contract-status="within_1m"><span>Action required</span><strong id="overviewExpiring1m">—</strong><small>Within 1 month</small></button>
+    <button type="button" class="contract-watch-card watch-six" data-contract-status="within_6m"><span>Renewal preparation</span><strong id="overviewExpiring6m">—</strong><small>≤ 6 months · cumulative</small></button>
+    <button type="button" class="contract-watch-card watch-three" data-contract-status="within_3m"><span>Renewal watch</span><strong id="overviewExpiring3m">—</strong><small>≤ 3 months · cumulative</small></button>
+    <button type="button" class="contract-watch-card watch-one" data-contract-status="within_1m"><span>Action required</span><strong id="overviewExpiring1m">—</strong><small>≤ 1 month · cumulative</small></button>
     <button type="button" class="contract-watch-card watch-expired" data-contract-status="expired"><span>Expired</span><strong id="overviewExpiredContracts">—</strong><small>Past contract end date</small></button>
     <button type="button" class="contract-watch-card watch-missing" data-contract-status="missing_dates"><span>Missing dates</span><strong id="overviewMissingContractDates">—</strong><small>Fully injected · incomplete period</small></button>
   </div>
 </section>
-<div class="overview-grid">
-<article class="panel"><div class="panel-heading"><div><div class="eyebrow">LIFECYCLE</div><h2>LP Circulation Progress</h2></div><span class="subtle-tag" id="lpTotalTag">— KHS</span></div>
-<div class="progress-summary"><strong class="progress-primary" id="progressPrimary">—</strong><strong class="progress-rate" id="progressRate">0%</strong></div>
-<p class="chart-caption">Portfolio distribution by LP completion status</p>
-<div class="stacked-progress" role="img" aria-label="LP circulation distribution: completed, in progress and not started. Exact counts are listed below."><span id="barCompleted" class="segment segment-completed"></span><span id="barInProgress" class="segment segment-progress"></span><span id="barNotStarted" class="segment segment-not-started"></span></div>
-<div class="progress-legend" aria-label="LP status legend">
-  <span class="legend-item legend-completed"><i aria-hidden="true"></i>Completed <b id="legendCompleted">—</b></span>
-  <span class="legend-item legend-progress"><i aria-hidden="true"></i>In progress <b id="legendInProgress">—</b></span>
-  <span class="legend-item legend-not-started"><i aria-hidden="true"></i>Not started <b id="legendNotStarted">—</b></span>
-</div></article>
-<article class="panel"><div class="panel-heading"><div><div class="eyebrow">PROCESS CHECKPOINTS</div><h2>Workflow Overview</h2></div></div>
-<div class="workflow-list" aria-label="Workflow checkpoint coverage">
-  <div class="workflow-item checkpoint-mi"><span>MI GM approved</span><b id="miGmCount">—</b><div class="mini-track" role="img" aria-label="Share of KHS records with MI GM approval"><i id="miGmBar" aria-hidden="true"></i></div></div>
-  <div class="workflow-item checkpoint-legal"><span>Legal submitted</span><b id="legalCount">—</b><div class="mini-track" role="img" aria-label="Share of KHS records submitted to Legal"><i id="legalBar" aria-hidden="true"></i></div></div>
-  <div class="workflow-item checkpoint-lp"><span>LP started</span><b id="lpStartedCount">—</b><div class="mini-track" role="img" aria-label="Share of KHS records with LP circulation started"><i id="lpStartedBar" aria-hidden="true"></i></div></div>
-</div></article>
-</div>
+
 
 
 </section>
 <section class="page-view" id="page-requests" data-title="Request Management">
 <div class="page-heading"><div><div class="eyebrow">WORKSPACE / INTAKE</div><h1>Request Management</h1><p>Create and manage parent requests. One request may contain multiple KHS items.</p></div><button class="primary-button" id="createRequestButton">+ New Request</button></div>
-<article class="panel"><div class="filter-toolbar"><input id="requestSearch" type="search" placeholder="Search subject, vendor, owner…"><button class="reset-button" id="requestSearchReset">Reset</button></div>
+<article class="panel"><div class="filter-toolbar"><input id="requestSearch" type="search" aria-label="Search requests" placeholder="Search subject, vendor, owner…"><button class="reset-button" id="requestSearchReset">Reset</button></div>
 <div class="table-wrap"><table><thead><tr><th>REQUEST SUBJECT</th><th>VENDOR PORTFOLIO</th><th>REQUEST DATE</th><th>REQUESTER / OWNER</th><th>KHS ITEMS</th><th>FULLY INJECTED</th><th></th></tr></thead><tbody id="requestBody"><tr><td colspan="7" class="table-message">Loading requests…</td></tr></tbody></table></div>
 <div class="register-footer"><span id="requestPagination">—</span><div class="pagination"><button id="requestPrevious" type="button">‹</button><button id="requestNext" type="button">›</button></div></div></article>
 </section>
@@ -153,7 +138,7 @@
 </div></details>
 <button class="reset-button" id="resetFilters" type="button">Reset filters</button>
 </div>
-<div class="table-wrap"><table><thead><tr><th>REQUEST SUBJECT / VENDOR</th><th>EXECUTOR</th><th>WORKFLOW STAGE</th><th>WORKFLOW STATUS</th><th>LP STATUS</th><th>LP CURRENT STAGE / AGE</th><th>INJECT START</th><th>FULLY INJECTED</th><th>WAITING FOR</th><th></th></tr></thead><tbody id="registerBody"><tr><td colspan="10" class="table-message">Loading…</td></tr></tbody></table></div>
+<div id="activeRegisterFilters" class="active-filter-summary" aria-live="polite" hidden></div><div class="table-wrap register-table-wrap"><table class="operational-table"><thead><tr><th>REQUEST / VENDOR</th><th>CURRENT STAGE &amp; AGE</th><th>LP STATUS</th><th>INJECTION</th><th>NEXT ACTION</th><th></th></tr></thead><tbody id="registerBody"><tr><td colspan="6" class="table-message">Loading…</td></tr></tbody></table></div>
 <div class="register-footer"><span id="recordCount">—</span><div class="pagination"><span id="paginationText">—</span><button id="previousPage" type="button">‹</button><button id="nextPage" type="button">›</button></div></div></article>
 </section>
 <section class="page-view" id="page-lp" data-title="LP Circulation">
@@ -198,7 +183,11 @@
   </article>
 </section>
 <section class="page-view" id="page-workflow" data-title="Workflow Monitoring">
-<div class="page-heading"><div><div class="eyebrow">WORKSPACE / PROCESS CONTROL</div><h1>Workflow Monitoring</h1><p>Distribution by the next workflow checkpoint and work awaiting action.</p></div><button class="secondary-button" id="workflowRefresh">Refresh</button></div>
+<div class="page-heading"><div><div class="eyebrow">WORKSPACE / PROCESS CONTROL</div><h1>Workflow Monitoring</h1><p>See where records are waiting and open the matching worklist directly.</p></div><button class="secondary-button" id="workflowRefresh">Refresh</button></div>
+<div class="workflow-workbench-toolbar">
+  <p id="workflowStageSummary" aria-live="polite">Loading workflow stages…</p>
+  <button type="button" class="workflow-empty-toggle" id="workflowEmptyToggle" aria-expanded="false" hidden>Show empty stages</button>
+</div>
 <div class="workflow-cards" id="workflowCards"><div class="panel">Loading workflow…</div></div>
 <article class="panel"><div class="panel-heading"><div><div class="eyebrow">LP CIRCULATION</div><h2>LoA Sign-off Route</h2></div></div><div class="loa-route"><span>User</span><i>→</i><span>Tim Kontrak</span><i>→</i><span>Junior Manager Vendor Management</span><i>→</i><span>Senior Manager Strategic Sourcing</span><i>→</i><span>GM SCM</span><i>→</i><span>Direktur</span></div><p class="muted">LP circulation is gated by GM SCM MI approval. The route is shown for process visibility; individual sign-off dates remain tracked on each KHS record.</p></article>
 </section>
@@ -233,7 +222,7 @@
     <div class="table-wrap"><table><thead><tr><th>KHS / VENDOR</th><th>REQUEST</th><th>FULLY INJECTED</th><th>CONTRACT PERIOD</th><th>TERM</th><th>TIME REMAINING</th><th>CONTRACT STATUS</th><th>RENEWAL ALERT</th><th></th></tr></thead><tbody id="contractBody"><tr><td colspan="9" class="table-message">Loading contracts…</td></tr></tbody></table></div>
     <div class="register-footer"><span id="contractPagination">—</span><div class="pagination"><button id="contractPrevious" type="button">‹</button><button id="contractNext" type="button">›</button></div></div>
   </article>
-  <p class="lifecycle-footnote">Alert stages are calculated from Contract End Date using Jakarta local date. Monitoring is in-app; email and WhatsApp notifications are not enabled.</p>
+  <p class="lifecycle-footnote">The 6-, 3-, and 1-month counts are cumulative urgency thresholds, so shorter horizons are included in longer ones. Alert stages use Contract End Date and Jakarta local date. Monitoring is in-app; email and WhatsApp notifications are not enabled.</p>
 </section>
 <section class="page-view" id="page-imports" data-title="Excel Import / Export">
 <div class="page-heading"><div><div class="eyebrow">DATA MANAGEMENT / WORKBOOK WORKSPACE</div><h1>Excel Import / Export</h1><p>Download the latest database workbook, edit existing records by ID, then preview and confirm the changes. Legacy v2.2 and v2.3 workbooks remain supported.</p></div><div class="heading-actions"><button class="secondary-button" id="downloadCurrentWorkbookButton">↓ Download current Excel</button><button class="secondary-button" id="exportKhsButton">↓ Export KHS CSV</button></div></div>
@@ -259,15 +248,39 @@
 </section>
 <section class="page-view" id="page-activity" data-title="Activity & Audit Log">
 <div class="page-heading"><div><div class="eyebrow">DATA MANAGEMENT / TRACEABILITY</div><h1>Activity & Audit Log</h1><p>Manual edits and Excel imports are recorded for traceability. Manual edits are labelled manual-entry until sign-in is introduced.</p></div><button class="secondary-button" id="activityRefresh">Refresh</button></div>
-<article class="panel"><div class="table-wrap"><table><thead><tr><th>WHEN</th><th>ENTITY</th><th>RECORD ID</th><th>ACTION</th><th>ACTOR</th><th>CHANGES</th></tr></thead><tbody id="activityBody"><tr><td colspan="6" class="table-message">Loading…</td></tr></tbody></table></div><div class="register-footer"><span id="activityPagination">—</span><div class="pagination"><button id="activityPrevious">‹</button><button id="activityNext">›</button></div></div></article>
+<article class="panel"><div class="filter-toolbar activity-toolbar"><input id="activitySearch" type="search" aria-label="Search activity history" placeholder="Search record ID, actor, action…"><select id="activityEntityFilter" aria-label="Filter activity entity"><option value="">All entities</option><option value="KHS_ITEM">KHS records</option><option value="REQUEST">Requests</option></select><button type="button" class="reset-button" id="activityReset">Reset</button></div><div class="table-wrap activity-table-wrap"><table class="operational-table"><thead><tr><th>WHEN</th><th>ENTITY</th><th>RECORD ID</th><th>ACTION</th><th>ACTOR</th><th>CHANGES</th></tr></thead><tbody id="activityBody"><tr><td colspan="6" class="table-message">Loading…</td></tr></tbody></table></div><div class="register-footer"><span id="activityPagination">—</span><div class="pagination"><button id="activityPrevious">‹</button><button id="activityNext">›</button></div></div></article>
 </section>
 <footer class="main-footer"><span>KHS Contract Operations</span><span>Contract Monitoring &amp; Tracking · Internal workspace</span></footer>
 </main></div>
-<dialog id="recordDialog" class="record-dialog"><form id="recordForm" method="dialog"><div class="dialog-header"><div><div class="eyebrow" id="dialogEyebrow">NEW RECORD</div><h2 id="dialogTitle">Create record</h2></div><button type="button" class="dialog-close" id="closeRecordDialog">×</button></div><div id="dialogFields" class="form-grid"></div><div id="dialogHint" class="form-hint"></div><div class="dialog-footer"><button type="button" class="secondary-button" id="cancelRecord">Cancel</button><button type="submit" class="primary-button" id="saveRecord">Save record</button></div></form></dialog>
+<dialog id="recordDialog" class="record-dialog"><form id="recordForm" method="dialog"><div class="dialog-header"><div><div class="eyebrow" id="dialogEyebrow">NEW RECORD</div><h2 id="dialogTitle">Create record</h2></div><button type="button" class="dialog-close" id="closeRecordDialog">×</button></div><div id="recordError" class="form-error" role="alert" hidden></div><div id="dialogFields" class="form-grid"></div><div id="dialogHint" class="form-hint"></div><div class="dialog-footer"><button type="button" class="secondary-button" id="cancelRecord">Cancel</button><button type="submit" class="primary-button" id="saveRecord">Save record</button></div></form></dialog>
 <dialog id="detailDialog" class="detail-dialog"><div class="dialog-header"><div><div class="eyebrow">KHS RECORD</div><h2 id="detailTitle">KHS Details</h2><p class="detail-subtitle" id="detailSubtitle"></p></div><button class="dialog-close" id="closeDialog">×</button></div><div id="detailStatus" class="dialog-status-row"></div>
-<section class="lp-timeline-section"><div class="lp-timeline-heading"><div><div class="eyebrow">LP CIRCULATION</div><h3>Approval Timeline</h3></div><span id="lpTimelineStage" class="status-badge status-in_progress">—</span></div><div id="lpTimeline" class="lp-timeline"></div><div id="lpTimelineNotice" class="lp-timeline-notice" hidden></div></section>
+<section class="lp-timeline-section" aria-labelledby="lpTimelineTitle">
+  <div class="lp-timeline-heading">
+    <div><div class="eyebrow">LP CIRCULATION</div><h3 id="lpTimelineTitle">Approval journey</h3><p>Evidence-led view of the six LP milestones</p></div>
+    <span id="lpTimelineStage" class="status-badge status-in_progress" aria-live="polite">—</span>
+  </div>
+  <div class="lp-stage-focus" aria-label="Current LP stage summary">
+    <div class="lp-stage-focus-item lp-stage-focus-current">
+      <span class="lp-stage-focus-label">Current Stage</span>
+      <strong id="lpCurrentStage">—</strong>
+      <small id="lpCurrentStageMeta">—</small>
+    </div>
+    <div class="lp-stage-focus-item">
+      <span class="lp-stage-focus-label">Stage Age</span>
+      <strong id="lpStageAge">—</strong>
+      <small id="lpStageAgeMeta">—</small>
+    </div>
+    <div class="lp-stage-focus-item">
+      <span class="lp-stage-focus-label">Upcoming</span>
+      <strong id="lpUpcomingStage">—</strong>
+      <small id="lpUpcomingMeta">—</small>
+    </div>
+  </div>
+  <div id="lpTimeline" class="lp-timeline" role="list" aria-label="LP approval milestones"></div>
+  <div id="lpTimelineNotice" class="lp-timeline-notice" role="note" hidden></div>
+</section>
 <section class="contract-detail-summary"><div class="contract-detail-heading"><div><div class="eyebrow">POST-INJECTION</div><h3>Contract Lifecycle</h3></div><span id="contractDetailStatus" class="status-badge">—</span></div><div id="contractDetailGrid" class="contract-detail-grid"></div></section>
-<div id="detailGrid" class="detail-grid"></div>
+<div id="detailGrid" class="detail-groups"></div>
 <section class="document-section">
   <div class="document-section-heading"><div><h3>Evidence Documents</h3><p class="muted">Supporting files attached to this KHS record.</p></div></div>
   <form id="documentUploadForm" class="document-upload-form" enctype="multipart/form-data">
