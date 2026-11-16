@@ -475,6 +475,8 @@ def test_workflow_overview_uses_milestone_derived_lp_queues(make_client):
     assert "lp_stage_key = 'prerequisite_exception'" in query
     assert "lp_stage_key = 'legacy_unverified'" in query
     assert "lp_timeline_has_gaps" in query
+    assert "lp_started_without_mi_gm_approval IS TRUE" in query
+    assert "FROM register_state" in query
     assert "POSITION('junior manager'" not in query
     assert "WITH register_state AS" in query
 
@@ -765,6 +767,7 @@ def test_lp_circulation_endpoint_returns_stage_counts_and_age(make_client):
         "contract_start_date": None,
         "contract_end_date": None,
         "khs_inject_completion_date": None,
+        "mi_gm_approval_date": today - timedelta(days=12),
         "lp_circulation_start_date": today - timedelta(days=10),
         "lp_contract_team_completion_date": None,
         "lp_junior_manager_approval_date": None,
@@ -783,7 +786,12 @@ def test_lp_circulation_endpoint_returns_stage_counts_and_age(make_client):
     pool = RegisterFakePool(
         rows=[row],
         total=1,
-        stage_summary_rows=[{"lp_stage_key": "contract_team", "total": 1, "timeline_gaps": 0}],
+        stage_summary_rows=[{
+            "lp_stage_key": "contract_team",
+            "total": 1,
+            "timeline_gaps": 0,
+            "prerequisite_exceptions": 0,
+        }],
     )
 
     response = make_client(pool).get("/api/dashboard/lp-circulation?stage=contract_team")
@@ -792,11 +800,29 @@ def test_lp_circulation_endpoint_returns_stage_counts_and_age(make_client):
     payload = response.get_json()
     assert payload["summary"]["total_lp_records"] == 1
     assert payload["summary"]["by_stage"]["contract_team"] == 1
+    assert payload["summary"]["prerequisite_exceptions"] == 0
     assert payload["data"][0]["lp_stage_key"] == "contract_team"
     assert payload["data"][0]["lp_stage_age_days"] == 10
     assert payload["data"][0]["contract_lifecycle"]["contract_lifecycle_status"] == "not_fully_injected"
     assert len(pool.queries) == 3
     assert pool.queries[0][1] == ["contract_team"]
+
+
+def test_lp_prerequisite_exception_filter_includes_director_signed_history(make_client):
+    pool = RegisterFakePool(rows=[], total=2)
+
+    response = make_client(pool).get(
+        "/api/dashboard/lp-circulation?stage=prerequisite_exception"
+    )
+
+    assert response.status_code == 200
+    count_query, params = pool.queries[0]
+    data_query, data_params = pool.queries[1]
+    for query in (count_query, data_query):
+        assert "register.lp_started_without_mi_gm_approval IS TRUE" in query
+        assert "register.lp_stage_key = %s" not in query
+    assert params == []
+    assert data_params[-2:] == [25, 0]
 
 
 def test_contract_lifecycle_endpoint_summarizes_fully_injected_records(make_client):
