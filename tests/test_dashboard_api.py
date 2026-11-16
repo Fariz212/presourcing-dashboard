@@ -593,6 +593,7 @@ def test_lp_timeline_derives_stage_age_and_preserves_missing_legacy_dates():
     assert current["lp_timeline_has_gaps"] is False
 
     legacy = _lp_timeline_summary({
+        "mi_gm_approval_date": date(2026, 10, 28),
         "lp_circulation_start_date": date(2026, 11, 1),
         "lp_contract_team_completion_date": None,
         "lp_junior_manager_approval_date": date(2026, 11, 8),
