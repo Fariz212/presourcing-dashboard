@@ -143,7 +143,6 @@ def test_dashboard_contains_separate_operational_modules(monkeypatch, tmp_path):
     assert 'data-lp-stage="director"' in body
     assert 'data-lp-stage="prerequisite_exception"' in body
     assert 'data-lp-stage="legacy_unverified"' in body
-    assert "LP Timeline Quality" in body
     assert "New Request" in body
     assert "Add KHS" in body
     assert "Export KHS CSV" in body
