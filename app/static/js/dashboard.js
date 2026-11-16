@@ -841,6 +841,26 @@ function renderPreview(result) {
   set("previewValid", s.valid_rows || 0);
   set("previewWarnings", s.warning_rows || 0);
   set("previewErrors", s.error_rows || 0);
+
+  const plan = result.change_plan || {};
+  const changePlan = $("changePlan");
+  if (changePlan) {
+    changePlan.hidden = false;
+    set("changePlanCount", (plan.total_records || 0) + " records checked");
+    set("planNew", plan.new_records || 0);
+    set("planUpdated", plan.updated_records || 0);
+    set("planUnchanged", plan.unchanged_records || 0);
+    set("planFields", plan.changed_fields_count || 0);
+    const changes = plan.changes || [];
+    $("changePlanBody").innerHTML = changes.length
+      ? changes.map((item) =>
+          "<tr><td><strong>" + esc(item.id || "—") + "</strong><span class=\"cell-secondary\">" +
+          esc(item.entity || "—") + "</span></td><td>" + esc(item.operation || "—") +
+          "</td><td>" + esc((item.changed_fields || []).join(", ") || "—") + "</td></tr>"
+        ).join("")
+      : '<tr><td colspan="3" class="table-message">No record fields will change. The uploaded values match the current database.</td></tr>';
+  }
+
   const allowed = state.importCanRun;
   $("previewEligibility").className = "preview-eligibility " + (allowed ? "eligible" : "ineligible");
   $("previewEligibility").textContent = allowed ? "Ready to confirm. Review and acknowledge warnings where present." : "Import blocked: correct the validation errors and upload the corrected workbook.";
