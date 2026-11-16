@@ -62,7 +62,10 @@ SELECT
     COUNT(*) FILTER (WHERE legal_submission_date IS NOT NULL) AS legal_submitted,
     COUNT(*) FILTER (
         WHERE lp_circulation_start_date IS NOT NULL
-          AND mi_gm_approval_date IS NULL
+          AND (
+                mi_gm_approval_date IS NULL
+             OR lp_circulation_start_date < mi_gm_approval_date
+          )
     ) AS lp_started_without_mi_gm,
     COUNT(*) FILTER (
         WHERE mi_gm_approval_date IS NOT NULL
@@ -279,6 +282,9 @@ SELECT
     k.waiting_reason,
     k.last_updated_date,
     k.remarks,
+    k.legacy_overall_status,
+    k.legacy_detailed_status,
+    k.migration_review,
     k.updated_at,
 
     derived.lp_status,
@@ -290,7 +296,10 @@ SELECT
 
     (
         k.lp_circulation_start_date IS NOT NULL
-        AND k.mi_gm_approval_date IS NULL
+        AND (
+              k.mi_gm_approval_date IS NULL
+           OR k.lp_circulation_start_date < k.mi_gm_approval_date
+        )
     ) AS lp_started_without_mi_gm_approval
 
 FROM khs_items k
@@ -371,32 +380,40 @@ CROSS JOIN LATERAL (
         CASE
             WHEN k.lp_completion_date IS NOT NULL
                 THEN 'completed'
+            WHEN k.lp_circulation_start_date IS NOT NULL
+              AND (
+                    k.mi_gm_approval_date IS NULL
+                 OR k.lp_circulation_start_date < k.mi_gm_approval_date
+              )
+                THEN 'prerequisite_exception'
             WHEN (
-            (k.lp_circulation_start_date IS NULL AND (
-                k.lp_contract_team_completion_date IS NOT NULL
-                OR k.lp_junior_manager_approval_date IS NOT NULL
-                OR k.lp_senior_manager_approval_date IS NOT NULL
-                OR k.lp_gm_scm_approval_date IS NOT NULL
-                OR k.lp_completion_date IS NOT NULL
-            ))
-            OR (k.lp_contract_team_completion_date IS NULL AND (
-                k.lp_junior_manager_approval_date IS NOT NULL
-                OR k.lp_senior_manager_approval_date IS NOT NULL
-                OR k.lp_gm_scm_approval_date IS NOT NULL
-                OR k.lp_completion_date IS NOT NULL
-            ))
-            OR (k.lp_junior_manager_approval_date IS NULL AND (
-                k.lp_senior_manager_approval_date IS NOT NULL
-                OR k.lp_gm_scm_approval_date IS NOT NULL
-                OR k.lp_completion_date IS NOT NULL
-            ))
-            OR (k.lp_senior_manager_approval_date IS NULL AND (
-                k.lp_gm_scm_approval_date IS NOT NULL
-                OR k.lp_completion_date IS NOT NULL
-            ))
-            OR (k.lp_gm_scm_approval_date IS NULL AND k.lp_completion_date IS NOT NULL)
-        )
+                (k.lp_circulation_start_date IS NULL AND (
+                    k.lp_contract_team_completion_date IS NOT NULL
+                    OR k.lp_junior_manager_approval_date IS NOT NULL
+                    OR k.lp_senior_manager_approval_date IS NOT NULL
+                    OR k.lp_gm_scm_approval_date IS NOT NULL
+                ))
+                OR (k.lp_contract_team_completion_date IS NULL AND (
+                    k.lp_junior_manager_approval_date IS NOT NULL
+                    OR k.lp_senior_manager_approval_date IS NOT NULL
+                    OR k.lp_gm_scm_approval_date IS NOT NULL
+                ))
+                OR (k.lp_junior_manager_approval_date IS NULL AND (
+                    k.lp_senior_manager_approval_date IS NOT NULL
+                    OR k.lp_gm_scm_approval_date IS NOT NULL
+                ))
+                OR (k.lp_senior_manager_approval_date IS NULL
+                    AND k.lp_gm_scm_approval_date IS NOT NULL)
+            )
                 THEN 'legacy_incomplete'
+            WHEN k.lp_circulation_start_date IS NOT NULL
+              AND k.lp_contract_team_completion_date IS NULL
+              AND k.lp_junior_manager_approval_date IS NULL
+              AND k.lp_senior_manager_approval_date IS NULL
+              AND k.lp_gm_scm_approval_date IS NULL
+              AND LOWER(BTRIM(COALESCE(k.legacy_overall_status, '')))
+                    IN ('done', 'completed')
+                THEN 'legacy_unverified'
             WHEN k.lp_circulation_start_date IS NULL
                 THEN 'not_started'
             WHEN k.lp_contract_team_completion_date IS NULL
@@ -537,6 +554,8 @@ LP_MILESTONE_ORDER = (
 )
 LP_STAGE_LABELS = {
     "not_started": "Not Started",
+    "prerequisite_exception": "MI GM Prerequisite Exception",
+    "legacy_unverified": "Legacy LP Stage Unverified",
     "legacy_incomplete": "Legacy Timeline Incomplete",
     "contract_team": "Tim Kontrak",
     "junior_manager": "Junior Manager",
@@ -579,15 +598,35 @@ def _lp_timeline_summary(record, today=None):
     has_gaps = bool(gaps)
     start_date = values[0]
     completion_date = values[-1]
+    mi_gm_date = _date_only(record.get("mi_gm_approval_date"))
+    legacy_status = str(record.get("legacy_overall_status") or "").strip().casefold()
+    prerequisite_exception = bool(
+        start_date and (mi_gm_date is None or start_date < mi_gm_date)
+    )
+    legacy_unverified = bool(
+        start_date
+        and not any(values[1:])
+        and legacy_status in {"done", "completed"}
+    )
 
     if completion_date is not None:
         stage_key = "completed"
+        stage_started = None
+        stage_age = None
+    elif prerequisite_exception:
+        stage_key = "prerequisite_exception"
         stage_started = None
         stage_age = None
     elif has_gaps:
         # A later milestone exists after a missing earlier date. The current
         # owner/stage cannot be inferred reliably from milestone dates alone.
         stage_key = "legacy_incomplete"
+        stage_started = None
+        stage_age = None
+    elif legacy_unverified:
+        # Legacy "Done" is not proof of Director sign-off under the current
+        # LP completion rule. Keep it out of active approver lanes until verified.
+        stage_key = "legacy_unverified"
         stage_started = None
         stage_age = None
     elif start_date is None:
@@ -616,6 +655,10 @@ def _lp_timeline_summary(record, today=None):
         data_status = "legacy_incomplete"
     elif stage_key == "completed":
         data_status = "complete"
+    elif stage_key == "prerequisite_exception":
+        data_status = "prerequisite_exception"
+    elif stage_key == "legacy_unverified":
+        data_status = "legacy_unverified"
     elif stage_key == "not_started":
         data_status = "not_started"
     else:
@@ -629,6 +672,8 @@ def _lp_timeline_summary(record, today=None):
         "lp_timeline_has_gaps": has_gaps,
         "lp_timeline_gaps": gaps,
         "lp_timeline_data_status": data_status,
+        "lp_prerequisite_exception": prerequisite_exception,
+        "lp_legacy_unverified": legacy_unverified,
     }
 
 
@@ -1916,9 +1961,13 @@ def workflow_monitoring():
 
 
 WORKFLOW_OVERVIEW_QUERY = f"""
-WITH active_lp AS (
-    SELECT {_waiting_role_case_sql("waiting_for")} AS approval_role
-    FROM khs_items
+WITH register_state AS (
+    SELECT *
+    FROM ({REGISTER_BASE_QUERY}) AS register
+),
+active_lp AS (
+    SELECT *
+    FROM register_state
     WHERE lp_completion_date IS NULL
       AND (
             lp_circulation_start_date IS NOT NULL
@@ -1949,24 +1998,35 @@ mi_queue AS (
 ),
 lp_queue AS (
     SELECT
-        COUNT(*) FILTER (WHERE approval_role = 'junior_manager')::int AS junior_manager,
-        COUNT(*) FILTER (WHERE approval_role = 'senior_manager')::int AS senior_manager,
-        COUNT(*) FILTER (WHERE approval_role = 'general_manager')::int AS general_manager,
-        COUNT(*) FILTER (WHERE approval_role = 'director')::int AS director,
-        COUNT(*) FILTER (WHERE approval_role = 'unassigned_or_other')::int AS unassigned_or_other,
-        COUNT(*)::int AS active_total
+        COUNT(*) FILTER (WHERE lp_stage_key = 'contract_team')::int AS contract_team,
+        COUNT(*) FILTER (WHERE lp_stage_key = 'junior_manager')::int AS junior_manager,
+        COUNT(*) FILTER (WHERE lp_stage_key = 'senior_manager')::int AS senior_manager,
+        COUNT(*) FILTER (WHERE lp_stage_key = 'general_manager')::int AS general_manager,
+        COUNT(*) FILTER (WHERE lp_stage_key = 'director')::int AS director,
+        COUNT(*) FILTER (WHERE lp_stage_key IN (
+            'contract_team', 'junior_manager', 'senior_manager',
+            'general_manager', 'director'
+        ))::int AS active_total,
+        COUNT(*)::int AS records_in_circulation,
+        COUNT(*) FILTER (WHERE lp_stage_key = 'prerequisite_exception')::int AS prerequisite_exceptions,
+        COUNT(*) FILTER (WHERE lp_stage_key = 'legacy_unverified')::int AS legacy_unverified,
+        COUNT(*) FILTER (WHERE lp_timeline_has_gaps IS TRUE)::int AS timeline_gaps
     FROM active_lp
 )
 SELECT
     mi_queue.junior_manager,
     mi_queue.senior_manager,
     mi_queue.general_manager,
+    lp_queue.contract_team,
     lp_queue.junior_manager,
     lp_queue.senior_manager,
     lp_queue.general_manager,
     lp_queue.director,
-    lp_queue.unassigned_or_other,
-    lp_queue.active_total
+    lp_queue.active_total,
+    lp_queue.records_in_circulation,
+    lp_queue.prerequisite_exceptions,
+    lp_queue.legacy_unverified,
+    lp_queue.timeline_gaps
 FROM mi_queue
 CROSS JOIN lp_queue;
 """
@@ -1974,12 +2034,11 @@ CROSS JOIN lp_queue;
 
 @dashboard_bp.get("/workflow/overview")
 def workflow_overview():
-    """Return role-level approval queues for the executive overview.
+    """Return role-level queues from the same milestone-derived state as LP Circulation.
 
-    MI queues are derived from the sequential MI approval date fields.
-    LP queues use the current Waiting For value on active LP records. Any
-    active LP record without a recognized role is retained in the
-    unassigned_or_other bucket so the displayed totals remain reconcilable.
+    LP lane counts never depend on the optional free-text Waiting For field.
+    Records with invalid prerequisites or unverifiable legacy status are
+    reported separately and excluded from normal approval lanes.
     """
     try:
         with get_db_pool().connection() as conn:
@@ -1992,12 +2051,16 @@ def workflow_overview():
             mi_junior,
             mi_senior,
             mi_general,
+            lp_contract_team,
             lp_junior,
             lp_senior,
             lp_general,
             lp_director,
-            lp_unassigned,
             lp_active,
+            lp_records,
+            lp_prerequisite,
+            lp_legacy,
+            lp_gaps,
         ) = row
 
         mi = [
@@ -2006,10 +2069,11 @@ def workflow_overview():
             {"key": "general_manager", "label": "General Manager", "count": mi_general, "stage_code": "MI_GM_APPROVAL"},
         ]
         lp = [
-            {"key": "junior_manager", "label": "Junior Manager", "count": lp_junior},
-            {"key": "senior_manager", "label": "Senior Manager", "count": lp_senior},
-            {"key": "general_manager", "label": "General Manager", "count": lp_general},
-            {"key": "director", "label": "Director", "count": lp_director},
+            {"key": "contract_team", "label": "Tim Kontrak", "count": lp_contract_team},
+            {"key": "junior_manager", "label": "Junior Manager Vendor Management", "count": lp_junior},
+            {"key": "senior_manager", "label": "Senior Manager Strategic Sourcing", "count": lp_senior},
+            {"key": "general_manager", "label": "GM SCM", "count": lp_general},
+            {"key": "director", "label": "Director / Direktur", "count": lp_director},
         ]
 
         return jsonify(
@@ -2018,10 +2082,13 @@ def workflow_overview():
                 "memo_internal": mi,
                 "lp": lp,
                 "lp_active_total": lp_active,
-                "lp_unassigned_or_other": lp_unassigned,
+                "lp_records_in_circulation": lp_records,
+                "lp_prerequisite_exceptions": lp_prerequisite,
+                "lp_legacy_unverified": lp_legacy,
+                "lp_timeline_gaps": lp_gaps,
                 "lp_count_basis": (
-                    "LP role counts use the Waiting For value on active LP records "
-                    "(LP circulation started, not yet completed)."
+                    "LP role counts are derived from the six ordered LP milestone dates. "
+                    "Waiting For is descriptive metadata and does not determine the current stage."
                 ),
             },
         ), 200
