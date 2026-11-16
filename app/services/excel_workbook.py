@@ -58,6 +58,7 @@ KHS_HEADERS = [
     "Legacy Detailed Status",
     "Original Source Column S (Audit Copy - LP Circulation Start Date)",
     "Migration Review",
+    "LP Timeline Quality",
     "LP Next Approver",
 ]
 
@@ -358,6 +359,39 @@ def build_current_khs_workbook(requests, items, executors, subtypes=None, waitin
             record.get("legacy_detailed_status"),
             record.get("source_col_s_audit_date"),
             record.get("migration_review"),
+            (
+                "Legacy stage unverified"
+                if record.get("lp_timeline_source") == "LEGACY_UNVERIFIED"
+                and not record.get("lp_completion_date")
+                and not any(record.get(field) for field in (
+                    "lp_contract_team_completion_date",
+                    "lp_junior_manager_approval_date",
+                    "lp_senior_manager_approval_date",
+                    "lp_gm_scm_approval_date",
+                ))
+                else "Completed · history gaps"
+                if record.get("lp_completion_date") and any(
+                    not record.get(field)
+                    for field in (
+                        "lp_circulation_start_date",
+                        "lp_contract_team_completion_date",
+                        "lp_junior_manager_approval_date",
+                        "lp_senior_manager_approval_date",
+                        "lp_gm_scm_approval_date",
+                    )
+                )
+                else "Timeline gaps"
+                if any(
+                    record.get(later) and not record.get(earlier)
+                    for earlier, later in (
+                        ("lp_circulation_start_date", "lp_contract_team_completion_date"),
+                        ("lp_contract_team_completion_date", "lp_junior_manager_approval_date"),
+                        ("lp_junior_manager_approval_date", "lp_senior_manager_approval_date"),
+                        ("lp_senior_manager_approval_date", "lp_gm_scm_approval_date"),
+                    )
+                )
+                else "Milestone tracked"
+            ),
             None,
         ]
         khs_ws.append([None] * len(KHS_HEADERS))
@@ -387,7 +421,7 @@ def build_current_khs_workbook(requests, items, executors, subtypes=None, waitin
         khs_ws[c["Current Stage"]] = (
             f'=IF({c["KHS Inject Completion Date"]}<>"","Fully Injected",'
             f'IF({c["LP Completion Date"]}<>"","KHS Inject",'
-            f'IF(AND(COUNT({c["LP Contract Team Completion Date"]}:{c["LP GM SCM Approval Date"]})>0,{c["LP Circulation Start Date"]}=""),"LP Data Review",'
+            f'IF(OR({c["LP Timeline Quality"]}="Legacy stage unverified",{c["LP Timeline Quality"]}="Timeline gaps"),"LP Data Review",'
             f'IF(COUNT({c["LP Circulation Start Date"]}:{c["LP GM SCM Approval Date"]})>0,"LP Circulation",'
             f'IF({c["Legal Submission Date"]}<>"","Legal Processing",'
             f'IF({c["MI GM Approval Date"]}<>"","Legal Submission",'
@@ -400,17 +434,24 @@ def build_current_khs_workbook(requests, items, executors, subtypes=None, waitin
             f'IF({c["Request Date"]}<>"","Dispatch","Request Received")))))))))))))'
         )
         khs_ws[c["LP Next Approver"]] = (
-            f'=IF(AND({c["LP Circulation Start Date"]}<>"",'
+            f'=IF({c["LP Completion Date"]}<>"","LP completed",'
+            f'IF(AND({c["LP Timeline Quality"]}="Legacy stage unverified",'
+            f'{c["LP Contract Team Completion Date"]}="",{c["LP Junior Manager Approval Date"]}="",'
+            f'{c["LP Senior Manager Approval Date"]}="",{c["LP GM SCM Approval Date"]}=""),"Legacy stage unverified",'
+            f'IF(OR(AND({c["LP Contract Team Completion Date"]}="",'
+            f'OR({c["LP Junior Manager Approval Date"]}<>"",{c["LP Senior Manager Approval Date"]}<>"",{c["LP GM SCM Approval Date"]}<>"")),'
+            f'AND({c["LP Junior Manager Approval Date"]}="",'
+            f'OR({c["LP Senior Manager Approval Date"]}<>"",{c["LP GM SCM Approval Date"]}<>"")),'
+            f'AND({c["LP Senior Manager Approval Date"]}="",{c["LP GM SCM Approval Date"]}<>"")),'
+            f'"LP data review",'
+            f'IF(AND({c["LP Circulation Start Date"]}<>"",'
             f'OR({c["MI GM Approval Date"]}="",{c["LP Circulation Start Date"]}<{c["MI GM Approval Date"]})),'
             f'"Prerequisite exception",'
-            f'IF({c["LP Completion Date"]}<>"","LP completed",'
             f'IF(AND({c["LP Circulation Start Date"]}<>"",{c["LP Contract Team Completion Date"]}=""),"Tim Kontrak",'
             f'IF(AND({c["LP Contract Team Completion Date"]}<>"",{c["LP Junior Manager Approval Date"]}=""),"Junior Manager Vendor Management",'
             f'IF(AND({c["LP Junior Manager Approval Date"]}<>"",{c["LP Senior Manager Approval Date"]}=""),"Senior Manager Strategic Sourcing",'
             f'IF(AND({c["LP Senior Manager Approval Date"]}<>"",{c["LP GM SCM Approval Date"]}=""),"GM SCM",'
-            f'IF(AND({c["LP GM SCM Approval Date"]}<>"",{c["LP Completion Date"]}=""),"Director / Direktur",'
-            f'IF(OR({c["LP Contract Team Completion Date"]}<>"",{c["LP Junior Manager Approval Date"]}<>"",'
-            f'{c["LP Senior Manager Approval Date"]}<>"",{c["LP GM SCM Approval Date"]}<>""),"LP data review","—"))))))))'
+            f'IF(AND({c["LP GM SCM Approval Date"]}<>"",{c["LP Completion Date"]}=""),"Director / Direktur","—")))))))))'
         )
 
     wb.calculation.fullCalcOnLoad = True
@@ -423,7 +464,7 @@ def build_current_khs_workbook(requests, items, executors, subtypes=None, waitin
         "O": 18, "P": 18, "Q": 18, "R": 17, "S": 18, "T": 19,
         "U": 25, "V": 25, "W": 25, "X": 21, "Y": 19, "Z": 16,
         "AA": 18, "AB": 20, "AC": 17, "AD": 22, "AE": 20, "AF": 42,
-        "AG": 15, "AH": 42, "AI": 24, "AJ": 28, "AK": 40, "AL": 28,
+        "AG": 15, "AH": 42, "AI": 24, "AJ": 28, "AK": 40, "AL": 28, "AM": 26, "AN": 32,
     }
     _style_sheet(khs_ws, khs_header_row, KHS_HEADERS, khs_widths)
 
