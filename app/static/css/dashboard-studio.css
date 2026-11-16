@@ -3801,7 +3801,7 @@ button:disabled {
    JS derives the visible labels from each table header, so no column is lost. */
 .table-wrap table { min-width: 820px; }
 .activity-table-wrap table { min-width: 900px; }
-@media (max-width: 760px) {
+@media (max-width: 920px) {
   .table-wrap {
     overflow: visible;
     border: 0;
@@ -4005,5 +4005,26 @@ button:disabled {
     display: inline-flex;
     width: fit-content;
     max-width: 100%;
+  }
+}
+
+/* Tablet navigation follows the same explicit drawer behavior as mobile. */
+@media (max-width: 920px) {
+  .mobile-nav-toggle { display: grid; }
+  .sidebar .side-nav { display: none; }
+  .sidebar.nav-open .side-nav {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0,1fr));
+    gap: 5px;
+    overflow: visible;
+    margin-top: 9px;
+    padding: 8px 0 2px;
+    border-top: 1px solid rgba(255,255,255,.12);
+  }
+  .sidebar.nav-open .secondary-caption {
+    display: block;
+    margin: 12px 2px 5px;
+    color: #a6b8d0;
+    font-size: 8px;
   }
 }
