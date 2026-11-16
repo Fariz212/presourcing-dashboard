@@ -26,6 +26,8 @@ const state = {
   importWarnings: false,
   workflowStageFilter: null,
   workflowRoleFilter: null,
+  workflowRows: [],
+  showEmptyWorkflowStages: false,
   attentionOnly: false
 };
 
@@ -520,17 +522,49 @@ async function loadRegister() {
   $("nextPage").disabled = !result.pagination.has_next;
 }
 
-async function loadWorkflow() {
-  const result = await api("/api/dashboard/workflow");
+function renderWorkflowCards() {
   const wrap = $("workflowCards");
   if (!wrap) return;
-  const rows = result.data || [];
-  wrap.innerHTML = rows.length ? rows.map((r) =>
-    '<button type="button" class="workflow-stage" data-workflow-stage="' + esc(r.stage_code) + '">' +
-    '<span class="workflow-stage-top"><span>' + esc(r.stage_name) + '</span><strong>' + esc(r.total) + "</strong></span>" +
-    '<span class="workflow-stage-bottom">' + esc(r.completed) + ' completed <span>Open matching records →</span></span>' +
-    "</button>"
-  ).join("") : '<div class="empty-state">No workflow stage data is available.</div>';
+  const rows = state.workflowRows || [];
+  const occupied = rows.filter((row) => Number(row.total) > 0);
+  const empty = rows.filter((row) => Number(row.total) === 0);
+  const visibleRows = state.showEmptyWorkflowStages ? rows : occupied;
+  const totalRecords = occupied.reduce((sum, row) => sum + Number(row.total || 0), 0);
+  set(
+    "workflowStageSummary",
+    occupied.length + " of " + rows.length + " stages have records · " +
+      totalRecords + " records assigned to a workflow stage"
+  );
+
+  const toggle = $("workflowEmptyToggle");
+  if (toggle) {
+    toggle.hidden = empty.length === 0;
+    toggle.textContent = state.showEmptyWorkflowStages
+      ? "Hide empty stages"
+      : "Show " + empty.length + " empty stages";
+    toggle.setAttribute("aria-expanded", String(state.showEmptyWorkflowStages));
+  }
+
+  wrap.innerHTML = visibleRows.length ? visibleRows.map((row) => {
+    const isFullyInjected = /fully injected/i.test(row.stage_name || "");
+    const detail = isFullyInjected
+      ? Number(row.completed || 0) + " fully injected"
+      : Number(row.total || 0) + " record" + (Number(row.total) === 1 ? "" : "s") + " at this stage";
+    return '<button type="button" class="workflow-stage" data-workflow-stage="' + esc(row.stage_code) +
+      '" aria-label="Open ' + esc(row.stage_name) + ', ' + esc(detail) + '">' +
+      '<span class="workflow-stage-top"><span>' + esc(row.stage_name) + '</span><strong>' +
+      esc(row.total) + "</strong></span>" +
+      '<span class="workflow-stage-bottom"><span>' + esc(detail) +
+      '</span><span class="workflow-stage-action">Open records →</span></span>' +
+      "</button>";
+  }).join("") : '<div class="empty-state">No workflow stages currently contain records.</div>';
+}
+
+async function loadWorkflow() {
+  const result = await api("/api/dashboard/workflow");
+  state.workflowRows = result.data || [];
+  state.showEmptyWorkflowStages = false;
+  renderWorkflowCards();
 }
 
 async function loadLPCirculation() {
@@ -1383,6 +1417,10 @@ function bind() {
     state.registerPage = 1;
     clearRegisterFilters();
     go("register");
+  });
+  $("workflowEmptyToggle").addEventListener("click", () => {
+    state.showEmptyWorkflowStages = !state.showEmptyWorkflowStages;
+    renderWorkflowCards();
   });
   $("workflowRefresh").addEventListener("click", () => loadWorkflow().catch((e) => toast(e.message)));
   $("lpRefresh").addEventListener("click", () => { state.lpPage = 1; loadLPCirculation().catch((e) => toast(e.message)); });
