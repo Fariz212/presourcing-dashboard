@@ -113,7 +113,13 @@ def _workflow_stage(item):
         return "COMPLETED"
     if item.get("lp_completion_date"):
         return "KHS_INJECTION"
-    if item.get("lp_circulation_start_date"):
+    if any(item.get(field) for field in (
+        "lp_circulation_start_date",
+        "lp_contract_team_completion_date",
+        "lp_junior_manager_approval_date",
+        "lp_senior_manager_approval_date",
+        "lp_gm_scm_approval_date",
+    )):
         return "LP_CIRCULATION"
     if item.get("legal_submission_date"):
         return "LEGAL_PROCESSING"
@@ -284,13 +290,21 @@ def build_current_khs_workbook(requests, items, executors, subtypes=None, waitin
                 "dispatch_date", "boq_confirmation_date", "negotiation_date",
                 "final_negotiation_date", "mi_head_approval_date", "mi_sm_approval_date",
                 "mi_gm_approval_date", "legal_submission_date",
-                "lp_circulation_start_date", "lp_completion_date",
+                "lp_circulation_start_date", "lp_contract_team_completion_date",
+                "lp_junior_manager_approval_date", "lp_senior_manager_approval_date",
+                "lp_gm_scm_approval_date", "lp_completion_date",
             ))
             else "Not Started"
         )
         lp_status = (
             "Completed" if record.get("lp_completion_date")
-            else "In Progress" if record.get("lp_circulation_start_date")
+            else "In Progress" if any(record.get(field) for field in (
+                "lp_circulation_start_date",
+                "lp_contract_team_completion_date",
+                "lp_junior_manager_approval_date",
+                "lp_senior_manager_approval_date",
+                "lp_gm_scm_approval_date",
+            ))
             else "Not Started"
         )
         stage_code = _workflow_stage(record)
