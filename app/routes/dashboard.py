@@ -1052,7 +1052,7 @@ def khs_register():
                      WHEN 'general_manager' THEN register.lp_senior_manager_approval_date
                      WHEN 'director' THEN register.lp_gm_scm_approval_date
                      ELSE NULL
-                 END ASC NULLS FIRST,
+                 END ASC NULLS LAST,
                  (register.waiting_for IS NOT NULL) DESC,
                  register.updated_at ASC NULLS FIRST,
                  register.dispatch_date DESC NULLS LAST,
