@@ -147,11 +147,26 @@ def main() -> int:
             page.locator("#page-register.active").wait_for(state="visible", timeout=15_000)
             page.wait_for_load_state("networkidle", timeout=20_000)
 
-            detail_button = page.locator("#registerBody [data-view-khs]").first
+            # Use a synthetic record with three completed milestones and an
+            # active Senior Manager approval stage, so Current Stage, Stage
+            # Age, and Upcoming are exercised rather than showing a not-started LP.
+            detail_button = page.locator('#registerBody [data-view-khs="KHS-VIS-004"]')
             detail_button.wait_for(state="visible", timeout=15_000)
             detail_button.click(timeout=10_000)
             page.locator("#detailDialog[open]").wait_for(state="visible", timeout=10_000)
             page.locator("#lpTimeline .lp-timeline-item").first.wait_for(state="visible", timeout=10_000)
+
+            current_stage = page.locator("#lpCurrentStage").inner_text()
+            stage_age = page.locator("#lpStageAge").inner_text()
+            upcoming_stage = page.locator("#lpUpcomingStage").inner_text()
+            if "Senior Manager Strategic Sourcing" not in current_stage:
+                raise AssertionError(f"Unexpected Current Stage: {current_stage}")
+            if "day" not in stage_age.lower():
+                raise AssertionError(f"Stage Age is not displayed: {stage_age}")
+            if "GM SCM" not in upcoming_stage:
+                raise AssertionError(f"Unexpected Upcoming stage: {upcoming_stage}")
+            if page.locator("#lpTimeline .lp-timeline-item.current").count() != 1:
+                raise AssertionError("Expected exactly one current LP stage marker")
 
             def capture_dialog(name: str, viewport_name: str, width: int, height: int) -> None:
                 page.set_viewport_size({"width": width, "height": height})
