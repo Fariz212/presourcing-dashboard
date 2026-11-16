@@ -272,6 +272,7 @@ SELECT
     k.lp_senior_manager_approval_date,
     k.lp_gm_scm_approval_date,
     k.lp_completion_date,
+    k.lp_timeline_source,
     k.khs_inject_start_date,
     k.khs_inject_completion_date,
 
@@ -290,7 +291,10 @@ SELECT
 
     (
         k.lp_circulation_start_date IS NOT NULL
-        AND k.mi_gm_approval_date IS NULL
+        AND (
+            k.mi_gm_approval_date IS NULL
+            OR k.lp_circulation_start_date < k.mi_gm_approval_date
+        )
     ) AS lp_started_without_mi_gm_approval
 
 FROM khs_items k
@@ -371,6 +375,8 @@ CROSS JOIN LATERAL (
         CASE
             WHEN k.lp_completion_date IS NOT NULL
                 THEN 'completed'
+            WHEN k.lp_timeline_source = 'LEGACY_UNVERIFIED'
+                THEN 'legacy_unverified'
             WHEN (
             (k.lp_circulation_start_date IS NULL AND (
                 k.lp_contract_team_completion_date IS NOT NULL
@@ -411,6 +417,8 @@ CROSS JOIN LATERAL (
         END AS lp_stage_key,
 
         (
+            k.lp_timeline_source = 'LEGACY_UNVERIFIED'
+            OR
             (k.lp_circulation_start_date IS NULL AND (
                 k.lp_contract_team_completion_date IS NOT NULL
                 OR k.lp_junior_manager_approval_date IS NOT NULL
@@ -538,6 +546,7 @@ LP_MILESTONE_ORDER = (
 LP_STAGE_LABELS = {
     "not_started": "Not Started",
     "legacy_incomplete": "Legacy Timeline Incomplete",
+    "legacy_unverified": "Legacy Stage Unverified",
     "contract_team": "Tim Kontrak",
     "junior_manager": "Junior Manager",
     "senior_manager": "Senior Manager",
@@ -566,7 +575,7 @@ def _jakarta_today():
 
 
 def _lp_timeline_summary(record, today=None):
-    """Derive the next LP step while preserving gaps in legacy history."""
+    """Derive the next LP step without guessing the owner of legacy records."""
     today = today or _jakarta_today()
     values = [_date_only(record.get(field)) for field, _ in LP_MILESTONE_ORDER]
     populated = [index for index, value in enumerate(values) if value is not None]
@@ -576,7 +585,10 @@ def _lp_timeline_summary(record, today=None):
         for index in range(last_populated + 1)
         if values[index] is None
     ]
-    has_gaps = bool(gaps)
+    legacy_unverified = record.get("lp_timeline_source") == "LEGACY_UNVERIFIED"
+    if legacy_unverified and not gaps and values[0] is not None:
+        gaps = ["current LP owner not recorded"]
+    has_gaps = bool(gaps) or legacy_unverified
     start_date = values[0]
     completion_date = values[-1]
 
@@ -584,9 +596,11 @@ def _lp_timeline_summary(record, today=None):
         stage_key = "completed"
         stage_started = None
         stage_age = None
+    elif legacy_unverified:
+        stage_key = "legacy_unverified"
+        stage_started = None
+        stage_age = None
     elif has_gaps:
-        # A later milestone exists after a missing earlier date. The current
-        # owner/stage cannot be inferred reliably from milestone dates alone.
         stage_key = "legacy_incomplete"
         stage_started = None
         stage_age = None
@@ -613,7 +627,7 @@ def _lp_timeline_summary(record, today=None):
         stage_age = max((today - stage_started).days, 0) if stage_started else None
 
     if has_gaps:
-        data_status = "legacy_incomplete"
+        data_status = "legacy_unverified" if legacy_unverified else "legacy_incomplete"
     elif stage_key == "completed":
         data_status = "complete"
     elif stage_key == "not_started":
