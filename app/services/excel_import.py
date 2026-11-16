@@ -899,6 +899,28 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None, k
                     "LP milestone dates must be in chronological order.",
                 )
 
+            populated_lp_indexes = [
+                index for index, field in enumerate(all_lp_date_fields)
+                if effective_dates.get(field) is not None
+            ]
+            last_lp_index = max(populated_lp_indexes, default=-1)
+            missing_lp_predecessors = [
+                all_lp_date_fields[index]
+                for index in range(last_lp_index + 1)
+                if effective_dates.get(all_lp_date_fields[index]) is None
+            ]
+            if lp_milestones_changed and missing_lp_predecessors:
+                _add_issue(
+                    issues,
+                    "ERROR",
+                    "LP_MILESTONE_GAP",
+                    "KHS_ITEM",
+                    row_number,
+                    "LP Milestones",
+                    "LP milestones must be completed in sequence. Fill the missing earlier date(s): "
+                    + ", ".join(missing_lp_predecessors),
+                )
+
             inject_start = effective_dates["khs_inject_start_date"]
             inject_completion = effective_dates["khs_inject_completion_date"]
             inject_dates_changed = any(
