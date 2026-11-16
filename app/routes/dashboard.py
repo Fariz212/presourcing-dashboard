@@ -2133,23 +2133,73 @@ def workflow_overview():
 @dashboard_bp.get("/activity")
 def activity_log():
     try:
-        page=_register_positive_int("page",1)
-        per_page=_register_positive_int("per_page",25,maximum=100)
+        page = _register_positive_int("page", 1)
+        per_page = _register_positive_int("per_page", 25, maximum=100)
     except ValueError as exc:
-        return jsonify(success=False,message=str(exc)),400
+        return jsonify(success=False, message=str(exc)), 400
+
+    search = request.args.get("q", "").strip()
+    if len(search) > 100:
+        return jsonify(success=False, code="INVALID_SEARCH",
+                       message="Activity search must not exceed 100 characters."), 400
+
+    entity_type = request.args.get("entity_type", "").strip().upper()
+    if entity_type and entity_type not in {"REQUEST", "KHS_ITEM"}:
+        return jsonify(success=False, code="INVALID_ENTITY_TYPE",
+                       message="Unsupported activity entity filter."), 400
+
+    filters = []
+    params = []
+    if entity_type:
+        filters.append("entity_type = %s")
+        params.append(entity_type)
+    if search:
+        pattern = f"%{search}%"
+        filters.append("""
+            (
+                entity_id ILIKE %s
+                OR entity_type ILIKE %s
+                OR action ILIKE %s
+                OR actor ILIKE %s
+                OR COALESCE(changes::text, '') ILIKE %s
+            )
+        """)
+        params.extend([pattern] * 5)
+    where_sql = "WHERE " + " AND ".join(filters) if filters else ""
+    offset = (page - 1) * per_page
+
     try:
         with get_db_pool().connection() as conn:
-            total=conn.execute("SELECT COUNT(*) FROM khs_activity_logs").fetchone()[0]
-            rows=conn.execute("""SELECT id,entity_type,entity_id,action,actor,changes,occurred_at
-                                 FROM khs_activity_logs ORDER BY occurred_at DESC,id DESC
-                                 LIMIT %s OFFSET %s""",(per_page,(page-1)*per_page)).fetchall()
-        return jsonify(success=True,data=[_row_dict(dict(zip(
-            ("id","entity_type","entity_id","action","actor","changes","occurred_at"),r))) for r in rows],
-            pagination={"page":page,"per_page":per_page,"total_records":total,
-                        "total_pages":(total+per_page-1)//per_page if total else 0}),200
+            total = conn.execute(
+                f"SELECT COUNT(*) FROM khs_activity_logs {where_sql}",
+                params,
+            ).fetchone()[0]
+            rows = conn.execute(
+                f"""SELECT id, entity_type, entity_id, action, actor, changes, occurred_at
+                    FROM khs_activity_logs
+                    {where_sql}
+                    ORDER BY occurred_at DESC, id DESC
+                    LIMIT %s OFFSET %s""",
+                [*params, per_page, offset],
+            ).fetchall()
+        return jsonify(
+            success=True,
+            data=[_row_dict(dict(zip(
+                ("id", "entity_type", "entity_id", "action", "actor", "changes", "occurred_at"),
+                row,
+            ))) for row in rows],
+            pagination={
+                "page": page,
+                "per_page": per_page,
+                "total_records": total,
+                "total_pages": (total + per_page - 1) // per_page if total else 0,
+                "has_previous": page > 1,
+                "has_next": page < ((total + per_page - 1) // per_page if total else 0),
+            },
+        ), 200
     except Exception:
         current_app.logger.exception("Activity query failed.")
-        return jsonify(success=False,message="Activity log unavailable."),503
+        return jsonify(success=False, message="Activity log unavailable."), 503
 
 
 @dashboard_bp.get("/export")
