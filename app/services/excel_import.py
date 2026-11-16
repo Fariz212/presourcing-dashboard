@@ -1123,6 +1123,27 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None, k
                 **dates,
             }
 
+            if existing_item:
+                read_only_fields = (
+                    ("Source Row No.", "source_row_no"),
+                    ("Legacy Overall Status", "legacy_overall_status"),
+                    ("Legacy Detailed Status", "legacy_detailed_status"),
+                    ("Original Source Column S (Audit Copy - LP Circulation Start Date)", "source_col_s_audit_date"),
+                    ("Migration Review", "migration_review"),
+                )
+                for header, field in read_only_fields:
+                    incoming = record.get(field)
+                    if incoming is not None and incoming != existing_item.get(field):
+                        _add_issue(
+                            issues,
+                            "ERROR",
+                            "READ_ONLY_FIELD_CHANGED",
+                            "KHS_ITEM",
+                            row_number,
+                            header,
+                            f"{header} is a historical/system reference field and cannot be changed through Excel import.",
+                        )
+
             items.append(record)
 
         if not requests and not items:
