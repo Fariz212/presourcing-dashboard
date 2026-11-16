@@ -229,8 +229,8 @@ function renderApprovalPipeline(data) {
   if (!data) {
     [
       "miQueueTotal", "miJuniorCount", "miSeniorCount", "miGeneralCount",
-      "lpQueueTotal", "lpJuniorCount", "lpSeniorCount", "lpGeneralCount",
-      "lpDirectorCount", "lpOtherCount"
+      "lpQueueTotal", "lpContractTeamCount", "lpJuniorCount", "lpSeniorCount",
+      "lpGeneralCount", "lpDirectorCount", "lpPrerequisiteCount", "lpLegacyCount"
     ].forEach((id) => set(id, "—"));
     set("lpQueueNote", "Approval queue data is temporarily unavailable.");
     return;
@@ -251,15 +251,17 @@ function renderApprovalPipeline(data) {
   set("miGeneralCount", miGeneral);
   set("miQueueTotal", miJunior + miSenior + miGeneral);
 
+  set("lpContractTeamCount", countFor(lp, "contract_team"));
   set("lpJuniorCount", countFor(lp, "junior_manager"));
   set("lpSeniorCount", countFor(lp, "senior_manager"));
   set("lpGeneralCount", countFor(lp, "general_manager"));
   set("lpDirectorCount", countFor(lp, "director"));
   set("lpQueueTotal", data.lp_active_total);
-  set("lpOtherCount", data.lp_unassigned_or_other);
+  set("lpPrerequisiteCount", data.lp_prerequisite_exception);
+  set("lpLegacyCount", data.lp_legacy_unverified);
   set(
     "lpQueueNote",
-    "Active LP records not mapped to the four roles are retained in this bucket."
+    data.lp_count_basis || "LP stage counts are derived from dated milestones."
   );
 }
 
@@ -372,7 +374,7 @@ function registerQuery() {
   });
   if (state.workflowStageFilter) p.set("stage", state.workflowStageFilter);
   else if ($("stageFilter") && $("stageFilter").value) p.set("stage", $("stageFilter").value);
-  if (state.workflowRoleFilter) p.set("waiting_role", state.workflowRoleFilter);
+  if (state.workflowRoleFilter) p.set("lp_stage", state.workflowRoleFilter);
   if (state.attentionOnly) p.set("attention", "true");
   return p.toString();
 }
@@ -838,6 +840,23 @@ function renderPreview(result) {
   const allowed = state.importCanRun;
   $("previewEligibility").className = "preview-eligibility " + (allowed ? "eligible" : "ineligible");
   $("previewEligibility").textContent = allowed ? "Ready to confirm. Review and acknowledge warnings where present." : "Import blocked: correct the validation errors and upload the corrected workbook.";
+  const changes = result.preview_changes || [];
+  $("changesSection").hidden = !changes.length;
+  set("changesCount", changes.length + " record(s) with detected changes");
+  $("changesBody").innerHTML = changes.map((row) => {
+    const details = (row.fields || []).map((field) =>
+      "<li>" + esc(field.field.replaceAll("_", " ")) + ": " +
+      esc(field.before == null ? "—" : String(field.before)) + " → " +
+      esc(field.after == null ? "—" : String(field.after)) + "</li>"
+    ).join("");
+    const summary = details
+      ? "<details><summary>" + (row.fields || []).length + " field change(s)</summary><ul>" + details + "</ul></details>"
+      : "<span class=\"muted\">No field changes detected</span>";
+    return "<tr><td><strong>" + esc(row.external_id) + "</strong></td><td>" +
+      esc(row.entity) + "</td><td>" + esc(row.row) + "</td><td>" + summary + "</td></tr>";
+  }).join("");
+  $("changesTruncated").hidden = !result.preview_changes_truncated;
+
   const issues = result.issues || [];
   $("issuesSection").hidden = !issues.length;
   set("issuesCount", issues.length + " issue(s)");
@@ -1011,6 +1030,16 @@ function bind() {
     el.addEventListener("click", () => {
       state.workflowStageFilter = null;
       state.workflowRoleFilter = el.dataset.queueRole;
+      state.attentionOnly = false;
+      state.registerPage = 1;
+      clearRegisterFilters();
+      go("register");
+    })
+  );
+  document.querySelectorAll("[data-lp-stage]").forEach((el) =>
+    el.addEventListener("click", () => {
+      state.workflowStageFilter = null;
+      state.workflowRoleFilter = el.dataset.lpStage;
       state.attentionOnly = false;
       state.registerPage = 1;
       clearRegisterFilters();
