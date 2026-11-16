@@ -427,6 +427,71 @@ def test_document_upload_rejects_unsupported_file_extensions(make_client):
 
 
 
+class WorkflowRowsCursor:
+    def __init__(self, rows):
+        self.rows = rows
+
+    def execute(self, query):
+        self.query = query
+
+    def fetchall(self):
+        return self.rows
+
+
+class WorkflowRowsConnection:
+    def __init__(self, rows):
+        self.cursor_object = WorkflowRowsCursor(rows)
+        self.query = None
+
+    def cursor(self, row_factory=None):
+        return self.cursor_object
+
+
+class WorkflowRowsPool:
+    def __init__(self, rows):
+        self.connection_object = WorkflowRowsConnection(rows)
+
+    @contextmanager
+    def connection(self):
+        yield self.connection_object
+
+
+def test_workflow_monitoring_returns_milestone_derived_stage_age(make_client):
+    rows = [
+        {
+            "stage_code": "LP_CIRCULATION",
+            "stage_name": "LP Circulation",
+            "sequence_number": 11,
+            "total": 3,
+            "completed": 0,
+            "oldest_stage_age_days": 42,
+            "stage_age_unavailable": 1,
+        },
+        {
+            "stage_code": "COMPLETED",
+            "stage_name": "Fully Injected",
+            "sequence_number": 13,
+            "total": 2,
+            "completed": 2,
+            "oldest_stage_age_days": None,
+            "stage_age_unavailable": 0,
+        },
+    ]
+    pool = WorkflowRowsPool(rows)
+    response = make_client(pool).get("/api/dashboard/workflow")
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["data"][0]["oldest_stage_age_days"] == 42
+    assert payload["data"][0]["stage_age_unavailable"] == 1
+    assert payload["data"][1]["oldest_stage_age_days"] is None
+    query = pool.connection_object.cursor_object.query
+    assert "WHEN 'LP_CIRCULATION' THEN derived_register.lp_circulation_start_date" in query
+    assert "WHEN 'KHS_INJECTION' THEN derived_register.lp_completion_date" in query
+    assert "WHEN 'MI_GM_APPROVAL' THEN derived_register.mi_sm_approval_date" in query
+    assert "oldest_stage_age_days" in query
+
+
 def test_workflow_overview_uses_milestone_derived_lp_queues(make_client):
     pool = FakePool(row=(4, 3, 2, 8, 5, 4, 3, 2, 22, 33, 7, 5, 12))
 
