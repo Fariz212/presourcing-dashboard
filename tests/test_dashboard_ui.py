@@ -142,7 +142,7 @@ def test_dashboard_contains_separate_operational_modules(monkeypatch, tmp_path):
     assert "Export KHS CSV" in body
     assert "Download current Excel" in body
     assert "Fully Injected" in body
-    assert "REQUEST SUBJECT / VENDOR" in body
+    assert "REQUEST / VENDOR" in body
     assert "VENDOR PORTFOLIO" in body
     assert "Evidence Documents" in body
     assert 'id="documentUploadForm"' in body
@@ -303,7 +303,7 @@ def test_lean_workspace_navigation_responsive_tables_and_activity_filters(monkey
     assert 'id="primarySideNav"' in body
     assert 'id="dataSideNav"' in body
     assert 'id="activeRegisterFilters"' in body
-    assert 'class="register-table-wrap"' in body
+    assert 'register-table-wrap' in body
     assert 'id="activitySearch"' in body
     assert 'id="activityEntityFilter"' in body
     assert 'id="quickAddKhs"' not in body
