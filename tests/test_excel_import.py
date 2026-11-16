@@ -269,6 +269,7 @@ def test_khs_only_partial_workbook_can_reference_existing_request():
             "vendor_name": "PT Test Vendor",
             "executor_code": "ALW",
             "subtype": "Renewal",
+            "mi_gm_approval_date": date(2026, 11, 9),
             "lp_circulation_start_date": date(2026, 11, 10),
             "lp_completion_date": date(2026, 11, 12),
             "khs_inject_start_date": date(2026, 11, 13),
