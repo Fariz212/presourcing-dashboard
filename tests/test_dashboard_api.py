@@ -472,7 +472,7 @@ def test_workflow_overview_uses_milestone_derived_lp_queues(make_client):
     assert "mi_sm_approval_date" in query
     assert "mi_gm_approval_date" in query
     assert "lp_stage_key = 'contract_team'" in query
-    assert "lp_stage_key = 'prerequisite_exception'" in query
+    assert "THEN 'prerequisite_exception'" in query
     assert "lp_stage_key = 'legacy_unverified'" in query
     assert "lp_timeline_has_gaps" in query
     assert "lp_started_without_mi_gm_approval IS TRUE" in query
