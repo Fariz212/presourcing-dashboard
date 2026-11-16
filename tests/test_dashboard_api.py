@@ -575,7 +575,7 @@ def test_workflow_monitoring_returns_milestone_derived_stage_age(make_client):
     assert payload["data"][0]["stage_age_unavailable"] == 1
     assert payload["data"][1]["oldest_stage_age_days"] is None
     query = pool.connection_object.cursor_object.query
-    assert "WHEN 'LP_CIRCULATION' THEN derived_register.lp_circulation_start_date" in query
+    assert "WHEN 'contract_team' THEN k.lp_circulation_start_date" in query
     assert "WHEN 'KHS_INJECTION' THEN derived_register.lp_completion_date" in query
     assert "derived_register.current_stage_started_on AS stage_started_on" in query
     assert "oldest_stage_age_days" in query
