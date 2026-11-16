@@ -306,6 +306,9 @@ def test_lean_workspace_navigation_responsive_tables_and_activity_filters(monkey
     assert 'register-table-wrap' in body
     assert 'id="activitySearch"' in body
     assert 'id="activityEntityFilter"' in body
+    assert 'id="workflowStageSummary"' in body
+    assert 'id="workflowEmptyToggle"' in body
+    assert 'id="attentionMobileHint"' in body
     assert 'id="quickAddKhs"' not in body
     assert 'id="qualityAlert"' not in body
     assert 'class="overview-grid"' not in body
@@ -317,6 +320,9 @@ def test_lean_workspace_navigation_responsive_tables_and_activity_filters(monkey
         b"function observeResponsiveTables()",
         b"function renderActiveRegisterFilters()",
         b"data-workflow-stage",
+        b"function renderWorkflowCards()",
+        b"state.showEmptyWorkflowStages",
+        b"Number(row.total) > 0",
         b"state.activityQuery",
         b"state.saving",
         b"Saving",
@@ -330,6 +336,9 @@ def test_lean_workspace_navigation_responsive_tables_and_activity_filters(monkey
         b".mobile-nav-toggle",
         b".sidebar.nav-open .side-nav",
         b".table-wrap tbody tr",
+        b".workflow-workbench-toolbar",
+        b".workflow-empty-toggle",
+        b".attention-mobile-hint",
         b".filter-chip",
         b".form-error",
     ):
