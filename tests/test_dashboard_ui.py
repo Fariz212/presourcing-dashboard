@@ -118,7 +118,7 @@ def test_dashboard_contains_separate_operational_modules(monkeypatch, tmp_path):
     assert b'aria-label=\\"Open KHS ' in attention_js.data
     assert "LP Circulation" in body
     assert "Contract Lifecycle" in body
-    assert "Approval Timeline" in body
+    assert "Approval journey" in body
     assert "Contract Lifecycle Watch" in body
     assert "CONTRACT STATUS" in body
     assert "RENEWAL ALERT" in body
