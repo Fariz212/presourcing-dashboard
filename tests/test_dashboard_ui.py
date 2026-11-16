@@ -228,3 +228,34 @@ def test_lp_summary_separates_live_stages_from_quality_overlays(monkeypatch, tmp
     assert 'data-lp-stage="prerequisite_exception"' in body
     assert 'data-lp-stage="legacy_unverified"' in body
     assert 'data-lp-stage="legacy_incomplete"' in body
+
+
+def test_dashboard_graphs_have_clear_labels_and_status_legend(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        "app.init_db_pool",
+        lambda _app: DummyPool(),
+    )
+    flask_app = create_app({
+        "TESTING": True,
+        "SECRET_KEY": "dashboard-graphs-test-secret",
+        "DATABASE_URL": "postgresql://test:test@localhost/test",
+        "UPLOAD_DIR": tmp_path / "uploads",
+    })
+    client = flask_app.test_client()
+    response = client.get("/dashboard")
+    assert response.status_code == 200
+    body = response.data.decode("utf-8")
+
+    assert 'role="img" aria-label="LP circulation distribution' in body
+    assert 'class="legend-item legend-completed"' in body
+    assert 'class="legend-item legend-progress"' in body
+    assert 'class="legend-item legend-not-started"' in body
+    assert 'aria-label="Share of KHS records with MI GM approval"' in body
+    assert 'aria-label="Share of KHS records submitted to Legal"' in body
+    assert 'aria-label="Share of KHS records with LP circulation started"' in body
+
+    stylesheet = client.get("/static/css/dashboard-studio.css")
+    assert stylesheet.status_code == 200
+    assert b".stacked-progress .segment-completed" in stylesheet.data
+    assert b".workflow-item .mini-track" in stylesheet.data
+    assert b".workflow-stage::after" in stylesheet.data
