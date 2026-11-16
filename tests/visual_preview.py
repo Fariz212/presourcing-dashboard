@@ -67,23 +67,33 @@ def main() -> int:
             else None,
         )
 
+        current_page: str | None = None
+
         for page_name, viewport_name, width, height in CAPTURES:
             file_name = f"{page_name}-{viewport_name}.png"
             target = OUTPUT_DIR / file_name
             try:
-                page.set_viewport_size({"width": width, "height": height})
-                response = page.goto(
-                    f"{BASE_URL}/dashboard#{page_name}",
-                    wait_until="networkidle",
-                    timeout=45_000,
-                )
-                if response is None or response.status != 200:
-                    status = response.status if response is not None else "no response"
-                    raise RuntimeError(f"Dashboard returned {status}")
+                if current_page is None:
+                    response = page.goto(
+                        f"{BASE_URL}/dashboard",
+                        wait_until="networkidle",
+                        timeout=45_000,
+                    )
+                    if response is None or response.status != 200:
+                        status = response.status if response is not None else "no response"
+                        raise RuntimeError(f"Dashboard returned {status}")
+                    current_page = "overview"
+                elif page_name != current_page:
+                    navigation_link = page.locator(
+                        f'a.nav-link[data-page="{page_name}"]'
+                    ).first
+                    navigation_link.click(timeout=10_000)
+                    current_page = page_name
 
                 active_view = page.locator(f"#page-{page_name}.active")
                 active_view.wait_for(state="visible", timeout=15_000)
                 page.wait_for_load_state("networkidle", timeout=20_000)
+                page.set_viewport_size({"width": width, "height": height})
                 page.wait_for_timeout(500)
 
                 dimensions = page.evaluate(
