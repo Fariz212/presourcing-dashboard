@@ -359,44 +359,7 @@ def build_current_khs_workbook(requests, items, executors, subtypes=None, waitin
             record.get("legacy_detailed_status"),
             record.get("source_col_s_audit_date"),
             record.get("migration_review"),
-            (
-                "MI prerequisite exception"
-                if record.get("lp_circulation_start_date") and (
-                    not record.get("mi_gm_approval_date")
-                    or record["lp_circulation_start_date"] < record["mi_gm_approval_date"]
-                )
-                else "Legacy stage unverified"
-                if record.get("lp_timeline_source") == "LEGACY_UNVERIFIED"
-                and not record.get("lp_completion_date")
-                and not any(record.get(field) for field in (
-                    "lp_contract_team_completion_date",
-                    "lp_junior_manager_approval_date",
-                    "lp_senior_manager_approval_date",
-                    "lp_gm_scm_approval_date",
-                ))
-                else "Completed · history gaps"
-                if record.get("lp_completion_date") and any(
-                    not record.get(field)
-                    for field in (
-                        "lp_circulation_start_date",
-                        "lp_contract_team_completion_date",
-                        "lp_junior_manager_approval_date",
-                        "lp_senior_manager_approval_date",
-                        "lp_gm_scm_approval_date",
-                    )
-                )
-                else "Timeline gaps"
-                if any(
-                    record.get(later) and not record.get(earlier)
-                    for earlier, later in (
-                        ("lp_circulation_start_date", "lp_contract_team_completion_date"),
-                        ("lp_contract_team_completion_date", "lp_junior_manager_approval_date"),
-                        ("lp_junior_manager_approval_date", "lp_senior_manager_approval_date"),
-                        ("lp_senior_manager_approval_date", "lp_gm_scm_approval_date"),
-                    )
-                )
-                else "Milestone tracked"
-            ),
+            None,
             None,
         ]
         khs_ws.append([None] * len(KHS_HEADERS))
@@ -411,6 +374,21 @@ def build_current_khs_workbook(requests, items, executors, subtypes=None, waitin
     }
     for row_number in range(khs_header_row + 1, khs_ws.max_row + 1):
         c = {name: f"{letter}{row_number}" for name, letter in khs_col.items()}
+        source_flag = (
+            "LEGACY_UNVERIFIED"
+            if record.get("lp_timeline_source") == "LEGACY_UNVERIFIED"
+            else "MILESTONE_TRACKED"
+        )
+        khs_ws[c["LP Timeline Quality"]] = (
+            f'=IF(AND("{source_flag}"="LEGACY_UNVERIFIED",'
+            f'{c["LP Completion Date"]}="",COUNT({c["LP Contract Team Completion Date"]}:{c["LP GM SCM Approval Date"]})=0),"Legacy stage unverified",'
+            f'IF(AND({c["LP Completion Date"]}<>"",COUNT({c["LP Circulation Start Date"]}:{c["LP GM SCM Approval Date"]})<5),"Completed · history gaps",'
+            f'IF(OR(AND({c["LP Contract Team Completion Date"]}<>"",{c["LP Circulation Start Date"]}=""),'
+            f'AND({c["LP Junior Manager Approval Date"]}<>"",OR({c["LP Contract Team Completion Date"]}="",{c["LP Circulation Start Date"]}="")),'
+            f'AND({c["LP Senior Manager Approval Date"]}<>"",OR({c["LP Junior Manager Approval Date"]}="",{c["LP Contract Team Completion Date"]}="",{c["LP Circulation Start Date"]}="")),'
+            f'AND({c["LP GM SCM Approval Date"]}<>"",OR({c["LP Senior Manager Approval Date"]}="",{c["LP Junior Manager Approval Date"]}="",{c["LP Contract Team Completion Date"]}="",{c["LP Circulation Start Date"]}=""))),"Timeline gaps",'
+            f'IF(AND({c["LP Circulation Start Date"]}<>"",OR({c["MI GM Approval Date"]}="",{c["LP Circulation Start Date"]}<{c["MI GM Approval Date"]})),"MI prerequisite exception","Milestone tracked"))))'
+        )
         khs_ws[c["MI Status"]] = f'=IF({c["MI GM Approval Date"]}<>"","Completed","Not Completed")'
         khs_ws[c["LP Status"]] = (
             f'=IF({c["LP Completion Date"]}<>"","Completed",'
@@ -440,24 +418,14 @@ def build_current_khs_workbook(requests, items, executors, subtypes=None, waitin
         )
         khs_ws[c["LP Next Approver"]] = (
             f'=IF({c["LP Completion Date"]}<>"","LP completed",'
-            f'IF(AND({c["LP Timeline Quality"]}="Legacy stage unverified",'
-            f'{c["LP Contract Team Completion Date"]}="",{c["LP Junior Manager Approval Date"]}="",'
-            f'{c["LP Senior Manager Approval Date"]}="",{c["LP GM SCM Approval Date"]}=""),"Legacy stage unverified",'
+            f'IF({c["LP Timeline Quality"]}="Legacy stage unverified","Legacy stage unverified",'
             f'IF({c["LP Timeline Quality"]}="Timeline gaps","LP data review",'
-            f'IF(OR(AND({c["LP Contract Team Completion Date"]}="",'
-            f'OR({c["LP Junior Manager Approval Date"]}<>"",{c["LP Senior Manager Approval Date"]}<>"",{c["LP GM SCM Approval Date"]}<>"")),'
-            f'AND({c["LP Junior Manager Approval Date"]}="",'
-            f'OR({c["LP Senior Manager Approval Date"]}<>"",{c["LP GM SCM Approval Date"]}<>"")),'
-            f'AND({c["LP Senior Manager Approval Date"]}="",{c["LP GM SCM Approval Date"]}<>"")),'
-            f'"LP data review",'
-            f'IF(AND({c["LP Circulation Start Date"]}<>"",'
-            f'OR({c["MI GM Approval Date"]}="",{c["LP Circulation Start Date"]}<{c["MI GM Approval Date"]})),'
-            f'"Prerequisite exception",'
+            f'IF({c["LP Timeline Quality"]}="MI prerequisite exception","Prerequisite exception",'
             f'IF(AND({c["LP Circulation Start Date"]}<>"",{c["LP Contract Team Completion Date"]}=""),"Tim Kontrak",'
             f'IF(AND({c["LP Contract Team Completion Date"]}<>"",{c["LP Junior Manager Approval Date"]}=""),"Junior Manager Vendor Management",'
             f'IF(AND({c["LP Junior Manager Approval Date"]}<>"",{c["LP Senior Manager Approval Date"]}=""),"Senior Manager Strategic Sourcing",'
             f'IF(AND({c["LP Senior Manager Approval Date"]}<>"",{c["LP GM SCM Approval Date"]}=""),"GM SCM",'
-            f'IF(AND({c["LP GM SCM Approval Date"]}<>"",{c["LP Completion Date"]}=""),"Director / Direktur","—"))))))))))'
+            f'IF(AND({c["LP GM SCM Approval Date"]}<>"",{c["LP Completion Date"]}=""),"Director / Direktur","—")))))))))'
         )
 
     wb.calculation.fullCalcOnLoad = True
