@@ -62,7 +62,10 @@ SELECT
     COUNT(*) FILTER (WHERE legal_submission_date IS NOT NULL) AS legal_submitted,
     COUNT(*) FILTER (
         WHERE lp_circulation_start_date IS NOT NULL
-          AND mi_gm_approval_date IS NULL
+          AND (
+                mi_gm_approval_date IS NULL
+                OR lp_circulation_start_date < mi_gm_approval_date
+          )
     ) AS lp_started_without_mi_gm,
     COUNT(*) FILTER (
         WHERE mi_gm_approval_date IS NOT NULL
@@ -1877,11 +1880,34 @@ def update_khs(khs_id):
                 parent = conn.execute("SELECT 1 FROM khs_requests WHERE request_id=%s", (data["request_id"],)).fetchone()
                 if not parent:
                     return jsonify(success=False,code="PARENT_REQUEST_NOT_FOUND",message="Parent request does not exist."),422
-            historic_lp_exception = bool(before.get("lp_circulation_start_date") and not before.get("mi_gm_approval_date"))
-            lp_start_changed = ("lp_circulation_start_date" in data and data["lp_circulation_start_date"] != before.get("lp_circulation_start_date"))
-            gm_approval_cleared = ("mi_gm_approval_date" in data and data["mi_gm_approval_date"] is None)
-            if merged.get("lp_circulation_start_date") and not merged.get("mi_gm_approval_date") and (not historic_lp_exception or lp_start_changed or gm_approval_cleared):
-                return jsonify(success=False,code="MI_GM_REQUIRED",message="LP circulation cannot start before GM SCM MI approval."),422
+            before_lp_start = before.get("lp_circulation_start_date")
+            before_mi_gm = before.get("mi_gm_approval_date")
+            merged_lp_start = merged.get("lp_circulation_start_date")
+            merged_mi_gm = merged.get("mi_gm_approval_date")
+            historic_lp_exception = bool(
+                before_lp_start
+                and (not before_mi_gm or before_lp_start < before_mi_gm)
+            )
+            lp_start_changed = (
+                "lp_circulation_start_date" in data
+                and data["lp_circulation_start_date"] != before_lp_start
+            )
+            mi_gm_changed = (
+                "mi_gm_approval_date" in data
+                and data["mi_gm_approval_date"] != before_mi_gm
+            )
+            prerequisite_invalid = bool(
+                merged_lp_start
+                and (not merged_mi_gm or merged_lp_start < merged_mi_gm)
+            )
+            if prerequisite_invalid and (
+                not historic_lp_exception or lp_start_changed or mi_gm_changed
+            ):
+                return jsonify(
+                    success=False,
+                    code="MI_GM_REQUIRED",
+                    message="LP circulation must be on or after MI GM approval. Reconcile the existing history before changing these dates.",
+                ), 422
             lp_update_error = _lp_milestone_update_error(before, data)
             if lp_update_error:
                 code, message = lp_update_error
@@ -1904,6 +1930,29 @@ def update_khs(khs_id):
                 active=conn.execute("SELECT 1 FROM khs_executors WHERE executor_code=%s AND is_active=TRUE",(data["executor_code"],)).fetchone()
                 if not active:
                     return jsonify(success=False,code="INVALID_EXECUTOR",message="Select an active executor."),422
+            lp_milestone_fields = (
+                "lp_circulation_start_date",
+                "lp_contract_team_completion_date",
+                "lp_junior_manager_approval_date",
+                "lp_senior_manager_approval_date",
+                "lp_gm_scm_approval_date",
+                "lp_completion_date",
+            )
+            lp_milestones_changed = any(
+                field in data and data[field] != before.get(field)
+                for field in lp_milestone_fields
+            )
+            if lp_milestones_changed:
+                merged_lp_dates = [merged.get(field) for field in lp_milestone_fields]
+                last_populated = max(
+                    (index for index, value in enumerate(merged_lp_dates) if value is not None),
+                    default=-1,
+                )
+                if last_populated >= 0 and all(
+                    value is not None for value in merged_lp_dates[:last_populated + 1]
+                ):
+                    data["lp_timeline_source"] = "MILESTONE_TRACKED"
+
             cols=tuple(data)
             conn.execute("UPDATE khs_items SET "+", ".join(f"{c}=%s" for c in cols)+", updated_at=NOW(),last_updated_date=CURRENT_DATE WHERE khs_id=%s",
                          [data[c] for c in cols]+[khs_id])
