@@ -115,6 +115,9 @@ def test_dashboard_contains_separate_operational_modules(monkeypatch, tmp_path):
     assert b'data-label=\\"REQUEST / KHS\\"' in attention_js.data
     assert b'aria-label=\\"Open KHS ' in attention_js.data
     assert "LP Circulation" in body
+    assert "Tim Kontrak" in body
+    assert "Legacy stage unverified" in body
+    assert "Detected data changes" in body
     assert "Contract Lifecycle" in body
     assert "Approval Timeline" in body
     assert "Contract Lifecycle Watch" in body
@@ -133,7 +136,14 @@ def test_dashboard_contains_separate_operational_modules(monkeypatch, tmp_path):
     assert "General Manager" in body
     assert "Director" in body
     assert 'data-attention-only="true"' in body
-    assert 'data-queue-role="director"' in body
+    assert 'data-lp-stage="contract_team"' in body
+    assert 'data-lp-stage="junior_manager"' in body
+    assert 'data-lp-stage="senior_manager"' in body
+    assert 'data-lp-stage="general_manager"' in body
+    assert 'data-lp-stage="director"' in body
+    assert 'data-lp-stage="prerequisite_exception"' in body
+    assert 'data-lp-stage="legacy_unverified"' in body
+    assert "LP Timeline Quality" in body
     assert "New Request" in body
     assert "Add KHS" in body
     assert "Export KHS CSV" in body
