@@ -550,12 +550,22 @@ function renderWorkflowCards() {
     const detail = isFullyInjected
       ? Number(row.completed || 0) + " fully injected"
       : Number(row.total || 0) + " record" + (Number(row.total) === 1 ? "" : "s") + " at this stage";
+    const age = isFullyInjected
+      ? "Closed stage"
+      : row.oldest_stage_age_days == null
+        ? "Stage age unavailable"
+        : "Oldest in stage: " + Number(row.oldest_stage_age_days) +
+          (Number(row.oldest_stage_age_days) === 1 ? " day" : " days");
+    const unavailable = !isFullyInjected && Number(row.stage_age_unavailable || 0) > 0
+      ? " · " + Number(row.stage_age_unavailable) + " without a start date"
+      : "";
     return '<button type="button" class="workflow-stage" data-workflow-stage="' + esc(row.stage_code) +
-      '" aria-label="Open ' + esc(row.stage_name) + ', ' + esc(detail) + '">' +
+      '" aria-label="Open ' + esc(row.stage_name) + ', ' + esc(detail) + ', ' + esc(age) + unavailable + '">' +
       '<span class="workflow-stage-top"><span>' + esc(row.stage_name) + '</span><strong>' +
       esc(row.total) + "</strong></span>" +
-      '<span class="workflow-stage-bottom"><span>' + esc(detail) +
-      '</span><span class="workflow-stage-action">Open records →</span></span>' +
+      '<span class="workflow-stage-bottom"><span class="workflow-stage-count">' + esc(detail) +
+      '</span><span class="workflow-stage-age">' + esc(age + unavailable) + '</span>' +
+      '<span class="workflow-stage-action">Open records →</span></span>' +
       "</button>";
   }).join("") : '<div class="empty-state">No workflow stages currently contain records.</div>';
 }
