@@ -261,6 +261,30 @@ def build_current_khs_workbook(requests, items, executors, subtypes=None, waitin
         request_ws.append([None] * len(REQUEST_HEADERS))
         for col, value in enumerate(row, start=1):
             _write_cell(request_ws.cell(request_ws.max_row, col), value)
+    request_col = {
+        name: get_column_letter(REQUEST_HEADERS.index(name) + 1)
+        for name in REQUEST_HEADERS
+    }
+    khs_request_col = get_column_letter(KHS_HEADERS.index("Request ID") + 1)
+    khs_inject_col = get_column_letter(KHS_HEADERS.index("KHS Inject Completion Date") + 1)
+    for row_number in range(request_header_row + 1, request_ws.max_row + 1):
+        request_id_cell = f"{request_col['Request ID']}{row_number}"
+        request_ws[f"{request_col['Total KHS']}{row_number}"] = (
+            f'=COUNTIF(\'02 - KHS Tracking\'!${khs_request_col}$6:${khs_request_col}$1048576,{request_id_cell})'
+        )
+        request_ws[f"{request_col['Fully Injected KHS']}{row_number}"] = (
+            f'=COUNTIFS(\'02 - KHS Tracking\'!${khs_request_col}$6:${khs_request_col}$1048576,{request_id_cell},'
+            f'\'02 - KHS Tracking\'!${khs_inject_col}$6:${khs_inject_col}$1048576,"<>")'
+        )
+        request_ws[f"{request_col['Open KHS']}{row_number}"] = (
+            f'=MAX({request_col["Total KHS"]}{row_number}-{request_col["Fully Injected KHS"]}{row_number},0)'
+        )
+        request_ws[f"{request_col['Request Status']}{row_number}"] = (
+            f'=IF({request_col["Total KHS"]}{row_number}=0,"Not Started",'
+            f'IF({request_col["Fully Injected KHS"]}{row_number}={request_col["Total KHS"]}{row_number},'
+            f'"Completed",IF({request_col["Fully Injected KHS"]}{row_number}>0,"Partially Completed","In Progress")))'
+        )
+
     _style_sheet(
         request_ws,
         request_header_row,
@@ -334,10 +358,64 @@ def build_current_khs_workbook(requests, items, executors, subtypes=None, waitin
             record.get("legacy_detailed_status"),
             record.get("source_col_s_audit_date"),
             record.get("migration_review"),
+            None,
         ]
         khs_ws.append([None] * len(KHS_HEADERS))
         for col, value in enumerate(row, start=1):
             _write_cell(khs_ws.cell(khs_ws.max_row, col), value)
+
+    # Calculated columns are formulas, so the displayed values recalculate
+    # immediately when a user changes an input date in Excel.
+    khs_col = {
+        name: get_column_letter(KHS_HEADERS.index(name) + 1)
+        for name in KHS_HEADERS
+    }
+    for row_number in range(khs_header_row + 1, khs_ws.max_row + 1):
+        c = {name: f"{letter}{row_number}" for name, letter in khs_col.items()}
+        khs_ws[c["MI Status"]] = f'=IF({c["MI GM Approval Date"]}<>"","Completed","Not Completed")'
+        khs_ws[c["LP Status"]] = (
+            f'=IF({c["LP Completion Date"]}<>"","Completed",'
+            f'IF(COUNT({c["LP Circulation Start Date"]}:{c["LP GM SCM Approval Date"]})>0,"In Progress","Not Started"))'
+        )
+        khs_ws[c["Workflow Status"]] = (
+            f'=IF({c["KHS Inject Completion Date"]}<>"","Completed",'
+            f'IF(COUNT({c["Dispatch Date"]},{c["BOQ Confirmation Date"]}:{c["Final Negotiation Date"]},'
+            f'{c["MI Head Approval Date"]}:{c["MI GM Approval Date"]},{c["Legal Submission Date"]},'
+            f'{c["LP Circulation Start Date"]}:{c["LP Completion Date"]},{c["KHS Inject Start Date"]})>0,'
+            f'"In Progress","Not Started"))'
+        )
+        khs_ws[c["Current Stage"]] = (
+            f'=IF({c["KHS Inject Completion Date"]}<>"","Fully Injected",'
+            f'IF({c["LP Completion Date"]}<>"","KHS Inject",'
+            f'IF(AND(COUNT({c["LP Contract Team Completion Date"]}:{c["LP GM SCM Approval Date"]})>0,{c["LP Circulation Start Date"]}=""),"LP Data Review",'
+            f'IF(COUNT({c["LP Circulation Start Date"]}:{c["LP GM SCM Approval Date"]})>0,"LP Circulation",'
+            f'IF({c["Legal Submission Date"]}<>"","Legal Processing",'
+            f'IF({c["MI GM Approval Date"]}<>"","Legal Submission",'
+            f'IF({c["MI SM Approval Date"]}<>"","MI Approval - GM",'
+            f'IF({c["MI Head Approval Date"]}<>"","MI Approval - SM",'
+            f'IF({c["Final Negotiation Date"]}<>"","MI Approval - Head",'
+            f'IF({c["Negotiation Date"]}<>"","Final Negotiation",'
+            f'IF({c["BOQ Confirmation Date"]}<>"","Negotiation",'
+            f'IF({c["Dispatch Date"]}<>"","BOQ Confirmation",'
+            f'IF({c["Request Date"]}<>"","Dispatch","Request Received")))))))))))))'
+        )
+        khs_ws[c["LP Next Approver"]] = (
+            f'=IF(AND({c["LP Circulation Start Date"]}<>"",'
+            f'OR({c["MI GM Approval Date"]}="",{c["LP Circulation Start Date"]}<{c["MI GM Approval Date"]})),'
+            f'"Prerequisite exception",'
+            f'IF({c["LP Completion Date"]}<>"","LP completed",'
+            f'IF(AND({c["LP Circulation Start Date"]}<>"",{c["LP Contract Team Completion Date"]}=""),"Tim Kontrak",'
+            f'IF(AND({c["LP Contract Team Completion Date"]}<>"",{c["LP Junior Manager Approval Date"]}=""),"Junior Manager Vendor Management",'
+            f'IF(AND({c["LP Junior Manager Approval Date"]}<>"",{c["LP Senior Manager Approval Date"]}=""),"Senior Manager Strategic Sourcing",'
+            f'IF(AND({c["LP Senior Manager Approval Date"]}<>"",{c["LP GM SCM Approval Date"]}=""),"GM SCM",'
+            f'IF(AND({c["LP GM SCM Approval Date"]}<>"",{c["LP Completion Date"]}=""),"Director / Direktur",'
+            f'IF(OR({c["LP Contract Team Completion Date"]}<>"",{c["LP Junior Manager Approval Date"]}<>"",'
+            f'{c["LP Senior Manager Approval Date"]}<>"",{c["LP GM SCM Approval Date"]}<>""),"LP data review","—"))))))))'
+        )
+
+    wb.calculation.fullCalcOnLoad = True
+    wb.calculation.forceFullCalc = True
+    wb.calculation.calcMode = "auto"
 
     khs_widths = {
         "A": 20, "B": 20, "C": 15, "D": 42, "E": 34, "F": 14, "G": 15,
