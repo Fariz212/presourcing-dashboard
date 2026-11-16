@@ -1167,14 +1167,16 @@ def lp_circulation_register():
         {where_sql}
         ORDER BY
             CASE register.lp_stage_key
-                WHEN 'legacy_incomplete' THEN 0
-                WHEN 'contract_team' THEN 1
-                WHEN 'junior_manager' THEN 2
-                WHEN 'senior_manager' THEN 3
-                WHEN 'general_manager' THEN 4
-                WHEN 'director' THEN 5
-                WHEN 'completed' THEN 6
-                ELSE 7
+                WHEN 'prerequisite_exception' THEN 0
+                WHEN 'legacy_unverified' THEN 1
+                WHEN 'legacy_incomplete' THEN 2
+                WHEN 'contract_team' THEN 3
+                WHEN 'junior_manager' THEN 4
+                WHEN 'senior_manager' THEN 5
+                WHEN 'general_manager' THEN 6
+                WHEN 'director' THEN 7
+                WHEN 'completed' THEN 8
+                ELSE 9
             END,
             register.lp_circulation_start_date ASC NULLS FIRST,
             register.khs_id
