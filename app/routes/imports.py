@@ -294,7 +294,7 @@ def preview_import():
 
             request_rows = conn.execute(
                 """
-                SELECT request_id, request_date, request_subject
+                SELECT request_id, request_date, request_subject, requester_owner
                 FROM khs_requests
                 """
             ).fetchall()
@@ -302,6 +302,7 @@ def preview_import():
                 row[0]: {
                     "request_date": row[1],
                     "request_subject": row[2],
+                    "requester_owner": row[3],
                 }
                 for row in request_rows
             }
@@ -373,6 +374,55 @@ def preview_import():
         }
 
         missing_staged_keys = issue_keys - row_keys
+
+        preview_changes = []
+        changed_record_count = 0
+        unchanged_record_count = 0
+        preview_field_sets = {
+            "REQUEST": ("request_date", "request_subject", "requester_owner"),
+            "KHS_ITEM": (
+                "request_id", "source_row_no", "dispatch_date", "executor_code",
+                "subtype", "vendor_name", "contract_start_date", "contract_end_date",
+                "boq_confirmation_date", "negotiation_date", "final_negotiation_date",
+                "mi_head_approval_date", "mi_sm_approval_date", "mi_gm_approval_date",
+                "legal_submission_date", "lp_circulation_start_date",
+                "lp_contract_team_completion_date", "lp_junior_manager_approval_date",
+                "lp_senior_manager_approval_date", "lp_gm_scm_approval_date",
+                "lp_completion_date", "khs_inject_start_date", "khs_inject_completion_date",
+                "waiting_for", "waiting_reason", "last_updated_date", "remarks",
+            ),
+        }
+        for entity, sheet, record in staged_records:
+            external_id = record["request_id"] if entity == "REQUEST" else record["khs_id"]
+            existing = (
+                known_requests.get(external_id) if entity == "REQUEST"
+                else known_items.get(external_id)
+            )
+            field_changes = []
+            for field in preview_field_sets[entity]:
+                after = record.get(field)
+                if after is None:
+                    continue
+                before = existing.get(field) if existing else None
+                if before != after:
+                    field_changes.append({
+                        "field": field,
+                        "before": _json_safe(before),
+                        "after": _json_safe(after),
+                    })
+            change_type = "NEW" if existing is None else "UPDATED" if field_changes else "UNCHANGED"
+            if field_changes or existing is None:
+                changed_record_count += 1
+            else:
+                unchanged_record_count += 1
+            preview_changes.append({
+                "entity": entity,
+                "sheet": sheet,
+                "row": record["source_excel_row"],
+                "external_id": external_id,
+                "change_type": change_type,
+                "fields": field_changes,
+            })
 
         valid_count = 0
         warning_count = 0
@@ -497,8 +547,12 @@ def preview_import():
                             Jsonb({
                                 "source_sheet": sheet,
                                 "source_excel_row": row_number,
+                                "cells": _json_safe(record.get("_raw_data", {})),
                             }),
-                            Jsonb(_json_safe(record)),
+                            Jsonb(_json_safe({
+                                key: value for key, value in record.items()
+                                if key != "_raw_data"
+                            })),
                             Jsonb([
                                 issue for issue in row_issues
                                 if issue["severity"] == "ERROR"
@@ -531,6 +585,12 @@ def preview_import():
             },
             "issues": issues[:500],
             "issues_truncated": len(issues) > 500,
+            "change_summary": {
+                "records_with_changes": changed_record_count,
+                "unchanged_records": unchanged_record_count,
+            },
+            "preview_changes": preview_changes[:200],
+            "preview_changes_truncated": len(preview_changes) > 200,
         }), 201
 
     except WorkbookImportError as exc:
