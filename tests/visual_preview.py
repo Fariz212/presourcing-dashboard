@@ -54,7 +54,7 @@ def assert_stage_and_age(page, body_id, khs_id, stage_text, expected_age_text,
         raise AssertionError(
             f"{body_id} {khs_id}: expected stage {stage_text!r}, got {actual_stage!r}"
         )
-    age_match = re.search(r"\\b\\d+ days? in stage\\b", actual_age)
+    age_match = re.search(r"\b\d+ days? in stage\b", actual_age)
     if not age_match:
         raise AssertionError(
             f"{body_id} {khs_id}: expected a numeric stage age, got {actual_age!r}"
