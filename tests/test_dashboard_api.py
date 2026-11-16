@@ -690,7 +690,7 @@ def test_lp_circulation_legacy_gap_filter_includes_completed_history(make_client
         rows=[row],
         total=1,
         stage_summary_rows=[
-            {"lp_stage_key": "completed", "total": 1, "timeline_gaps": 1}
+            {"lp_stage_key": "completed", "total": 1, "timeline_gaps": 1, "prerequisite_exceptions": 0}
         ],
     )
 
