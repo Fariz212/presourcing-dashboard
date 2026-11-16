@@ -112,7 +112,7 @@ def _row_status(issues):
 def _planned_change(entity, record, existing):
     """Describe exactly which non-blank source values would change a record."""
     id_field = "request_id" if entity == "REQUEST" else "khs_id"
-    excluded = {"source_excel_row"}
+    excluded = {"source_excel_row", id_field}
     changed_fields = [
         field
         for field, value in record.items()
