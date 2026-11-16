@@ -8,6 +8,9 @@ const state = {
   registerPage: 1,
   historyPage: 1,
   activityPage: 1,
+  activityQuery: "",
+  activityEntity: "",
+  saving: false,
   lpPage: 1,
   contractPage: 1,
   perPage: 25,
@@ -144,6 +147,29 @@ function showSystem(online, message) {
   set("systemStatusText", message || (online ? "Connected" : "Unavailable"));
 }
 
+function syncRefreshVisibility(page) {
+  const refresh = $("refreshButton");
+  if (!refresh) return;
+  const pageSpecific = {
+    overview: "overviewRefresh",
+    lp: "lpRefresh",
+    contracts: "contractRefresh",
+    workflow: "workflowRefresh",
+    activity: "activityRefresh"
+  };
+  refresh.hidden = !!pageSpecific[page];
+}
+
+function closeMobileNavigation() {
+  const sidebar = document.querySelector(".sidebar");
+  const toggle = $("mobileNavToggle");
+  if (sidebar) sidebar.classList.remove("nav-open");
+  if (toggle) {
+    toggle.setAttribute("aria-expanded", "false");
+    toggle.setAttribute("aria-label", "Open navigation");
+  }
+}
+
 function go(page) {
   const allowed = ["overview", "requests", "register", "lp", "contracts", "workflow", "imports", "activity"];
   if (allowed.indexOf(page) < 0) return;
@@ -158,6 +184,8 @@ function go(page) {
   });
   const active = $("page-" + page);
   set("breadcrumbCurrent", active ? active.dataset.title : page);
+  syncRefreshVisibility(page);
+  closeMobileNavigation();
   if (window.location.hash !== "#" + page) history.replaceState(null, "", "#" + page);
   loadPage(page).catch((err) => toast(err.message));
 }
@@ -374,6 +402,57 @@ function clearRegisterFilters() {
     });
 }
 
+function renderActiveRegisterFilters() {
+  const container = $("activeRegisterFilters");
+  if (!container) return;
+  const filters = [];
+  const controls = [
+    ["searchInput", "Search"],
+    ["statusFilter", "LP status"],
+    ["executorFilter", "Executor"],
+    ["subtypeFilter", "Contract type"],
+    ["waitingFilter", "Waiting for"],
+    ["stageFilter", "Workflow stage"]
+  ];
+  controls.forEach(([id, label]) => {
+    const control = $(id);
+    if (!control || !control.value) return;
+    const option = control.tagName === "SELECT" ? control.options[control.selectedIndex] : null;
+    const value = option ? option.textContent : control.value;
+    filters.push({id, label, value});
+  });
+  if (state.workflowStageFilter) filters.push({id:"workflowStageFilter",label:"Stage",value:state.workflowStageFilter.replace(/_/g," ")});
+  if (state.workflowRoleFilter) filters.push({id:"workflowRoleFilter",label:"Approval role",value:state.workflowRoleFilter.replace(/_/g," ")});
+  if (state.attentionOnly) filters.push({id:"attentionOnly",label:"Queue",value:"Needs attention"});
+  container.hidden = filters.length === 0;
+  container.innerHTML = filters.map((filter) =>
+    '<button type="button" class="filter-chip" data-clear-filter="' + esc(filter.id) + '">' +
+    '<span>' + esc(filter.label) + ': ' + esc(filter.value) + '</span><span aria-hidden="true">×</span></button>'
+  ).join("") + (filters.length ? '<button type="button" class="clear-all-filters" data-clear-filter="all">Clear all</button>' : "");
+  const summary = document.querySelector(".filter-more summary");
+  if (summary) summary.textContent = filters.length ? "More filters · " + filters.length + " active" : "More filters";
+}
+
+function clearOneRegisterFilter(id) {
+  if (id === "all") {
+    clearRegisterFilters();
+    state.workflowStageFilter = null;
+    state.workflowRoleFilter = null;
+    state.attentionOnly = false;
+  } else if (id === "workflowStageFilter") {
+    state.workflowStageFilter = null;
+  } else if (id === "workflowRoleFilter") {
+    state.workflowRoleFilter = null;
+  } else if (id === "attentionOnly") {
+    state.attentionOnly = false;
+  } else {
+    const control = $(id);
+    if (control) control.value = "";
+  }
+  state.registerPage = 1;
+  loadRegister().catch((error) => toast(error.message));
+}
+
 function registerQuery() {
   const p = new URLSearchParams();
   p.set("page", String(state.registerPage));
@@ -394,24 +473,38 @@ async function loadRegister() {
   const result = await api("/api/dashboard/khs?" + registerQuery());
   const body = $("registerBody");
   if (!body) return;
-  if (!result.data.length) emptyRow("registerBody", 10, "No KHS records match the current filters.");
-  else body.innerHTML = result.data.map((r) =>
-    "<tr><td><span class=\"cell-primary\">" + esc(r.request_subject || "Untitled request") + "</span>" +
-    "<span class=\"cell-secondary\">" + esc(r.vendor_name) + " · " + esc(r.khs_id) + "</span></td>" +
-    "<td>" + esc(r.executor_name || r.executor_code || "Unassigned") + "</td>" +
-    "<td>" + esc(r.current_stage_name || r.current_stage_code) +
-    (r.lp_started_without_mi_gm_approval ? '<span class="exception-label">Prerequisite exception</span>' : "") +
-    "</td><td><span class=\"status-badge status-" + esc(r.workflow_status || "not_started") + "\">" +
-    esc((r.workflow_status || "not_started").replace("_", " ")) + "</span></td>" +
-    "<td><span class=\"status-badge status-" + esc(r.lp_status) + "\">" +
-    esc(r.lp_status.replace("_", " ")) + "</span></td>" +
-    "<td><span class=\"cell-primary\">" + esc(r.lp_stage_label || "—") + "</span>" +
-    "<span class=\"cell-secondary\">" + (r.lp_stage_age_days == null ? (r.lp_timeline_has_gaps ? "History incomplete" : "—") : esc(r.lp_stage_age_days + " days in stage")) + "</span>" +
-    (r.lp_timeline_has_gaps ? '<span class="exception-label">Legacy milestone gaps</span>' : "") + "</td>" +
-    "<td>" + esc(fmt(r.khs_inject_start_date)) + "</td><td>" + esc(fmt(r.khs_inject_completion_date)) + "</td>" +
-    "<td>" + esc(r.waiting_for || "—") + "</td>" +
-    "<td><button class=\"view-button\" data-view-khs=\"" + esc(r.khs_id) + "\">Details</button></td></tr>"
-  ).join("");
+  if (!result.data.length) emptyRow("registerBody", 6, "No KHS records match the current filters.");
+  else body.innerHTML = result.data.map((r) => {
+    const stage = r.lp_stage_label || r.current_stage_name || "Not started";
+    const stageAge = r.lp_stage_age_days == null
+      ? (r.lp_timeline_has_gaps ? "Historical dates need review" : "No active LP stage")
+      : r.lp_stage_age_days + (r.lp_stage_age_days === 1 ? " day in stage" : " days in stage");
+    const lpStatus = String(r.lp_status || "not_started").replace(/_/g, " ");
+    const injection = r.khs_inject_completion_date
+      ? '<span class="status-badge status-completed">Fully injected</span><span class="cell-secondary">' + esc(fmt(r.khs_inject_completion_date)) + "</span>"
+      : r.khs_inject_start_date
+        ? '<span class="status-badge status-in_progress">Injection started</span><span class="cell-secondary">' + esc(fmt(r.khs_inject_start_date)) + "</span>"
+        : '<span class="status-badge status-neutral">Not started</span>';
+    const exception = r.lp_prerequisite_exception || r.lp_started_without_mi_gm_approval
+      ? '<span class="exception-label">MI GM prerequisite review</span>'
+      : r.lp_legacy_unverified
+        ? '<span class="exception-label">Director sign-off unverified</span>'
+        : r.lp_timeline_has_gaps
+          ? '<span class="exception-label">Historical timeline gaps</span>' : "";
+    return "<tr>" +
+      '<td><span class="cell-primary">' + esc(r.request_subject || "Untitled request") + '</span>' +
+      '<span class="cell-secondary">' + esc(r.vendor_name) + " · " + esc(r.khs_id) + '</span>' +
+      '<span class="cell-tertiary">' + esc(r.executor_name || r.executor_code || "Unassigned") + "</span></td>" +
+      '<td><span class="cell-primary">' + esc(stage) + '</span>' +
+      '<span class="cell-secondary">' + esc(stageAge) + "</span>" + exception + "</td>" +
+      '<td><span class="status-badge status-' + esc(r.lp_status || "not_started") + '">' + esc(lpStatus) + "</span></td>" +
+      "<td>" + injection + "</td>" +
+      '<td><span class="cell-primary">' + esc(r.waiting_for || (exception ? "Review data / prerequisite" : "No waiting owner recorded")) + '</span>' +
+      (r.waiting_reason ? '<span class="cell-secondary">' + esc(r.waiting_reason) + "</span>" : "") + "</td>" +
+      '<td><button type="button" class="view-button" data-view-khs="' + esc(r.khs_id) + '">Details</button></td>' +
+      "</tr>";
+  }).join("");
+  renderActiveRegisterFilters();
   set("sidebarTotal", result.pagination.total_records);
   set("recordCount", result.pagination.total_records + " records");
   set("paginationText", "Page " + (result.pagination.page || 1) + " of " + (result.pagination.total_pages || 0));
@@ -423,11 +516,13 @@ async function loadWorkflow() {
   const result = await api("/api/dashboard/workflow");
   const wrap = $("workflowCards");
   if (!wrap) return;
-  wrap.innerHTML = (result.data || []).map((r) =>
-    '<article class="workflow-stage"><h3>' + esc(r.stage_name) + '</h3><strong>' + esc(r.total) +
-    '</strong><p>Records currently at this checkpoint</p></article>'
-  ).join("");
-  if (!result.data || !result.data.length) wrap.textContent = "No workflow stage data.";
+  const rows = result.data || [];
+  wrap.innerHTML = rows.length ? rows.map((r) =>
+    '<button type="button" class="workflow-stage" data-workflow-stage="' + esc(r.stage_code) + '">' +
+    '<span class="workflow-stage-top"><span>' + esc(r.stage_name) + '</span><strong>' + esc(r.total) + "</strong></span>" +
+    '<span class="workflow-stage-bottom">' + esc(r.completed) + ' completed <span>Open matching records →</span></span>' +
+    "</button>"
+  ).join("") : '<div class="empty-state">No workflow stage data is available.</div>';
 }
 
 async function loadLPCirculation() {
@@ -741,10 +836,16 @@ function renderContractDetail(record) {
 }
 
 async function loadActivity() {
-  const result = await api("/api/dashboard/activity?page=" + state.activityPage + "&per_page=25");
+  const params = new URLSearchParams({
+    page: String(state.activityPage),
+    per_page: "25"
+  });
+  if (state.activityQuery) params.set("q", state.activityQuery);
+  if (state.activityEntity) params.set("entity_type", state.activityEntity);
+  const result = await api("/api/dashboard/activity?" + params.toString());
   const body = $("activityBody");
   if (!body) return;
-  if (!result.data.length) emptyRow("activityBody", 6, "No activity has been recorded.");
+  if (!result.data.length) emptyRow("activityBody", 6, "No activity matches the current filters.");
   else body.innerHTML = result.data.map((r) => {
     const changes = typeof r.changes === "string" ? r.changes : JSON.stringify(r.changes || {});
     return "<tr><td>" + esc(fmt(r.occurred_at)) + "</td><td>" + esc(r.entity_type) + "</td><td>" +
@@ -752,9 +853,9 @@ async function loadActivity() {
       '<td title="' + esc(changes) + '">' + esc(changes.length > 90 ? changes.slice(0, 90) + "…" : changes) + "</td></tr>";
   }).join("");
   const p = result.pagination || {};
-  set("activityPagination", "Page " + p.page + " · " + p.total_records + " activities");
-  $("activityPrevious").disabled = state.activityPage <= 1;
-  $("activityNext").disabled = state.activityPage >= p.total_pages;
+  set("activityPagination", "Page " + p.page + " of " + p.total_pages + " · " + p.total_records + " activities");
+  $("activityPrevious").disabled = !p.has_previous;
+  $("activityNext").disabled = !p.has_next;
 }
 
 async function loadImportHistory() {
@@ -778,32 +879,33 @@ async function loadImportHistory() {
 
 function fillDialogField(def, record, mode) {
   const name = def[0], label = def[1], type = def[2];
+  const id = "field-" + name;
   const value = record && record[name] != null ? String(record[name]).slice(0, 10) : "";
   let control = "";
   if (type === "date") {
-    control = '<input type="date" name="' + name + '" value="' + esc(value) + '">';
+    control = '<input id="' + id + '" type="date" name="' + name + '" value="' + esc(value) + '" aria-label="' + esc(label) + '">';
   } else if (type === "textarea") {
-    control = '<textarea name="' + name + '" rows="3">' + esc(record && record[name] || "") + "</textarea>";
+    control = '<textarea id="' + id + '" name="' + name + '" rows="3" aria-label="' + esc(label) + '">' + esc(record && record[name] || "") + "</textarea>";
   } else if (type === "request") {
     const opts = state.requests.map((r) => '<option value="' + esc(r.request_id) + '">' +
       esc(r.request_subject + (r.vendor_summary ? " · " + r.vendor_summary : "")) + "</option>").join("");
-    control = '<select name="request_id" required><option value="">Select request</option>' + opts + "</select>";
+    control = '<select id="' + id + '" name="request_id" required aria-label="' + esc(label) + '"><option value="">Select request</option>' + opts + "</select>";
   } else if (type === "executor") {
     const opts = state.executors.map((r) => '<option value="' + esc(r.executor_code) + '">' +
       esc(r.executor_code + " · " + r.display_name) + "</option>").join("");
     const legacy = record && record.executor_code && !state.executors.some((r) => r.executor_code === record.executor_code)
       ? '<option value="' + esc(record.executor_code) + '">' + esc(record.executor_code + " · current / inactive") + "</option>" : "";
-    control = '<select name="executor_code" required><option value="">Select executor</option>' + legacy + opts + "</select>";
+    control = '<select id="' + id + '" name="executor_code" required aria-label="' + esc(label) + '"><option value="">Select executor</option>' + legacy + opts + "</select>";
   } else if (type === "subtype") {
     const current = record && record.subtype && !["Renewal", "Kontrak Baru"].includes(record.subtype)
       ? '<option value="' + esc(record.subtype) + '">' + esc(record.subtype) + "</option>" : "";
-    control = '<select name="subtype"><option value="">Select type</option>' + current + '<option>Renewal</option><option>Kontrak Baru</option></select>';
+    control = '<select id="' + id + '" name="subtype" aria-label="' + esc(label) + '"><option value="">Select type</option>' + current + '<option>Renewal</option><option>Kontrak Baru</option></select>';
   } else {
     const required = ["request_subject", "vendor_name"].includes(name) ? " required" : "";
-    control = '<input type="text" name="' + name + '" value="' + esc(record && record[name] || "") + '"' + required + '>';
+    control = '<input id="' + id + '" type="text" name="' + name + '" value="' + esc(record && record[name] || "") + '"' + required + ' aria-label="' + esc(label) + '">';
   }
   const full = type === "textarea";
-  return '<div class="form-field' + (full ? " full" : "") + '"><label>' + esc(label) + '</label>' + control + "</div>";
+  return '<div class="form-field' + (full ? " full" : "") + '"><label for="' + id + '">' + esc(label) + '</label>' + control + "</div>";
 }
 
 function renderGroupedKhsFields(record, editing) {
@@ -828,8 +930,10 @@ function renderGroupedKhsFields(record, editing) {
 
 async function openForm(kind, record, parentRequestId) {
   if (kind === "khs") {
-    await ensureFilters();
-    const rq = await api("/api/dashboard/requests?per_page=100");
+    const [, rq] = await Promise.all([
+      ensureFilters(),
+      api("/api/dashboard/requests?per_page=100")
+    ]);
     state.requests = rq.data || [];
   }
   const editing = !!record;
@@ -837,6 +941,11 @@ async function openForm(kind, record, parentRequestId) {
     !(editing && (f[0] === "request_id"))
   );
   state.editing = { kind: kind, record: record || null, original: record || {} };
+  state.saving = false;
+  const saveButton = $("saveRecord");
+  if (saveButton) { saveButton.disabled = false; saveButton.textContent = "Save record"; }
+  const recordError = $("recordError");
+  if (recordError) { recordError.hidden = true; recordError.textContent = ""; }
   $("dialogEyebrow").textContent = editing ? "EDIT RECORD" : "NEW RECORD";
   $("dialogTitle").textContent = (editing ? "Edit " : "Create ") + (kind === "request" ? "Request" : "KHS item");
   $("dialogHint").textContent = kind === "khs"
@@ -861,8 +970,10 @@ async function openForm(kind, record, parentRequestId) {
 async function saveRecord(event) {
   event.preventDefault();
   const edit = state.editing;
-  if (!edit) return;
+  if (!edit || state.saving) return;
   const form = $("recordForm");
+  const button = $("saveRecord");
+  const errorBox = $("recordError");
   const data = {};
   new FormData(form).forEach((value, key) => { data[key] = value === "" ? null : value; });
   const fields = edit.kind === "request" ? requestFields : itemFields;
@@ -879,12 +990,17 @@ async function saveRecord(event) {
     if (!Object.keys(data).length) {
       toast("No changes to save.", true);
       $("recordDialog").close();
+      state.editing = null;
       return;
     }
   }
   const base = "/api/dashboard/" + (edit.kind === "request" ? "requests" : "khs");
   const url = edit.record ? base + "/" + encodeURIComponent(edit.record[edit.kind === "request" ? "request_id" : "khs_id"]) : base;
   const method = edit.record ? "PATCH" : "POST";
+  state.saving = true;
+  button.disabled = true;
+  button.textContent = "Saving…";
+  if (errorBox) { errorBox.hidden = true; errorBox.textContent = ""; }
   try {
     await api(url, jsonOptions(method, data));
     $("recordDialog").close();
@@ -900,7 +1016,17 @@ async function saveRecord(event) {
     }
     state.editing = null;
   } catch (err) {
+    if (errorBox) {
+      errorBox.textContent = err.message;
+      errorBox.hidden = false;
+    }
     toast(err.message);
+  } finally {
+    state.saving = false;
+    if ($("recordDialog").open) {
+      button.disabled = false;
+      button.textContent = "Save record";
+    }
   }
 }
 
@@ -1153,7 +1279,39 @@ function bindImportDropzone() {
   });
 }
 
+function decorateResponsiveTableRows(tbody) {
+  const table = tbody.closest("table");
+  if (!table) return;
+  const headers = Array.from(table.querySelectorAll("thead th")).map((th) => th.textContent.trim());
+  tbody.querySelectorAll("tr").forEach((row) => {
+    const cells = Array.from(row.children).filter((cell) => cell.tagName === "TD");
+    if (cells.length === 1 && cells[0].hasAttribute("colspan")) {
+      cells[0].removeAttribute("data-label");
+      return;
+    }
+    cells.forEach((cell, index) => {
+      const label = headers[index] || (index === cells.length - 1 ? "Action" : "Details");
+      cell.dataset.label = label;
+    });
+  });
+}
+
+function observeResponsiveTables() {
+  document.querySelectorAll(".table-wrap tbody").forEach((tbody) => {
+    decorateResponsiveTableRows(tbody);
+    const observer = new MutationObserver(() => decorateResponsiveTableRows(tbody));
+    observer.observe(tbody, {childList:true, subtree:true});
+  });
+}
+
 function bind() {
+  const navToggle = $("mobileNavToggle");
+  if (navToggle) navToggle.addEventListener("click", () => {
+    const sidebar = document.querySelector(".sidebar");
+    const open = sidebar.classList.toggle("nav-open");
+    navToggle.setAttribute("aria-expanded", String(open));
+    navToggle.setAttribute("aria-label", open ? "Close navigation" : "Open navigation");
+  });
   document.querySelectorAll(".nav-link[data-page]").forEach((el) => {
     el.addEventListener("click", (event) => {
       event.preventDefault();
@@ -1206,10 +1364,40 @@ function bind() {
     })
   );
   $("refreshButton").addEventListener("click", () => loadPage(state.page).catch((e) => toast(e.message)));
+  $("overviewRefresh").addEventListener("click", () => loadOverview().catch((e) => toast(e.message)));
+  const workflowCards = $("workflowCards");
+  workflowCards.addEventListener("click", (event) => {
+    const card = event.target.closest("[data-workflow-stage]");
+    if (!card) return;
+    state.workflowStageFilter = card.dataset.workflowStage;
+    state.workflowRoleFilter = null;
+    state.attentionOnly = false;
+    state.registerPage = 1;
+    clearRegisterFilters();
+    go("register");
+  });
   $("workflowRefresh").addEventListener("click", () => loadWorkflow().catch((e) => toast(e.message)));
   $("lpRefresh").addEventListener("click", () => { state.lpPage = 1; loadLPCirculation().catch((e) => toast(e.message)); });
   $("contractRefresh").addEventListener("click", () => { state.contractPage = 1; loadContractLifecycle().catch((e) => toast(e.message)); });
   $("activityRefresh").addEventListener("click", () => { state.activityPage = 1; loadActivity().catch((e) => toast(e.message)); });
+  $("activitySearch").addEventListener("input", () => {
+    state.activityQuery = $("activitySearch").value.trim();
+    window.clearTimeout(state.searchTimer);
+    state.searchTimer = window.setTimeout(() => { state.activityPage = 1; loadActivity().catch((e) => toast(e.message)); }, 300);
+  });
+  $("activityEntityFilter").addEventListener("change", () => {
+    state.activityEntity = $("activityEntityFilter").value;
+    state.activityPage = 1;
+    loadActivity().catch((e) => toast(e.message));
+  });
+  $("activityReset").addEventListener("click", () => {
+    $("activitySearch").value = "";
+    $("activityEntityFilter").value = "";
+    state.activityQuery = "";
+    state.activityEntity = "";
+    state.activityPage = 1;
+    loadActivity().catch((e) => toast(e.message));
+  });
   $("lpSearch").addEventListener("input", () => {
     window.clearTimeout(state.searchTimer);
     state.searchTimer = window.setTimeout(() => { state.lpPage = 1; loadLPCirculation().catch((e) => toast(e.message)); }, 300);
@@ -1248,7 +1436,7 @@ function bind() {
 
   $("refreshHistoryButton").addEventListener("click", () => { state.historyPage = 1; loadImportHistory().catch((e) => toast(e.message)); });
   ["newRequestButton", "createRequestButton"].forEach((id) => $(id).addEventListener("click", () => openForm("request").catch((e) => toast(e.message))));
-  ["quickAddKhs", "createKhsButton"].forEach((id) => $(id).addEventListener("click", () => openForm("khs").catch((e) => toast(e.message))));
+  $("createKhsButton").addEventListener("click", () => openForm("khs").catch((e) => toast(e.message)));
   $("recordForm").addEventListener("submit", saveRecord);
   $("documentUploadForm").addEventListener("submit", uploadEvidence);
   ["closeRecordDialog", "cancelRecord"].forEach((id) => $(id).addEventListener("click", () => $("recordDialog").close()));
@@ -1270,10 +1458,13 @@ function bind() {
   $("requestSearchReset").addEventListener("click", () => { $("requestSearch").value = ""; state.requestQuery = ""; state.requestPage = 1; loadRequests().catch((e) => toast(e.message)); });
   $("requestPrevious").addEventListener("click", () => { if (state.requestPage > 1) { state.requestPage--; loadRequests().catch((e) => toast(e.message)); } });
   $("requestNext").addEventListener("click", () => { state.requestPage++; loadRequests().catch((e) => toast(e.message)); });
-  $("requestSearch").addEventListener("change", () => { state.requestQuery = $("requestSearch").value.trim(); });
   $("searchInput").addEventListener("input", () => {
     window.clearTimeout(state.searchTimer);
     state.searchTimer = window.setTimeout(() => { state.registerPage = 1; loadRegister().catch((e) => toast(e.message)); }, 300);
+  });
+  $("activeRegisterFilters").addEventListener("click", (event) => {
+    const chip = event.target.closest("[data-clear-filter]");
+    if (chip) clearOneRegisterFilter(chip.dataset.clearFilter);
   });
   ["statusFilter", "executorFilter", "subtypeFilter", "waitingFilter", "stageFilter"].forEach((id) =>
     $(id).addEventListener("change", () => { state.registerPage = 1; loadRegister().catch((e) => toast(e.message)); })
@@ -1323,6 +1514,7 @@ function bind() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  observeResponsiveTables();
   bind();
   const initial = window.location.hash.replace("#", "");
   go(["overview", "requests", "register", "lp", "contracts", "workflow", "imports", "activity"].indexOf(initial) >= 0 ? initial : "overview");
