@@ -230,6 +230,58 @@ def test_lp_summary_separates_live_stages_from_quality_overlays(monkeypatch, tmp
     assert 'data-lp-stage="legacy_incomplete"' in body
 
 
+
+def test_khs_detail_and_form_prioritize_lp_workflow(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        "app.init_db_pool",
+        lambda _app: DummyPool(),
+    )
+    flask_app = create_app({
+        "TESTING": True,
+        "SECRET_KEY": "dashboard-lp-first-test-secret",
+        "DATABASE_URL": "postgresql://test:test@localhost/test",
+        "UPLOAD_DIR": tmp_path / "uploads",
+    })
+    client = flask_app.test_client()
+
+    response = client.get("/dashboard")
+    assert response.status_code == 200
+    body = response.data.decode("utf-8")
+    assert 'id="lpCurrentStage"' in body
+    assert 'id="lpStageAge"' in body
+    assert 'id="lpUpcomingStage"' in body
+    assert 'role="list" aria-label="LP approval milestones"' in body
+    assert 'id="detailGrid" class="detail-groups"' in body
+
+    javascript = client.get("/static/js/dashboard.js")
+    assert javascript.status_code == 200
+    script = javascript.data
+    assert b"renderGroupedKhsFields" in script
+    assert b"itemFieldGroups" in script
+    assert b"record.lp_stage_age_days" in script
+    assert b"record.lp_timeline_gaps" in script
+    for field in (
+        b"lp_circulation_start_date",
+        b"lp_contract_team_completion_date",
+        b"lp_junior_manager_approval_date",
+        b"lp_senior_manager_approval_date",
+        b"lp_gm_scm_approval_date",
+        b"lp_completion_date",
+    ):
+        assert field in script
+
+    stylesheet = client.get("/static/css/dashboard-studio.css")
+    assert stylesheet.status_code == 200
+    for selector in (
+        b".lp-stage-focus",
+        b".lp-form-grid",
+        b".form-section-lp-circulation",
+        b".detail-groups",
+        b".lp-timeline-item.gap",
+    ):
+        assert selector in stylesheet.data
+
+
 def test_dashboard_graphs_have_clear_labels_and_status_legend(monkeypatch, tmp_path):
     monkeypatch.setattr(
         "app.init_db_pool",
