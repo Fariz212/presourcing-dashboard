@@ -78,6 +78,7 @@ def main() -> int:
             file_name = f"{page_name}-{viewport_name}.png"
             target = OUTPUT_DIR / file_name
             try:
+                page.set_viewport_size({"width": width, "height": height})
                 if current_page is None:
                     response = page.goto(
                         f"{BASE_URL}/dashboard",
@@ -89,6 +90,8 @@ def main() -> int:
                         raise RuntimeError(f"Dashboard returned {status}")
                     current_page = "overview"
                 elif page_name != current_page:
+                    if width <= 760:
+                        page.locator("#mobileNavToggle").click(timeout=10_000)
                     navigation_link = page.locator(
                         f'a.nav-link[data-page="{page_name}"]'
                     ).first
@@ -171,6 +174,8 @@ def main() -> int:
 
         # Verify workflow stage summaries open the matching KHS Register filter.
         try:
+            page.set_viewport_size({"width": 390, "height": 844})
+            page.locator("#mobileNavToggle").click(timeout=10_000)
             page.locator('a.nav-link[data-page="workflow"]').first.click(timeout=10_000)
             current_page = "workflow"
             page.locator("#page-workflow.active").wait_for(state="visible", timeout=15_000)
