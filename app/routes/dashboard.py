@@ -1045,8 +1045,14 @@ def khs_register():
         FROM ({REGISTER_BASE_QUERY}) AS register
         {where_sql}
         ORDER BY register.lp_started_without_mi_gm_approval DESC,
-                 (register.lp_stage_age_days IS NOT NULL) DESC,
-                 register.lp_stage_age_days DESC NULLS LAST,
+                 CASE register.lp_stage_key
+                     WHEN 'contract_team' THEN register.lp_circulation_start_date
+                     WHEN 'junior_manager' THEN register.lp_contract_team_completion_date
+                     WHEN 'senior_manager' THEN register.lp_junior_manager_approval_date
+                     WHEN 'general_manager' THEN register.lp_senior_manager_approval_date
+                     WHEN 'director' THEN register.lp_gm_scm_approval_date
+                     ELSE NULL
+                 END ASC NULLS FIRST,
                  (register.waiting_for IS NOT NULL) DESC,
                  register.updated_at ASC NULLS FIRST,
                  register.dispatch_date DESC NULLS LAST,
