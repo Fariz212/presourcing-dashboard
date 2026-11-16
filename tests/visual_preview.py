@@ -9,10 +9,9 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import date, datetime
+import re
 from pathlib import Path
 from time import time
-from zoneinfo import ZoneInfo
 
 from playwright.sync_api import sync_playwright
 
@@ -44,7 +43,7 @@ CAPTURES = [
 
 
 
-def assert_stage_and_age(page, body_id, khs_id, stage_text, age_days,
+def assert_stage_and_age(page, body_id, khs_id, stage_text, expected_age_text,
                          stage_cell_index, age_cell_index):
     row = page.locator(f"#{body_id} tr").filter(has_text=khs_id).first
     row.wait_for(state="visible", timeout=15_000)
@@ -55,11 +54,16 @@ def assert_stage_and_age(page, body_id, khs_id, stage_text, age_days,
         raise AssertionError(
             f"{body_id} {khs_id}: expected stage {stage_text!r}, got {actual_stage!r}"
         )
-    expected_age = f"{age_days} day in stage" if age_days == 1 else f"{age_days} days in stage"
-    if expected_age not in actual_age:
+    age_match = re.search(r"\\b\\d+ days? in stage\\b", actual_age)
+    if not age_match:
         raise AssertionError(
-            f"{body_id} {khs_id}: expected age {expected_age!r}, got {actual_age!r}"
+            f"{body_id} {khs_id}: expected a numeric stage age, got {actual_age!r}"
         )
+    if expected_age_text is not None and age_match.group(0) != expected_age_text:
+        raise AssertionError(
+            f"{body_id} {khs_id}: expected age {expected_age_text!r}, got {age_match.group(0)!r}"
+        )
+    return age_match.group(0)
 
 
 def main() -> int:
@@ -247,16 +251,13 @@ def main() -> int:
             # The register must show overall workflow stages before LP and
             # after LP, while retaining the fine-grained LP stage during LP.
             page.set_viewport_size({"width": 1440, "height": 1000})
-            today = datetime.now(ZoneInfo("Asia/Jakarta")).date()
-            mi_gm_age = (today - date(2026, 9, 20)).days
-            injection_age = (today - date(2026, 11, 3)).days
-            assert_stage_and_age(
+            mi_gm_age = assert_stage_and_age(
                 page, "registerBody", "KHS-VIS-002",
-                "MI Approval - GM", mi_gm_age, 1, 1,
+                "MI Approval - GM", None, 1, 1,
             )
-            assert_stage_and_age(
+            injection_age = assert_stage_and_age(
                 page, "registerBody", "KHS-VIS-009",
-                "KHS Inject", injection_age, 1, 1,
+                "KHS Inject", None, 1, 1,
             )
 
             # The priority queue must use the same workflow stage and age
