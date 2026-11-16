@@ -49,6 +49,7 @@ ITEM_FIELDS = (
     "legacy_detailed_status",
     "source_col_s_audit_date",
     "migration_review",
+    "lp_timeline_source",
 )
 
 DATE_FIELDS = {
@@ -211,6 +212,19 @@ def _upsert_entity(conn, entity_type, record, batch_id):
     ).fetchone()
 
     if existing_row is None:
+        if entity_type == "KHS_ITEM" and any(
+            values.get(field) is not None
+            for field in (
+                "lp_circulation_start_date",
+                "lp_contract_team_completion_date",
+                "lp_junior_manager_approval_date",
+                "lp_senior_manager_approval_date",
+                "lp_gm_scm_approval_date",
+                "lp_completion_date",
+            )
+        ):
+            values["lp_timeline_source"] = "MILESTONE_TRACKED"
+
         insert_columns = (id_column,) + tuple(
             field for field in fields if field in values
         )
@@ -263,6 +277,22 @@ def _upsert_entity(conn, entity_type, record, batch_id):
             )
 
     existing = dict(zip(columns, existing_row))
+
+    if entity_type == "KHS_ITEM":
+        lp_milestone_fields = (
+            "lp_circulation_start_date",
+            "lp_contract_team_completion_date",
+            "lp_junior_manager_approval_date",
+            "lp_senior_manager_approval_date",
+            "lp_gm_scm_approval_date",
+            "lp_completion_date",
+        )
+        lp_milestones_changed = any(
+            field in values and values[field] != existing.get(field)
+            for field in lp_milestone_fields
+        )
+        if lp_milestones_changed:
+            values["lp_timeline_source"] = "MILESTONE_TRACKED"
 
     changes = {}
     for field, new_value in values.items():
