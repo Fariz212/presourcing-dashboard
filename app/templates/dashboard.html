@@ -57,7 +57,7 @@
 </div>
 
 <article class="panel attention-panel"><div class="panel-heading"><div><div class="eyebrow">ACTION REQUIRED</div><h2>Priority action queue</h2><p>Records awaiting approval, owner follow-up, or prerequisite review.</p></div><button class="text-button" data-go="register" data-attention-only="true">View attention queue →</button></div>
-<div class="table-wrap"><table><thead><tr><th>REQUEST / KHS</th><th>VENDOR</th><th>CURRENT STAGE</th><th>WAITING FOR / NEXT ACTION</th><th>UPDATED</th><th>ACTION</th></tr></thead><tbody id="attentionBody"><tr><td colspan="6" class="table-message">Loading…</td></tr></tbody></table></div></article>
+<div class="table-wrap"><table><thead><tr><th>REQUEST / KHS</th><th>VENDOR</th><th>CURRENT STAGE</th><th>WAITING FOR / NEXT ACTION</th><th>STAGE AGE / UPDATED</th><th>ACTION</th></tr></thead><tbody id="attentionBody"><tr><td colspan="6" class="table-message">Loading…</td></tr></tbody></table></div></article>
 <section class="approval-command" aria-labelledby="approvalCommandTitle">
   <div class="approval-command-heading">
     <div>
@@ -108,9 +108,9 @@
     <button type="button" class="text-button" data-go="contracts">Open contract lifecycle →</button>
   </div>
   <div class="contract-watch-grid">
-    <button type="button" class="contract-watch-card watch-six" data-contract-status="within_6m"><span>Renewal preparation</span><strong id="overviewExpiring6m">—</strong><small>Within 6 months</small></button>
-    <button type="button" class="contract-watch-card watch-three" data-contract-status="within_3m"><span>Renewal watch</span><strong id="overviewExpiring3m">—</strong><small>Within 3 months</small></button>
-    <button type="button" class="contract-watch-card watch-one" data-contract-status="within_1m"><span>Action required</span><strong id="overviewExpiring1m">—</strong><small>Within 1 month</small></button>
+    <button type="button" class="contract-watch-card watch-six" data-contract-status="within_6m"><span>Renewal preparation</span><strong id="overviewExpiring6m">—</strong><small>≤ 6 months · cumulative</small></button>
+    <button type="button" class="contract-watch-card watch-three" data-contract-status="within_3m"><span>Renewal watch</span><strong id="overviewExpiring3m">—</strong><small>≤ 3 months · cumulative</small></button>
+    <button type="button" class="contract-watch-card watch-one" data-contract-status="within_1m"><span>Action required</span><strong id="overviewExpiring1m">—</strong><small>≤ 1 month · cumulative</small></button>
     <button type="button" class="contract-watch-card watch-expired" data-contract-status="expired"><span>Expired</span><strong id="overviewExpiredContracts">—</strong><small>Past contract end date</small></button>
     <button type="button" class="contract-watch-card watch-missing" data-contract-status="missing_dates"><span>Missing dates</span><strong id="overviewMissingContractDates">—</strong><small>Fully injected · incomplete period</small></button>
   </div>
