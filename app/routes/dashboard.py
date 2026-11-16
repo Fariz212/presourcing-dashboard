@@ -2013,11 +2013,23 @@ lp_queue AS (
             'contract_team', 'junior_manager', 'senior_manager',
             'general_manager', 'director'
         ))::int AS active_total,
-        COUNT(*)::int AS records_in_circulation,
-        COUNT(*) FILTER (WHERE lp_stage_key = 'prerequisite_exception')::int AS prerequisite_exceptions,
-        COUNT(*) FILTER (WHERE lp_stage_key = 'legacy_unverified')::int AS legacy_unverified,
-        COUNT(*) FILTER (WHERE lp_timeline_has_gaps IS TRUE)::int AS timeline_gaps
+        COUNT(*)::int AS records_in_circulation
     FROM active_lp
+),
+lp_quality AS (
+    -- Data-quality exceptions are counted across the whole KHS portfolio,
+    -- including LPs already signed by the Director.
+    SELECT
+        COUNT(*) FILTER (
+            WHERE lp_started_without_mi_gm_approval IS TRUE
+        )::int AS prerequisite_exceptions,
+        COUNT(*) FILTER (
+            WHERE lp_stage_key = 'legacy_unverified'
+        )::int AS legacy_unverified,
+        COUNT(*) FILTER (
+            WHERE lp_timeline_has_gaps IS TRUE
+        )::int AS timeline_gaps
+    FROM register_state
 )
 SELECT
     mi_queue.junior_manager,
@@ -2030,11 +2042,12 @@ SELECT
     lp_queue.director,
     lp_queue.active_total,
     lp_queue.records_in_circulation,
-    lp_queue.prerequisite_exceptions,
-    lp_queue.legacy_unverified,
-    lp_queue.timeline_gaps
+    lp_quality.prerequisite_exceptions,
+    lp_quality.legacy_unverified,
+    lp_quality.timeline_gaps
 FROM mi_queue
-CROSS JOIN lp_queue;
+CROSS JOIN lp_queue
+CROSS JOIN lp_quality;
 """
 
 
