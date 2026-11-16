@@ -380,14 +380,15 @@ def build_current_khs_workbook(requests, items, executors, subtypes=None, waitin
             else "MILESTONE_TRACKED"
         )
         khs_ws[c["LP Timeline Quality"]] = (
-            f'=IF(AND("{source_flag}"="LEGACY_UNVERIFIED",'
+            f'=IF(AND({c["LP Circulation Start Date"]}<>"",'
+            f'OR({c["MI GM Approval Date"]}="",{c["LP Circulation Start Date"]}<{c["MI GM Approval Date"]})),"MI prerequisite exception",'
+            f'IF(AND("{source_flag}"="LEGACY_UNVERIFIED",'
             f'{c["LP Completion Date"]}="",COUNT({c["LP Contract Team Completion Date"]}:{c["LP GM SCM Approval Date"]})=0),"Legacy stage unverified",'
             f'IF(AND({c["LP Completion Date"]}<>"",COUNT({c["LP Circulation Start Date"]}:{c["LP GM SCM Approval Date"]})<5),"Completed · history gaps",'
             f'IF(OR(AND({c["LP Contract Team Completion Date"]}<>"",{c["LP Circulation Start Date"]}=""),'
             f'AND({c["LP Junior Manager Approval Date"]}<>"",OR({c["LP Contract Team Completion Date"]}="",{c["LP Circulation Start Date"]}="")),'
             f'AND({c["LP Senior Manager Approval Date"]}<>"",OR({c["LP Junior Manager Approval Date"]}="",{c["LP Contract Team Completion Date"]}="",{c["LP Circulation Start Date"]}="")),'
-            f'AND({c["LP GM SCM Approval Date"]}<>"",OR({c["LP Senior Manager Approval Date"]}="",{c["LP Junior Manager Approval Date"]}="",{c["LP Contract Team Completion Date"]}="",{c["LP Circulation Start Date"]}=""))),"Timeline gaps",'
-            f'IF(AND({c["LP Circulation Start Date"]}<>"",OR({c["MI GM Approval Date"]}="",{c["LP Circulation Start Date"]}<{c["MI GM Approval Date"]})),"MI prerequisite exception","Milestone tracked"))))'
+            f'AND({c["LP GM SCM Approval Date"]}<>"",OR({c["LP Senior Manager Approval Date"]}="",{c["LP Junior Manager Approval Date"]}="",{c["LP Contract Team Completion Date"]}="",{c["LP Circulation Start Date"]}=""))),"Timeline gaps","Milestone tracked"))))'
         )
         khs_ws[c["MI Status"]] = f'=IF({c["MI GM Approval Date"]}<>"","Completed","Not Completed")'
         khs_ws[c["LP Status"]] = (
