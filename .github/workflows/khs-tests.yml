@@ -5,6 +5,7 @@ on:
     branches: [khs, 'design/khs-atelier-ux']
   pull_request:
     branches: [khs]
+    types: [opened, synchronize, reopened, ready_for_review]
 
 permissions:
   contents: read
