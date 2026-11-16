@@ -1957,17 +1957,56 @@ def update_khs(khs_id):
 
 @dashboard_bp.get("/workflow")
 def workflow_monitoring():
+    # Use the Jakarta-local date so stage age is not affected by the database
+    # server timezone. Each age is anchored to the milestone that opened the
+    # current workflow stage; updated_at is deliberately not used as a proxy.
+    as_of = _jakarta_today().isoformat()
+    as_of_sql = f"DATE '{as_of}'"
     query = """
-        SELECT stage.stage_code, stage.stage_name, stage.sequence_number,
-               COUNT(register.khs_id)::int AS total,
-               COUNT(register.khs_id) FILTER (
-                   WHERE register.workflow_status = 'completed'
-               )::int AS completed
-        FROM khs_stage_config stage
-        LEFT JOIN (
-            SELECT khs_id, current_stage_code, lp_status, workflow_status
+        WITH register_state AS (
+            SELECT
+                derived_register.*,
+                CASE derived_register.current_stage_code
+                    WHEN 'REQUEST_RECEIVED' THEN derived_register.request_date
+                    WHEN 'DISPATCH' THEN derived_register.request_date
+                    WHEN 'BOQ_CONFIRMATION' THEN derived_register.dispatch_date
+                    WHEN 'NEGOTIATION' THEN derived_register.boq_confirmation_date
+                    WHEN 'FINAL_NEGOTIATION' THEN derived_register.negotiation_date
+                    WHEN 'MI_HEAD_APPROVAL' THEN derived_register.final_negotiation_date
+                    WHEN 'MI_SM_APPROVAL' THEN derived_register.mi_head_approval_date
+                    WHEN 'MI_GM_APPROVAL' THEN derived_register.mi_sm_approval_date
+                    WHEN 'LEGAL_SUBMISSION' THEN derived_register.mi_gm_approval_date
+                    WHEN 'LEGAL_PROCESSING' THEN derived_register.legal_submission_date
+                    WHEN 'LP_CIRCULATION' THEN derived_register.lp_circulation_start_date
+                    WHEN 'KHS_INJECTION' THEN derived_register.lp_completion_date
+                    ELSE NULL
+                END AS stage_started_on
             FROM (""" + REGISTER_BASE_QUERY + """) AS derived_register
-        ) AS register
+        )
+        SELECT
+            stage.stage_code,
+            stage.stage_name,
+            stage.sequence_number,
+            COUNT(register.khs_id)::int AS total,
+            COUNT(register.khs_id) FILTER (
+                WHERE register.workflow_status = 'completed'
+            )::int AS completed,
+            MAX(
+                CASE
+                    WHEN register.stage_started_on <= """ + as_of_sql + """
+                    THEN """ + as_of_sql + """ - register.stage_started_on
+                    ELSE NULL
+                END
+            )::int AS oldest_stage_age_days,
+            COUNT(register.khs_id) FILTER (
+                WHERE stage.stage_code <> 'COMPLETED'
+                  AND (
+                      register.stage_started_on IS NULL
+                      OR register.stage_started_on > """ + as_of_sql + """
+                  )
+            )::int AS stage_age_unavailable
+        FROM khs_stage_config stage
+        LEFT JOIN register_state AS register
           ON register.current_stage_code = stage.stage_code
         WHERE stage.is_active = TRUE
         GROUP BY stage.stage_code, stage.stage_name, stage.sequence_number
