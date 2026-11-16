@@ -138,13 +138,85 @@ def main() -> int:
                 capture_errors.append(f"{file_name}: {error}")
                 print(f"FAILED {file_name}: {error}")
 
+        # Capture the interaction surfaces that carry the LP workflow:
+        # the KHS detail journey and the grouped KHS form.
+        try:
+            if current_page != "register":
+                page.locator('a.nav-link[data-page="register"]').first.click(timeout=10_000)
+                current_page = "register"
+            page.locator("#page-register.active").wait_for(state="visible", timeout=15_000)
+            page.wait_for_load_state("networkidle", timeout=20_000)
+
+            detail_button = page.locator("#registerBody [data-view-khs]").first
+            detail_button.wait_for(state="visible", timeout=15_000)
+            detail_button.click(timeout=10_000)
+            page.locator("#detailDialog[open]").wait_for(state="visible", timeout=10_000)
+            page.locator("#lpTimeline .lp-timeline-item").first.wait_for(state="visible", timeout=10_000)
+
+            def capture_dialog(name: str, viewport_name: str, width: int, height: int) -> None:
+                page.set_viewport_size({"width": width, "height": height})
+                page.wait_for_timeout(300)
+                file_name = f"{name}-{viewport_name}.png"
+                target = OUTPUT_DIR / file_name
+                page.screenshot(path=str(target), full_page=False, animations="disabled")
+                dimensions = page.evaluate(
+                    """() => ({
+                        viewportWidth: window.innerWidth,
+                        documentWidth: Math.max(
+                            document.documentElement.scrollWidth,
+                            document.body.scrollWidth
+                        ),
+                        documentHeight: Math.max(
+                            document.documentElement.scrollHeight,
+                            document.body.scrollHeight
+                        )
+                    })"""
+                )
+                overflow = int(dimensions["documentWidth"]) - int(dimensions["viewportWidth"])
+                if overflow > 3:
+                    overflow_warnings.append({
+                        "page": name,
+                        "viewport": viewport_name,
+                        "horizontal_overflow_px": overflow,
+                        "dimensions": dimensions,
+                    })
+                captures.append({
+                    "page": name,
+                    "viewport": viewport_name,
+                    "width": width,
+                    "height": height,
+                    "file": file_name,
+                    "document_width": dimensions["documentWidth"],
+                    "document_height": dimensions["documentHeight"],
+                    "horizontal_overflow_px": max(0, overflow),
+                })
+                print(f"Captured {file_name}")
+
+            capture_dialog("khs-detail", "desktop", 1440, 1000)
+            capture_dialog("khs-detail", "mobile", 390, 844)
+            page.locator("#closeDialog").click()
+            page.locator("#detailDialog").wait_for(state="hidden", timeout=10_000)
+
+            page.set_viewport_size({"width": 1440, "height": 1000})
+            page.locator("#createKhsButton").click(timeout=10_000)
+            page.locator("#recordDialog[open]").wait_for(state="visible", timeout=10_000)
+            page.locator("#dialogFields .form-section-lp-circulation").wait_for(
+                state="visible", timeout=10_000
+            )
+            capture_dialog("khs-form", "desktop", 1440, 1000)
+            capture_dialog("khs-form", "mobile", 390, 844)
+            page.locator("#cancelRecord").click()
+        except Exception as error:
+            capture_errors.append(f"KHS detail/form interaction captures: {error}")
+            print(f"FAILED KHS detail/form interaction captures: {error}")
+
         browser.close()
 
     report = {
         "base_url": BASE_URL,
         "generated_at_unix": int(time()),
         "capture_count": len(captures),
-        "expected_capture_count": len(CAPTURES),
+        "expected_capture_count": len(CAPTURES) + 4,
         "captures": captures,
         "api_failures": api_failures,
         "uncaught_page_errors": page_errors,
@@ -218,7 +290,7 @@ img {{ display: block; width: 100%; height: auto; border: 1px solid #e8e7e0; bor
 
     if api_failures or page_errors or capture_errors:
         return 1
-    if len(captures) != len(CAPTURES):
+    if len(captures) != len(CAPTURES) + 4:
         return 1
     return 0
 
