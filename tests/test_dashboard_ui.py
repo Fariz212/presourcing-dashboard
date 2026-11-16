@@ -282,6 +282,65 @@ def test_khs_detail_and_form_prioritize_lp_workflow(monkeypatch, tmp_path):
         assert selector in stylesheet.data
 
 
+
+def test_lean_workspace_navigation_responsive_tables_and_activity_filters(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        "app.init_db_pool",
+        lambda _app: DummyPool(),
+    )
+    flask_app = create_app({
+        "TESTING": True,
+        "SECRET_KEY": "lean-workspace-test-secret",
+        "DATABASE_URL": "postgresql://test:test@localhost/test",
+        "UPLOAD_DIR": tmp_path / "uploads",
+    })
+    client = flask_app.test_client()
+
+    response = client.get("/dashboard")
+    assert response.status_code == 200
+    body = response.data.decode("utf-8")
+    assert 'id="mobileNavToggle"' in body
+    assert 'id="primarySideNav"' in body
+    assert 'id="dataSideNav"' in body
+    assert 'id="activeRegisterFilters"' in body
+    assert 'class="register-table-wrap"' in body
+    assert 'id="activitySearch"' in body
+    assert 'id="activityEntityFilter"' in body
+    assert 'id="quickAddKhs"' not in body
+    assert 'id="qualityAlert"' not in body
+    assert 'class="overview-grid"' not in body
+
+    javascript = client.get("/static/js/dashboard.js")
+    assert javascript.status_code == 200
+    script = javascript.data
+    for marker in (
+        b"function observeResponsiveTables()",
+        b"function renderActiveRegisterFilters()",
+        b"data-workflow-stage",
+        b"state.activityQuery",
+        b"state.saving",
+        b"Saving",
+        b"syncRefreshVisibility(page)",
+    ):
+        assert marker in script
+
+    stylesheet = client.get("/static/css/dashboard-studio.css")
+    assert stylesheet.status_code == 200
+    for selector in (
+        b".mobile-nav-toggle",
+        b".sidebar.nav-open .side-nav",
+        b".table-wrap tbody tr",
+        b".filter-chip",
+        b".form-error",
+    ):
+        assert selector in stylesheet.data
+
+    unsupported_entity = client.get("/api/dashboard/activity?entity_type=IMPORT")
+    assert unsupported_entity.status_code == 400
+    long_search = client.get("/api/dashboard/activity?q=" + ("x" * 101))
+    assert long_search.status_code == 400
+
+
 def test_dashboard_graphs_have_clear_labels_and_status_legend(monkeypatch, tmp_path):
     monkeypatch.setattr(
         "app.init_db_pool",
