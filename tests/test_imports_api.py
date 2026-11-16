@@ -4,6 +4,7 @@ from uuid import uuid4
 
 import pytest
 from openpyxl import Workbook, load_workbook
+from openpyxl.utils import get_column_letter
 
 from app import create_app
 from app.services.excel_workbook import build_current_khs_workbook
@@ -250,7 +251,7 @@ def test_download_current_workbook_contains_v23_schema(client):
     assert "attachment;" in response.headers["Content-Disposition"]
     assert response.headers["Cache-Control"] == "no-store"
 
-    workbook = load_workbook(BytesIO(response.data), data_only=True)
+    workbook = load_workbook(BytesIO(response.data), data_only=False)
     try:
         assert workbook.sheetnames == [
             "00 - Instructions",
@@ -258,16 +259,26 @@ def test_download_current_workbook_contains_v23_schema(client):
             "02 - KHS Tracking",
             "03 - Master Data",
         ]
-        request_headers = {
-            cell.value for cell in workbook["01 - Request Register"][5]
-        }
-        khs_headers = {
-            cell.value for cell in workbook["02 - KHS Tracking"][5]
-        }
+        request_ws = workbook["01 - Request Register"]
+        khs_ws = workbook["02 - KHS Tracking"]
+        request_headers = {cell.value: cell.column for cell in request_ws[5]}
+        khs_headers = {cell.value: cell.column for cell in khs_ws[5]}
         assert "Request Subject" in request_headers
         assert "KHS Inject Start Date" in khs_headers
         assert "KHS Inject Completion Date" in khs_headers
         assert "KHS ID" in khs_headers
+        assert "LP Timeline Quality" in khs_headers
+        assert "LP Next Approver" in khs_headers
+        assert request_ws.cell(6, request_headers["Total KHS"]).data_type == "f"
+        assert request_ws.cell(6, request_headers["Request Status"]).data_type == "f"
+        for name in ("MI Status", "LP Status", "Workflow Status", "Current Stage", "LP Next Approver"):
+            assert khs_ws.cell(6, khs_headers[name]).data_type == "f", name
+        waiting_range = f"{get_column_letter(khs_headers['Waiting For'])}6:{get_column_letter(khs_headers['Waiting For'])}1048576"
+        validation_ranges = [str(item.sqref) for item in khs_ws.data_validations.dataValidation]
+        assert waiting_range in validation_ranges
+        assert "AA6:AA1048576" not in validation_ranges
+        assert workbook.calculation.fullCalcOnLoad is True
+        assert workbook.calculation.forceFullCalc is True
         assert "Blank cells do not erase existing database values." in workbook["00 - Instructions"]["B7"].value
     finally:
         workbook.close()
