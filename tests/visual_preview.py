@@ -200,9 +200,9 @@ def main() -> int:
             page.set_viewport_size({"width": 1440, "height": 1000})
             page.locator("#createKhsButton").click(timeout=10_000)
             page.locator("#recordDialog[open]").wait_for(state="visible", timeout=10_000)
-            page.locator("#dialogFields .form-section-lp-circulation").wait_for(
-                state="visible", timeout=10_000
-            )
+            lp_form_section = page.locator("#dialogFields .form-section-lp-circulation")
+            lp_form_section.wait_for(state="visible", timeout=10_000)
+            lp_form_section.scroll_into_view_if_needed()
             capture_dialog("khs-form", "desktop", 1440, 1000)
             capture_dialog("khs-form", "mobile", 390, 844)
             page.locator("#cancelRecord").click()
