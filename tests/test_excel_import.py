@@ -580,6 +580,11 @@ def test_formula_in_input_date_column_is_rejected():
         and issue["field"] == "Dispatch Date"
         for issue in result["issues"]
     )
+    assert any(
+        issue["code"] == "FORMULA_IN_INPUT"
+        and issue["field"] == "Dispatch Date"
+        for issue in result["issues"]
+    )
 
 
 def test_current_workbook_calculated_columns_recalculate_and_waiting_dropdown_is_aligned():
