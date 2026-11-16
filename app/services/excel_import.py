@@ -364,7 +364,7 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None, k
         workbook = load_workbook(
             file_object,
             read_only=True,
-            data_only=True,
+            data_only=False,
         )
 
     except Exception as exc:
@@ -435,7 +435,15 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None, k
             if not subject and existing_request:
                 subject = existing_request.get("request_subject")
 
-            if not request_id and not subject:
+            if not any(cell.value not in (None, "") for cell in cells):
+                continue
+
+            if not request_id:
+                _add_issue(
+                    issues, "ERROR", "MISSING_REQUEST_ID",
+                    "REQUEST", row_number, "Request ID",
+                    "This row contains data but has no Request ID.",
+                )
                 continue
 
             if not request_id:
@@ -451,6 +459,14 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None, k
                     issues, "ERROR", "DUPLICATE_REQUEST_ID",
                     "REQUEST", row_number, "Request ID",
                     f"Duplicate Request ID: {request_id}.",
+                )
+                continue
+
+            if isinstance(known_requests, dict) and request_id not in known_requests:
+                _add_issue(
+                    issues, "ERROR", "NEW_REQUEST_NOT_ALLOWED",
+                    "REQUEST", row_number, "Request ID",
+                    "New Requests must be created in the web application so IDs are generated safely.",
                 )
                 continue
 
@@ -474,6 +490,11 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None, k
 
             record = {
                 "source_excel_row": row_number,
+                "_raw_data": {
+                    header: cells[index].value
+                    for header, index in request_map.items()
+                    if index < len(cells)
+                },
                 "request_id": request_id,
                 "request_date": dates["request_date"],
                 "request_subject": subject,
@@ -543,7 +564,15 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None, k
                 _value(cells, khs_map, "Request / Subject")
             )
 
-            if not any((khs_id, request_id, vendor, subject)):
+            if not any(cell.value not in (None, "") for cell in cells):
+                continue
+
+            if not khs_id:
+                _add_issue(
+                    issues, "ERROR", "MISSING_KHS_ID",
+                    "KHS_ITEM", row_number, "KHS ID",
+                    "This row contains data but has no KHS ID.",
+                )
                 continue
 
             row_has_error = False
@@ -566,6 +595,18 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None, k
                     )
 
             if row_has_error:
+                continue
+
+            if isinstance(known_items, dict) and khs_id not in known_items:
+                _add_issue(
+                    issues,
+                    "ERROR",
+                    "NEW_KHS_NOT_ALLOWED",
+                    "KHS_ITEM",
+                    row_number,
+                    "KHS ID",
+                    "New KHS records must be created in the web application so IDs are generated safely.",
+                )
                 continue
 
             if khs_id in item_ids:
@@ -780,10 +821,21 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None, k
                 value for value in mi_dates if value is not None
             ]
 
+            mi_date_fields = (
+                "mi_head_approval_date",
+                "mi_sm_approval_date",
+                "mi_gm_approval_date",
+            )
+            mi_dates_changed = any(
+                dates.get(field) is not None
+                and dates.get(field) != (existing_item or {}).get(field)
+                for field in mi_date_fields
+            )
+
             if populated_mi_dates != sorted(populated_mi_dates):
                 _add_issue(
                     issues,
-                    "WARNING",
+                    "ERROR" if mi_dates_changed else "WARNING",
                     "MI_APPROVAL_CHRONOLOGY",
                     "KHS_ITEM",
                     row_number,
@@ -856,10 +908,17 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None, k
             )
             mi_gm = effective_dates["mi_gm_approval_date"]
 
+            mi_gm_changed = (
+                dates.get("mi_gm_approval_date") is not None
+                and dates.get("mi_gm_approval_date")
+                    != (existing_item or {}).get("mi_gm_approval_date")
+            )
+            prerequisite_changed = lp_milestones_changed or mi_gm_changed
+
             if lp_start and not mi_gm:
                 _add_issue(
                     issues,
-                    "WARNING",
+                    "ERROR" if prerequisite_changed else "WARNING",
                     "LP_START_WITHOUT_MI_GM_DATE",
                     "KHS_ITEM",
                     row_number,
@@ -871,7 +930,7 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None, k
             elif lp_start and mi_gm and lp_start < mi_gm:
                 _add_issue(
                     issues,
-                    "WARNING",
+                    "ERROR" if prerequisite_changed else "WARNING",
                     "LP_START_BEFORE_MI_GM",
                     "KHS_ITEM",
                     row_number,
@@ -975,6 +1034,11 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None, k
 
             record = {
                 "source_excel_row": row_number,
+                "_raw_data": {
+                    header: cells[index].value
+                    for header, index in khs_map.items()
+                    if index < len(cells)
+                },
                 "khs_id": khs_id,
                 "request_id": request_id,
                 "source_row_no": _source_row_number(
