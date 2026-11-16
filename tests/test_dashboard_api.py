@@ -565,6 +565,26 @@ def test_lp_update_rejects_new_intermediate_date_without_start():
     )
 
 
+def test_lp_update_rejects_skipping_an_earlier_approval_milestone():
+    before = {
+        "lp_circulation_start_date": date(2026, 2, 1),
+        "lp_contract_team_completion_date": None,
+        "lp_junior_manager_approval_date": None,
+        "lp_senior_manager_approval_date": None,
+        "lp_gm_scm_approval_date": None,
+        "lp_completion_date": None,
+    }
+
+    error = _lp_milestone_update_error(
+        before,
+        {"lp_junior_manager_approval_date": date(2026, 2, 5)},
+    )
+
+    assert error is not None
+    assert error[0] == "LP_MILESTONE_GAP"
+    assert "lp_contract_team_completion_date" in error[1]
+
+
 def test_lp_update_rejects_out_of_order_new_milestone():
     before = {
         "lp_circulation_start_date": date(2026, 2, 1),
