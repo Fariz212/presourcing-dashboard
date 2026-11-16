@@ -104,6 +104,14 @@ def main() -> int:
                 page.set_viewport_size({"width": width, "height": height})
                 page.wait_for_timeout(500)
 
+                if page_name == "overview" and viewport_name == "mobile":
+                    total_attention_rows = page.locator("#attentionBody tr").count()
+                    visible_attention_rows = page.locator("#attentionBody tr:visible").count()
+                    if total_attention_rows > 3 and visible_attention_rows != 3:
+                        raise AssertionError(
+                            f"Mobile priority queue should show three rows, found {visible_attention_rows}"
+                        )
+
                 dimensions = page.evaluate(
                     """() => ({
                         viewportWidth: window.innerWidth,
@@ -179,6 +187,25 @@ def main() -> int:
             page.locator('a.nav-link[data-page="workflow"]').first.click(timeout=10_000)
             current_page = "workflow"
             page.locator("#page-workflow.active").wait_for(state="visible", timeout=15_000)
+            default_stage_count = page.locator("#workflowCards [data-workflow-stage]").count()
+            if default_stage_count == 0:
+                raise AssertionError("Workflow should show stages that currently contain records")
+            stage_toggle = page.locator("#workflowEmptyToggle")
+            if stage_toggle.is_visible():
+                default_summary = page.locator("#workflowStageSummary").inner_text()
+                if "stages have records" not in default_summary:
+                    raise AssertionError(f"Workflow occupancy summary is unclear: {default_summary}")
+                stage_toggle.click(timeout=10_000)
+                expanded_stage_count = page.locator("#workflowCards [data-workflow-stage]").count()
+                if expanded_stage_count <= default_stage_count:
+                    raise AssertionError("Showing empty stages did not expand the workflow")
+                if stage_toggle.get_attribute("aria-expanded") != "true":
+                    raise AssertionError("Empty-stage toggle did not expose its expanded state")
+                stage_toggle.click(timeout=10_000)
+                collapsed_stage_count = page.locator("#workflowCards [data-workflow-stage]").count()
+                if collapsed_stage_count != default_stage_count:
+                    raise AssertionError("Workflow empty stages did not collapse back to the occupied stages")
+
             stage_card = page.locator("#workflowCards [data-workflow-stage]").first
             stage_card.wait_for(state="visible", timeout=15_000)
             stage_card.click(timeout=10_000)
