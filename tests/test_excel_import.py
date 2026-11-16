@@ -526,6 +526,22 @@ def test_duplicate_khs_id_is_rejected():
     assert "DUPLICATE_KHS_ID" in codes
 
 
+def test_lp_milestone_update_cannot_skip_an_earlier_approval():
+    result = parse_khs_workbook(
+        build_workbook({
+            "LP Circulation Start Date": datetime(2026, 11, 1),
+            "LP Junior Manager Approval Date": datetime(2026, 11, 5),
+        }),
+        known_executors={"ALW"},
+    )
+    assert result["summary"]["can_import"] is False
+    assert any(
+        issue["code"] == "LP_MILESTONE_GAP"
+        and "lp_contract_team_completion_date" in issue["message"]
+        for issue in result["issues"]
+    )
+
+
 def test_khs_row_with_data_but_missing_id_is_rejected():
     workbook = build_workbook()
     source = load_workbook(workbook)
