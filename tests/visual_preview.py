@@ -24,14 +24,19 @@ CAPTURES = [
     ("overview", "tablet", 1024, 900),
     ("overview", "mobile", 390, 844),
     ("requests", "desktop", 1440, 1000),
+    ("requests", "mobile", 390, 844),
     ("register", "desktop", 1440, 1000),
     ("register", "mobile", 390, 844),
     ("lp", "desktop", 1440, 1000),
     ("lp", "mobile", 390, 844),
     ("contracts", "desktop", 1440, 1000),
     ("workflow", "desktop", 1440, 1000),
+    ("workflow", "mobile", 390, 844),
+    ("contracts", "mobile", 390, 844),
     ("imports", "desktop", 1440, 1000),
+    ("imports", "mobile", 390, 844),
     ("activity", "desktop", 1440, 1000),
+    ("activity", "mobile", 390, 844),
 ]
 
 
@@ -106,7 +111,14 @@ def main() -> int:
                         documentHeight: Math.max(
                             document.documentElement.scrollHeight,
                             document.body.scrollHeight
-                        )
+                        ),
+                        tableOverflows: Array.from(document.querySelectorAll(".table-wrap"))
+                            .filter((element) => element.scrollWidth > element.clientWidth + 3)
+                            .map((element) => ({
+                                className: element.className,
+                                scrollWidth: element.scrollWidth,
+                                clientWidth: element.clientWidth
+                            }))
                     })"""
                 )
                 overflow = int(dimensions["documentWidth"]) - int(dimensions["viewportWidth"])
@@ -116,6 +128,12 @@ def main() -> int:
                         "viewport": viewport_name,
                         "horizontal_overflow_px": overflow,
                         "dimensions": dimensions,
+                    })
+                if width <= 760 and dimensions.get("tableOverflows"):
+                    overflow_warnings.append({
+                        "page": page_name,
+                        "viewport": viewport_name,
+                        "responsive_table_overflow": dimensions["tableOverflows"],
                     })
 
                 page.screenshot(
@@ -137,6 +155,36 @@ def main() -> int:
             except Exception as error:
                 capture_errors.append(f"{file_name}: {error}")
                 print(f"FAILED {file_name}: {error}")
+
+        # Verify the mobile navigation exposes every page without horizontal menu hunting.
+        try:
+            page.set_viewport_size({"width": 390, "height": 844})
+            page.locator("#mobileNavToggle").click(timeout=10_000)
+            page.locator('#dataSideNav a[data-page="activity"]').wait_for(state="visible", timeout=10_000)
+            page.locator('#primarySideNav a[data-page="workflow"]').wait_for(state="visible", timeout=10_000)
+            page.locator("#mobileNavToggle").click(timeout=10_000)
+            if page.locator("#dataSideNav a[data-page='activity']:visible").count() != 0:
+                raise AssertionError("Mobile navigation did not collapse after closing the menu")
+        except Exception as error:
+            capture_errors.append(f"Mobile navigation interaction: {error}")
+            print(f"FAILED mobile navigation interaction: {error}")
+
+        # Verify workflow stage summaries open the matching KHS Register filter.
+        try:
+            page.locator('a.nav-link[data-page="workflow"]').first.click(timeout=10_000)
+            current_page = "workflow"
+            page.locator("#page-workflow.active").wait_for(state="visible", timeout=15_000)
+            stage_card = page.locator("#workflowCards [data-workflow-stage]").first
+            stage_card.wait_for(state="visible", timeout=15_000)
+            stage_card.click(timeout=10_000)
+            current_page = "register"
+            page.locator("#page-register.active").wait_for(state="visible", timeout=15_000)
+            page.locator("#registerBody tr").first.wait_for(state="visible", timeout=15_000)
+            if page.locator("#activeRegisterFilters").is_hidden():
+                raise AssertionError("Workflow stage drilldown did not expose its active filter")
+        except Exception as error:
+            capture_errors.append(f"Workflow stage drilldown: {error}")
+            print(f"FAILED workflow stage drilldown: {error}")
 
         # Capture the interaction surfaces that carry the LP workflow:
         # the KHS detail journey and the grouped KHS form.
