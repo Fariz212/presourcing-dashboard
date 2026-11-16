@@ -201,6 +201,9 @@ def test_partial_khs_excel_roundtrip_updates_existing_record(client):
         assert preview_payload["summary"]["total_requests"] == 0
         assert preview_payload["summary"]["total_khs_items"] == 1
         assert preview_payload["summary"]["error_rows"] == 0
+        assert preview_payload["change_plan"]["updated_khs_items"] == 1
+        assert preview_payload["change_plan"]["changed_fields_count"] == 2
+        assert preview_payload["change_plan"]["changes"][0]["id"] == khs_id
         batch_id = preview_payload["batch_id"]
 
         confirmation = client.post(

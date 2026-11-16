@@ -109,6 +109,30 @@ def _row_status(issues):
     return "VALID"
 
 
+def _planned_change(entity, record, existing):
+    """Describe exactly which non-blank source values would change a record."""
+    id_field = "request_id" if entity == "REQUEST" else "khs_id"
+    excluded = {"source_excel_row", id_field}
+    changed_fields = [
+        field
+        for field, value in record.items()
+        if field not in excluded
+        and value is not None
+        and (existing is None or value != existing.get(field))
+    ]
+    operation = (
+        "NEW" if existing is None
+        else "UPDATED" if changed_fields
+        else "UNCHANGED"
+    )
+    return {
+        "entity": entity,
+        "id": record.get(id_field),
+        "operation": operation,
+        "changed_fields": changed_fields,
+    }
+
+
 @imports_bp.get("/workbook.xlsx")
 def download_current_workbook():
     """Download a current-data Excel snapshot with the active import schema."""
@@ -294,7 +318,7 @@ def preview_import():
 
             request_rows = conn.execute(
                 """
-                SELECT request_id, request_date, request_subject
+                SELECT request_id, request_date, request_subject, requester_owner
                 FROM khs_requests
                 """
             ).fetchall()
@@ -302,6 +326,7 @@ def preview_import():
                 row[0]: {
                     "request_date": row[1],
                     "request_subject": row[2],
+                    "requester_owner": row[3],
                 }
                 for row in request_rows
             }
@@ -358,6 +383,35 @@ def preview_import():
                 for item in parsed["items"]
             ]
         )
+
+        planned_changes = []
+        for entity, _, record in staged_records:
+            existing_record = (
+                known_requests.get(record["request_id"])
+                if entity == "REQUEST"
+                else known_items.get(record["khs_id"])
+            )
+            planned_changes.append(
+                _planned_change(entity, record, existing_record)
+            )
+
+        change_plan = {
+            "total_records": len(planned_changes),
+            "new_records": sum(item["operation"] == "NEW" for item in planned_changes),
+            "updated_records": sum(item["operation"] == "UPDATED" for item in planned_changes),
+            "unchanged_records": sum(item["operation"] == "UNCHANGED" for item in planned_changes),
+            "new_requests": sum(item["entity"] == "REQUEST" and item["operation"] == "NEW" for item in planned_changes),
+            "updated_requests": sum(item["entity"] == "REQUEST" and item["operation"] == "UPDATED" for item in planned_changes),
+            "unchanged_requests": sum(item["entity"] == "REQUEST" and item["operation"] == "UNCHANGED" for item in planned_changes),
+            "new_khs_items": sum(item["entity"] == "KHS_ITEM" and item["operation"] == "NEW" for item in planned_changes),
+            "updated_khs_items": sum(item["entity"] == "KHS_ITEM" and item["operation"] == "UPDATED" for item in planned_changes),
+            "unchanged_khs_items": sum(item["entity"] == "KHS_ITEM" and item["operation"] == "UNCHANGED" for item in planned_changes),
+            "changed_fields_count": sum(len(item["changed_fields"]) for item in planned_changes),
+            "changes": [
+                item for item in planned_changes
+                if item["operation"] != "UNCHANGED"
+            ][:100],
+        }
 
         row_keys = {
             (entity, record["source_excel_row"])
@@ -442,6 +496,8 @@ def preview_import():
                         warning_count,
                         error_count,
                         Jsonb({
+                            "template_version": parsed["template_version"],
+                            "change_plan": change_plan,
                             "parser_summary": parsed["summary"],
                             "workbook_issues": workbook_issues,
                             "unrepresented_error_rows": len(
@@ -529,6 +585,7 @@ def preview_import():
                     and not has_global_error
                 ),
             },
+            "change_plan": change_plan,
             "issues": issues[:500],
             "issues_truncated": len(issues) > 500,
         }), 201

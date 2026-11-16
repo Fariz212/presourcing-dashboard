@@ -221,6 +221,7 @@ def test_current_v24_workbook_round_trips_lp_and_khs_inject_dates():
             "executor_code": "ALW",
             "subtype": "Renewal",
             "dispatch_date": date(2026, 11, 2),
+            "mi_gm_approval_date": date(2026, 11, 9),
             "lp_circulation_start_date": date(2026, 11, 10),
             "lp_contract_team_completion_date": date(2026, 11, 11),
             "lp_junior_manager_approval_date": date(2026, 11, 12),
@@ -268,6 +269,7 @@ def test_khs_only_partial_workbook_can_reference_existing_request():
             "vendor_name": "PT Test Vendor",
             "executor_code": "ALW",
             "subtype": "Renewal",
+            "mi_gm_approval_date": date(2026, 11, 9),
             "lp_circulation_start_date": date(2026, 11, 10),
             "lp_completion_date": date(2026, 11, 12),
             "khs_inject_start_date": date(2026, 11, 13),
@@ -410,7 +412,7 @@ def test_inject_completion_chronology_is_validated():
     assert result["summary"]["can_import"] is False
     assert "INJECT_COMPLETION_BEFORE_START" in codes
 
-def test_lp_start_without_mi_gm_generates_warning():
+def test_new_lp_start_without_mi_gm_is_blocked():
     result = parse_khs_workbook(
         build_workbook({
             "LP Circulation Start Date": datetime(2026, 11, 10),
@@ -419,10 +421,121 @@ def test_lp_start_without_mi_gm_generates_warning():
         known_executors={"ALW"},
     )
 
-    codes = {issue["code"] for issue in result["issues"]}
+    issues = [
+        issue for issue in result["issues"]
+        if issue["code"] == "LP_START_WITHOUT_MI_GM_DATE"
+    ]
+
+    assert result["summary"]["can_import"] is False
+    assert len(issues) == 1
+    assert issues[0]["severity"] == "ERROR"
+
+
+def test_unchanged_legacy_lp_prerequisite_exception_remains_a_warning():
+    lp_start = date(2026, 10, 20)
+    result = parse_khs_workbook(
+        build_workbook({
+            "LP Circulation Start Date": datetime(2026, 10, 20),
+            "Original Source Column S (Audit Copy - LP Circulation Start Date)": datetime(2026, 10, 20),
+        }),
+        known_executors={"ALW"},
+        known_requests={
+            "REQ-2026-001": {
+                "request_date": date(2026, 11, 1),
+                "request_subject": "KHS Test Request",
+            }
+        },
+        known_items={
+            "KHS-2026-0001": {
+                "request_id": "REQ-2026-001",
+                "vendor_name": "PT Test Vendor",
+                "lp_circulation_start_date": lp_start,
+                "mi_gm_approval_date": None,
+                "lp_contract_team_completion_date": None,
+                "lp_junior_manager_approval_date": None,
+                "lp_senior_manager_approval_date": None,
+                "lp_gm_scm_approval_date": None,
+                "lp_completion_date": None,
+            }
+        },
+    )
+
+    issues = [
+        issue for issue in result["issues"]
+        if issue["code"] == "LP_START_WITHOUT_MI_GM_DATE"
+    ]
 
     assert result["summary"]["can_import"] is True
-    assert "LP_START_WITHOUT_MI_GM_DATE" in codes
+    assert len(issues) == 1
+    assert issues[0]["severity"] == "WARNING"
+
+
+def test_lp_start_before_mi_gm_approval_is_blocked():
+    result = parse_khs_workbook(
+        build_workbook({
+            "MI GM Approval Date": datetime(2026, 11, 25),
+            "LP Circulation Start Date": datetime(2026, 10, 20),
+            "LP Contract Team Completion Date": datetime(2026, 11, 5),
+            "LP Junior Manager Approval Date": datetime(2026, 11, 6),
+            "LP Senior Manager Approval Date": datetime(2026, 11, 7),
+            "LP GM SCM Approval Date": datetime(2026, 11, 8),
+            "LP Completion Date (Director Signed)": datetime(2026, 11, 9),
+        }),
+        known_executors={"ALW"},
+    )
+
+    issues = [
+        issue for issue in result["issues"]
+        if issue["code"] == "LP_START_BEFORE_MI_GM"
+    ]
+    assert result["summary"]["can_import"] is False
+    assert len(issues) == 1
+    assert issues[0]["severity"] == "ERROR"
+
+
+def test_nonempty_khs_row_without_id_is_not_silently_skipped():
+    result = parse_khs_workbook(
+        build_workbook(
+            extra_items=[{
+                "KHS ID": None,
+                "Request ID": None,
+                "Vendor Name": None,
+                "LP Circulation Start Date": datetime(2026, 11, 11),
+            }]
+        ),
+        known_executors={"ALW"},
+    )
+
+    assert result["summary"]["can_import"] is False
+    assert any(
+        issue["code"] == "MISSING_KHS_ID"
+        and issue["severity"] == "ERROR"
+        for issue in result["issues"]
+    )
+
+
+def test_formula_in_editable_date_field_is_rejected():
+    workbook = build_workbook()
+    editable = load_workbook(workbook, data_only=False)
+    try:
+        ws = editable["02 - KHS Tracking"]
+        header_row = 4
+        headers = [cell.value for cell in ws[header_row]]
+        dispatch_column = headers.index("Dispatch Date") + 1
+        ws.cell(row=5, column=dispatch_column).value = "=DATE(2026,11,1)"
+        output = BytesIO()
+        editable.save(output)
+        output.seek(0)
+    finally:
+        editable.close()
+
+    result = parse_khs_workbook(output, known_executors={"ALW"})
+    assert result["summary"]["can_import"] is False
+    assert any(
+        issue["code"] == "FORMULA_IN_INPUT_FIELD"
+        and issue["field"] == "Dispatch Date"
+        for issue in result["issues"]
+    )
 
 
 def test_lp_completion_before_start_is_rejected():

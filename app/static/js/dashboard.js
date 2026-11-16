@@ -229,8 +229,9 @@ function renderApprovalPipeline(data) {
   if (!data) {
     [
       "miQueueTotal", "miJuniorCount", "miSeniorCount", "miGeneralCount",
-      "lpQueueTotal", "lpJuniorCount", "lpSeniorCount", "lpGeneralCount",
-      "lpDirectorCount", "lpOtherCount"
+      "lpQueueTotal", "lpContractTeamCount", "lpJuniorCount", "lpSeniorCount",
+      "lpGeneralCount", "lpDirectorCount", "lpPrerequisiteCount",
+      "lpLegacyUnverifiedCount", "lpTimelineGapsCount"
     ].forEach((id) => set(id, "—"));
     set("lpQueueNote", "Approval queue data is temporarily unavailable.");
     return;
@@ -251,15 +252,18 @@ function renderApprovalPipeline(data) {
   set("miGeneralCount", miGeneral);
   set("miQueueTotal", miJunior + miSenior + miGeneral);
 
+  set("lpContractTeamCount", countFor(lp, "contract_team"));
   set("lpJuniorCount", countFor(lp, "junior_manager"));
   set("lpSeniorCount", countFor(lp, "senior_manager"));
   set("lpGeneralCount", countFor(lp, "general_manager"));
   set("lpDirectorCount", countFor(lp, "director"));
   set("lpQueueTotal", data.lp_active_total);
-  set("lpOtherCount", data.lp_unassigned_or_other);
+  set("lpPrerequisiteCount", data.lp_prerequisite_exceptions || 0);
+  set("lpLegacyUnverifiedCount", data.lp_legacy_unverified || 0);
+  set("lpTimelineGapsCount", data.lp_timeline_gaps || 0);
   set(
     "lpQueueNote",
-    "Active LP records not mapped to the four roles are retained in this bucket."
+    "Current LP stage is derived from the ordered milestone dates. Exceptions are kept outside the approval lanes."
   );
 }
 
@@ -433,6 +437,8 @@ async function loadLPCirculation() {
   set("lpCountGm", byStage.general_manager || 0);
   set("lpCountDirector", byStage.director || 0);
   set("lpCountCompleted", byStage.completed || 0);
+  set("lpCountPrerequisite", summary.prerequisite_exceptions || 0);
+  set("lpCountLegacyUnverified", byStage.legacy_unverified || 0);
   set("lpCountLegacy", byStage.legacy_incomplete || 0);
 
   const body = $("lpBody");
@@ -445,11 +451,16 @@ async function loadLPCirculation() {
       const history = r.lp_timeline_has_gaps
         ? '<span class="status-badge status-warning">Partial history</span>'
         : '<span class="status-badge status-completed">Recorded</span>';
+      const prerequisiteFlag = r.lp_prerequisite_exception
+        ? '<span class="exception-label">MI GM prerequisite exception</span>' : "";
+      const legacyFlag = r.lp_legacy_unverified
+        ? '<span class="exception-label">Legacy Director sign-off unverified</span>' : "";
       return "<tr><td><span class=\"cell-primary\">" + esc(r.khs_id) + "</span>" +
         "<span class=\"cell-secondary\">" + esc(r.vendor_name) + "</span></td>" +
         "<td><span class=\"cell-primary\">" + esc(r.request_subject || "Untitled request") + "</span>" +
         "<span class=\"cell-secondary\">" + esc(r.request_id) + "</span></td>" +
         "<td><span class=\"cell-primary\">" + esc(r.lp_stage_label || "—") + "</span>" +
+        prerequisiteFlag + legacyFlag +
         (r.waiting_for ? "<span class=\"cell-secondary\">Waiting for " + esc(r.waiting_for) + "</span>" : "") + "</td>" +
         "<td>" + esc(age) + "</td><td>" + esc(fmt(r.lp_circulation_start_date)) + "</td>" +
         "<td>" + esc(r.waiting_reason || "—") + "</td><td>" + history + "</td>" +
@@ -835,6 +846,26 @@ function renderPreview(result) {
   set("previewValid", s.valid_rows || 0);
   set("previewWarnings", s.warning_rows || 0);
   set("previewErrors", s.error_rows || 0);
+
+  const plan = result.change_plan || {};
+  const changePlan = $("changePlan");
+  if (changePlan) {
+    changePlan.hidden = false;
+    set("changePlanCount", (plan.total_records || 0) + " records checked");
+    set("planNew", plan.new_records || 0);
+    set("planUpdated", plan.updated_records || 0);
+    set("planUnchanged", plan.unchanged_records || 0);
+    set("planFields", plan.changed_fields_count || 0);
+    const changes = plan.changes || [];
+    $("changePlanBody").innerHTML = changes.length
+      ? changes.map((item) =>
+          "<tr><td><strong>" + esc(item.id || "—") + "</strong><span class=\"cell-secondary\">" +
+          esc(item.entity || "—") + "</span></td><td>" + esc(item.operation || "—") +
+          "</td><td>" + esc((item.changed_fields || []).join(", ") || "—") + "</td></tr>"
+        ).join("")
+      : '<tr><td colspan="3" class="table-message">No record fields will change. The uploaded values match the current database.</td></tr>';
+  }
+
   const allowed = state.importCanRun;
   $("previewEligibility").className = "preview-eligibility " + (allowed ? "eligible" : "ineligible");
   $("previewEligibility").textContent = allowed ? "Ready to confirm. Review and acknowledge warnings where present." : "Import blocked: correct the validation errors and upload the corrected workbook.";
@@ -1015,6 +1046,14 @@ function bind() {
       state.registerPage = 1;
       clearRegisterFilters();
       go("register");
+    })
+  );
+  document.querySelectorAll("[data-lp-queue-stage]").forEach((el) =>
+    el.addEventListener("click", () => {
+      const filter = $("lpStageFilter");
+      if (filter) filter.value = el.dataset.lpQueueStage;
+      state.lpPage = 1;
+      go("lp");
     })
   );
   $("refreshButton").addEventListener("click", () => loadPage(state.page).catch((e) => toast(e.message)));

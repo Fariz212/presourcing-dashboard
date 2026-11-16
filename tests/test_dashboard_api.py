@@ -427,8 +427,8 @@ def test_document_upload_rejects_unsupported_file_extensions(make_client):
 
 
 
-def test_workflow_overview_returns_role_level_mi_and_lp_queues(make_client):
-    pool = FakePool(row=(4, 3, 2, 5, 4, 3, 2, 1, 15))
+def test_workflow_overview_uses_milestone_derived_lp_queues(make_client):
+    pool = FakePool(row=(4, 3, 2, 8, 5, 4, 3, 2, 22, 33, 7, 5, 12))
 
     response = make_client(pool).get("/api/dashboard/workflow/overview")
 
@@ -455,23 +455,30 @@ def test_workflow_overview_returns_role_level_mi_and_lp_queues(make_client):
             "stage_code": "MI_GM_APPROVAL",
         },
     ]
-    assert [item["count"] for item in payload["data"]["lp"]] == [5, 4, 3, 2]
-    assert payload["data"]["lp_active_total"] == 15
-    assert payload["data"]["lp_unassigned_or_other"] == 1
-    assert "Waiting For" in payload["data"]["lp_count_basis"]
+    assert [item["key"] for item in payload["data"]["lp"]] == [
+        "contract_team", "junior_manager", "senior_manager",
+        "general_manager", "director",
+    ]
+    assert [item["count"] for item in payload["data"]["lp"]] == [8, 5, 4, 3, 2]
+    assert payload["data"]["lp_active_total"] == 22
+    assert payload["data"]["lp_records_in_circulation"] == 33
+    assert payload["data"]["lp_prerequisite_exceptions"] == 7
+    assert payload["data"]["lp_legacy_unverified"] == 5
+    assert payload["data"]["lp_timeline_gaps"] == 12
+    assert "milestone dates" in payload["data"]["lp_count_basis"]
 
     query = pool.connection_object.executed_query
     assert "mi_head_approval_date" in query
     assert "mi_sm_approval_date" in query
     assert "mi_gm_approval_date" in query
-    assert "waiting_for" in query
-    assert query.count("ELSE 'unassigned_or_other'") == 1
-    assert "WITH active_lp AS" in query
-    assert "COUNT(*)::int AS active_total" in query
-    # Ordered CASE branches ensure one free-text assignment maps to one LP lane.
-    assert query.index("POSITION('junior manager'") < query.index("POSITION('senior manager'")
-    assert query.index("POSITION('senior manager'") < query.index("POSITION('general manager'")
-    assert query.index("POSITION('general manager'") < query.index("POSITION('director'")
+    assert "lp_stage_key = 'contract_team'" in query
+    assert "THEN 'prerequisite_exception'" in query
+    assert "lp_stage_key = 'legacy_unverified'" in query
+    assert "lp_timeline_has_gaps" in query
+    assert "lp_started_without_mi_gm_approval IS TRUE" in query
+    assert "FROM register_state" in query
+    assert "POSITION('junior manager'" not in query
+    assert "WITH register_state AS" in query
 
 
 def test_workflow_overview_returns_service_unavailable_on_db_error(make_client):
@@ -571,6 +578,7 @@ def test_lp_update_rejects_out_of_order_new_milestone():
 def test_lp_timeline_derives_stage_age_and_preserves_missing_legacy_dates():
     today = date(2026, 11, 13)
     current = _lp_timeline_summary({
+        "mi_gm_approval_date": date(2026, 10, 30),
         "lp_circulation_start_date": date(2026, 11, 3),
         "lp_contract_team_completion_date": None,
         "lp_junior_manager_approval_date": None,
@@ -585,6 +593,7 @@ def test_lp_timeline_derives_stage_age_and_preserves_missing_legacy_dates():
     assert current["lp_timeline_has_gaps"] is False
 
     legacy = _lp_timeline_summary({
+        "mi_gm_approval_date": date(2026, 10, 28),
         "lp_circulation_start_date": date(2026, 11, 1),
         "lp_contract_team_completion_date": None,
         "lp_junior_manager_approval_date": date(2026, 11, 8),
@@ -599,6 +608,39 @@ def test_lp_timeline_derives_stage_age_and_preserves_missing_legacy_dates():
     assert legacy["lp_timeline_has_gaps"] is True
     assert legacy["lp_timeline_gaps"] == ["lp_contract_team_completion_date"]
     assert legacy["lp_timeline_data_status"] == "legacy_incomplete"
+
+
+def test_lp_timeline_marks_missing_or_late_mi_gm_as_prerequisite_exception():
+    missing = _lp_timeline_summary({
+        "lp_circulation_start_date": date(2026, 11, 3),
+        "mi_gm_approval_date": None,
+    }, today=date(2026, 11, 16))
+    late = _lp_timeline_summary({
+        "lp_circulation_start_date": date(2026, 10, 20),
+        "mi_gm_approval_date": date(2026, 11, 25),
+    }, today=date(2026, 11, 16))
+
+    assert missing["lp_stage_key"] == "prerequisite_exception"
+    assert late["lp_stage_key"] == "prerequisite_exception"
+    assert missing["lp_stage_age_days"] is None
+    assert late["lp_prerequisite_exception"] is True
+
+
+def test_legacy_done_without_director_date_is_not_put_in_tim_kontrak_queue():
+    result = _lp_timeline_summary({
+        "lp_circulation_start_date": date(2026, 10, 20),
+        "mi_gm_approval_date": date(2026, 10, 15),
+        "lp_contract_team_completion_date": None,
+        "lp_junior_manager_approval_date": None,
+        "lp_senior_manager_approval_date": None,
+        "lp_gm_scm_approval_date": None,
+        "lp_completion_date": None,
+        "legacy_overall_status": "Done",
+    }, today=date(2026, 11, 16))
+
+    assert result["lp_stage_key"] == "legacy_unverified"
+    assert result["lp_stage_age_days"] is None
+    assert result["lp_legacy_unverified"] is True
 
 
 def test_lp_completed_legacy_record_keeps_intermediate_gaps_visible():
@@ -648,7 +690,7 @@ def test_lp_circulation_legacy_gap_filter_includes_completed_history(make_client
         rows=[row],
         total=1,
         stage_summary_rows=[
-            {"lp_stage_key": "completed", "total": 1, "timeline_gaps": 1}
+            {"lp_stage_key": "completed", "total": 1, "timeline_gaps": 1, "prerequisite_exceptions": 0}
         ],
     )
 
@@ -726,6 +768,7 @@ def test_lp_circulation_endpoint_returns_stage_counts_and_age(make_client):
         "contract_start_date": None,
         "contract_end_date": None,
         "khs_inject_completion_date": None,
+        "mi_gm_approval_date": today - timedelta(days=12),
         "lp_circulation_start_date": today - timedelta(days=10),
         "lp_contract_team_completion_date": None,
         "lp_junior_manager_approval_date": None,
@@ -744,7 +787,12 @@ def test_lp_circulation_endpoint_returns_stage_counts_and_age(make_client):
     pool = RegisterFakePool(
         rows=[row],
         total=1,
-        stage_summary_rows=[{"lp_stage_key": "contract_team", "total": 1, "timeline_gaps": 0}],
+        stage_summary_rows=[{
+            "lp_stage_key": "contract_team",
+            "total": 1,
+            "timeline_gaps": 0,
+            "prerequisite_exceptions": 0,
+        }],
     )
 
     response = make_client(pool).get("/api/dashboard/lp-circulation?stage=contract_team")
@@ -753,11 +801,29 @@ def test_lp_circulation_endpoint_returns_stage_counts_and_age(make_client):
     payload = response.get_json()
     assert payload["summary"]["total_lp_records"] == 1
     assert payload["summary"]["by_stage"]["contract_team"] == 1
+    assert payload["summary"]["prerequisite_exceptions"] == 0
     assert payload["data"][0]["lp_stage_key"] == "contract_team"
     assert payload["data"][0]["lp_stage_age_days"] == 10
     assert payload["data"][0]["contract_lifecycle"]["contract_lifecycle_status"] == "not_fully_injected"
     assert len(pool.queries) == 3
     assert pool.queries[0][1] == ["contract_team"]
+
+
+def test_lp_prerequisite_exception_filter_includes_director_signed_history(make_client):
+    pool = RegisterFakePool(rows=[], total=2)
+
+    response = make_client(pool).get(
+        "/api/dashboard/lp-circulation?stage=prerequisite_exception"
+    )
+
+    assert response.status_code == 200
+    count_query, params = pool.queries[0]
+    data_query, data_params = pool.queries[1]
+    for query in (count_query, data_query):
+        assert "register.lp_started_without_mi_gm_approval IS TRUE" in query
+        assert "register.lp_stage_key = %s" not in query
+    assert params == []
+    assert data_params[-2:] == [25, 0]
 
 
 def test_contract_lifecycle_endpoint_summarizes_fully_injected_records(make_client):
