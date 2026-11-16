@@ -1016,6 +1016,12 @@ def khs_register():
                     NULLIF(BTRIM(COALESCE(register.waiting_for, '')), '') IS NOT NULL
                     OR NULLIF(BTRIM(COALESCE(register.waiting_reason, '')), '') IS NOT NULL
                     OR register.lp_started_without_mi_gm_approval IS TRUE
+                    OR register.lp_stage_key IN (
+                        'prerequisite_exception',
+                        'legacy_unverified',
+                        'legacy_incomplete'
+                    )
+                    OR register.lp_timeline_has_gaps IS TRUE
                 )
             )
         """)
