@@ -64,7 +64,7 @@ jobs:
     env:
       SECRET_KEY: "ci-only-visual-preview-secret"
       DATABASE_URL: postgresql://khs_preview:khs_preview_password@localhost:5432/khs_preview
-      UPLOAD_DIR: ${dollar}{{ runner.temp }}/khs-visual-preview-uploads
+      UPLOAD_DIR: ${{ runner.temp }}/khs-visual-preview-uploads
       VISUAL_PREVIEW_URL: http://127.0.0.1:8000
       VISUAL_PREVIEW_OUTPUT: artifacts/visual-preview
     services:
@@ -111,8 +111,8 @@ jobs:
       - name: Start isolated KHS application
         run: |
           mkdir -p "$UPLOAD_DIR"
-          nohup python run.py > "${dollar}{{ runner.temp }}/khs-visual-preview.log" 2>&1 &
-          echo $! > "${dollar}{{ runner.temp }}/khs-visual-preview.pid"
+          nohup python run.py > "${{ runner.temp }}/khs-visual-preview.log" 2>&1 &
+          echo $! > "${{ runner.temp }}/khs-visual-preview.pid"
           for attempt in $(seq 1 45); do
             if curl --fail --silent http://127.0.0.1:8000/health/ready > /dev/null; then
               echo "KHS visual-preview application is ready."
@@ -120,7 +120,7 @@ jobs:
             fi
             sleep 1
           done
-          cat "${dollar}{{ runner.temp }}/khs-visual-preview.log"
+          cat "${{ runner.temp }}/khs-visual-preview.log"
           echo "KHS visual-preview application did not become ready."
           exit 1
 
@@ -131,9 +131,9 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: khs-visual-preview-${dollar}{{ github.event.pull_request.number || github.run_number }}
+          name: khs-visual-preview-${{ github.event.pull_request.number || github.run_number }}
           path: |
             artifacts/visual-preview/
-            ${dollar}{{ runner.temp }}/khs-visual-preview.log
+            ${{ runner.temp }}/khs-visual-preview.log
           if-no-files-found: warn
           retention-days: 14
