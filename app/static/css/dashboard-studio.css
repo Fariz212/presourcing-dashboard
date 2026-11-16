@@ -3584,3 +3584,397 @@ input:focus,select:focus,textarea:focus { border-color: #8db19a; outline: 3px so
   .detail-history-list li { grid-template-columns: 1fr 1fr; }
   .detail-history-list li span { grid-column: 1 / -1; }
 }
+
+
+/* --------------------------------------------------------------------------
+   Lean workspace iteration — reduce motion, duplication and input defects.
+   This layer intentionally overrides earlier visual experiments and keeps
+   the established API/data hooks unchanged.
+   -------------------------------------------------------------------------- */
+
+/* Navigation: one clear location for the primary task, no duplicated CTAs. */
+.sidebar-brand-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.mobile-nav-toggle {
+  display: none;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  place-items: center;
+  align-content: center;
+  gap: 4px;
+  border: 1px solid rgba(255,255,255,.18);
+  border-radius: 10px;
+  background: rgba(255,255,255,.07);
+  color: #fff;
+}
+.mobile-nav-toggle span {
+  display: block;
+  width: 16px;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+}
+.refresh-button[hidden] { display: none !important; }
+.overview-refresh { white-space: nowrap; }
+
+/* Overview is an action desk, not a second copy of the detailed modules. */
+.overview-page-heading { margin-bottom: 18px; }
+.overview-heading-actions .action-strip { align-items: center; }
+.attention-panel { margin-top: 18px; }
+.approval-command { margin-top: 18px; }
+.contract-watch { margin-top: 18px; }
+#qualityAlert, .overview-grid { display: none !important; }
+
+/* Compact stage workload buttons make the next action obvious. */
+#workflowCards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+#workflowCards .workflow-stage {
+  display: grid;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .16s ease, background .16s ease, transform .16s ease;
+}
+#workflowCards .workflow-stage:hover {
+  border-color: var(--line-strong);
+  background: var(--surface-soft);
+  transform: translateY(-1px);
+}
+.workflow-stage-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted-strong);
+  font-size: 11px;
+  font-weight: 700;
+}
+.workflow-stage-top strong {
+  color: var(--ink);
+  font-size: 24px;
+  font-variant-numeric: tabular-nums;
+}
+.workflow-stage-bottom {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 10px;
+}
+.workflow-stage-bottom span {
+  color: var(--teal-dark);
+  font-weight: 750;
+}
+.empty-state {
+  padding: 28px 18px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 12px;
+  color: var(--muted);
+  text-align: center;
+}
+
+/* Active register filters stay visible after the More filters disclosure closes. */
+.active-filter-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  padding: 0 0 12px;
+}
+.active-filter-summary[hidden] { display: none !important; }
+.filter-chip, .clear-all-filters {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 27px;
+  padding: 5px 9px;
+  border: 1px solid #dce6dc;
+  border-radius: 20px;
+  background: #f3f7f1;
+  color: #4c6752;
+  font-size: 9px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.filter-chip span:last-child {
+  color: #78907a;
+  font-size: 13px;
+  line-height: 1;
+}
+.clear-all-filters {
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+  text-decoration: underline;
+}
+
+/* Fewer columns in the operational register: identity, stage, status, action. */
+.register-table-wrap table { min-width: 830px; }
+.register-table-wrap th:nth-child(1) { min-width: 210px; }
+.register-table-wrap th:nth-child(2) { min-width: 190px; }
+.register-table-wrap th:nth-child(4) { min-width: 125px; }
+.register-table-wrap th:nth-child(5) { min-width: 175px; }
+.cell-tertiary {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 9px;
+}
+.register-toolbar .register-search { min-width: 250px; }
+.filter-more summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  gap: 6px;
+  cursor: pointer;
+}
+.filter-more summary:focus-visible,
+.filter-chip:focus-visible,
+.clear-all-filters:focus-visible {
+  outline: 3px solid rgba(72,117,163,.22);
+  outline-offset: 2px;
+}
+
+/* Form fields: explicit labels, inline errors, clear group rhythm and safe save. */
+.form-section .form-field label {
+  display: block;
+  margin-bottom: 6px;
+}
+.form-section .form-field input,
+.form-section .form-field select,
+.form-section .form-field textarea {
+  display: block;
+}
+.form-error {
+  margin: 13px 0 0;
+  padding: 11px 13px;
+  border: 1px solid #e9c8c5;
+  border-radius: 9px;
+  background: #fff3f1;
+  color: #944741;
+  font-size: 11px;
+  line-height: 1.55;
+}
+.form-error[hidden] { display: none !important; }
+#recordForm .dialog-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 9px;
+  margin-top: 14px;
+  background: rgba(255,255,255,.96);
+  border-top: 1px solid var(--line);
+  backdrop-filter: blur(12px);
+}
+#recordForm .dialog-footer .primary-button { min-width: 116px; }
+button:disabled {
+  cursor: not-allowed;
+  opacity: .58;
+  transform: none !important;
+}
+
+/* The action is now page-specific; retain a consistent universal refresh only
+   on pages that do not already have their own refresh action. */
+.topbar-actions { gap: 8px; }
+.refresh-button { white-space: nowrap; }
+
+/* Responsive tables become readable record cards on small screens.
+   JS derives the visible labels from each table header, so no column is lost. */
+.table-wrap table { min-width: 820px; }
+.activity-table-wrap table { min-width: 900px; }
+@media (max-width: 760px) {
+  .table-wrap {
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+  .table-wrap table,
+  .table-wrap tbody {
+    display: block;
+    width: 100%;
+    min-width: 0;
+  }
+  .table-wrap thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0,0,0,0);
+    white-space: nowrap;
+    border: 0;
+  }
+  .table-wrap tbody {
+    display: grid;
+    gap: 9px;
+  }
+  .table-wrap tbody tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px 14px;
+    min-width: 0;
+    padding: 13px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--surface);
+    box-shadow: 0 2px 7px rgba(28,47,38,.025);
+  }
+  .table-wrap tbody td {
+    display: grid;
+    align-content: start;
+    gap: 4px;
+    width: auto !important;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    color: var(--ink-soft);
+    font-size: 10px;
+    text-align: left !important;
+    overflow-wrap: anywhere;
+  }
+  .table-wrap tbody td::before {
+    content: attr(data-label);
+    color: var(--muted);
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: .075em;
+    line-height: 1.3;
+    text-transform: uppercase;
+  }
+  .table-wrap tbody td:first-child {
+    grid-column: 1 / -1;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--line);
+  }
+  .table-wrap tbody td:last-child {
+    align-self: end;
+    justify-content: start;
+  }
+  .table-wrap tbody td[colspan] {
+    display: block;
+    grid-column: 1 / -1;
+    padding: 18px 12px;
+    text-align: center !important;
+  }
+  .table-wrap tbody td[colspan]::before { display: none; }
+  .table-wrap .detail-value,
+  .table-wrap .cell-primary { overflow-wrap: anywhere; }
+  .activity-table-wrap tbody td:last-child { grid-column: 1 / -1; }
+  .activity-table-wrap tbody td:last-child::before { margin-bottom: 2px; }
+  .change-plan .table-wrap,
+  .issues-section .table-wrap { overflow: visible; }
+  .register-footer { align-items: flex-start; flex-direction: row; flex-wrap: wrap; }
+  .pagination { margin-left: auto; }
+  #workflowCards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 680px) {
+  .sidebar {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    width: 100%;
+    max-width: none;
+    height: auto;
+    min-height: 0;
+    padding: 9px 13px;
+    border-bottom: 1px solid rgba(255,255,255,.1);
+  }
+  .sidebar-brand-row { min-height: 38px; }
+  .brand { margin: 0; }
+  .mobile-nav-toggle { display: grid; }
+  .sidebar .side-nav { display: none; }
+  .sidebar.nav-open .side-nav {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 5px;
+    overflow: visible;
+    margin-top: 9px;
+    padding: 8px 0 2px;
+    border-top: 1px solid rgba(255,255,255,.12);
+  }
+  .sidebar.nav-open .secondary-caption {
+    display: block;
+    margin: 12px 2px 5px;
+    color: #a6b8d0;
+    font-size: 8px;
+  }
+  .sidebar .nav-link {
+    display: flex;
+    min-width: 0;
+    min-height: 40px;
+    padding: 8px 9px;
+    white-space: normal;
+    font-size: 10px;
+  }
+  .sidebar .nav-link span:nth-child(2) { min-width: 0; }
+  .sidebar-bottom { display: none !important; }
+  .topbar { min-height: 50px; }
+  .breadcrumbs { min-width: 0; }
+  .breadcrumbs strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .page-heading { gap: 9px; }
+  .page-heading .primary-button,
+  .page-heading .secondary-button { min-height: 37px; }
+  .overview-heading-actions .action-strip {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+  .overview-heading-actions .overview-refresh { grid-column: 1 / -1; }
+  .kpi-grid { gap: 8px; }
+  .kpi-card { min-height: 92px; padding: 11px; }
+  .kpi-value { font-size: 24px; }
+  .contract-watch-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .approval-lanes { gap: 9px; }
+  .queue-steps-five { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .register-toolbar { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 8px; }
+  .register-toolbar .register-search { grid-column: 1 / -1; min-width: 0; width: 100%; }
+  .register-toolbar > select { grid-column: 1; width: 100%; }
+  .register-toolbar .filter-more { grid-column: 1 / -1; }
+  .register-toolbar > .reset-button { grid-column: 2; grid-row: 2; align-self: center; }
+  .filter-more-fields { position: static; width: 100%; grid-template-columns: 1fr; box-shadow: none; margin-top: 8px; }
+  .active-filter-summary { padding: 0 0 11px; }
+  #workflowCards { grid-template-columns: 1fr; }
+  .workflow-stage { padding: 13px; }
+  .lp-stage-summary { gap: 7px; }
+  .lp-stage-card { min-height: 70px; padding: 9px; }
+  .lp-stage-card strong { font-size: 19px; }
+  .contract-lifecycle-summary { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .lifecycle-footnote { font-size: 9px; line-height: 1.6; }
+  .import-guide { grid-template-columns: 1fr; }
+  .activity-toolbar { display: grid; grid-template-columns: minmax(0,1fr) auto; }
+  .activity-toolbar input { grid-column: 1 / -1; width: 100%; min-width: 0; }
+  .activity-toolbar select { grid-column: 1; width: 100%; min-width: 0; }
+  .activity-toolbar button { grid-column: 2; }
+  #recordForm .dialog-footer { margin-bottom: -20px; }
+}
+@media (max-width: 420px) {
+  .sidebar.nav-open .side-nav { grid-template-columns: 1fr; }
+  .table-wrap tbody tr { gap: 9px 11px; padding: 11px; }
+  .table-wrap tbody td { font-size: 9px; }
+  .kpi-card { min-height: 86px; }
+  .kpi-value { font-size: 22px; }
+  .contract-watch-grid { grid-template-columns: 1fr 1fr; }
+  .overview-heading-actions .action-strip { grid-template-columns: 1fr; }
+  .overview-heading-actions .overview-refresh { grid-column: auto; }
+}
