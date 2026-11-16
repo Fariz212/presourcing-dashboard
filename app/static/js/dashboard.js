@@ -105,6 +105,36 @@ function pct(value) {
   return Math.max(0, Math.min(100, Number(value) || 0));
 }
 
+function currentStageLabel(record) {
+  if (record.current_stage_code === "LP_CIRCULATION") {
+    return record.lp_stage_label || record.current_stage_name || "LP Circulation";
+  }
+  return record.current_stage_name || record.current_stage_code || "—";
+}
+
+function currentStageAgeLabel(record) {
+  const age = record.current_stage_age_days;
+  if (age === null || age === undefined || !Number.isFinite(Number(age))) {
+    if (record.current_stage_code === "COMPLETED") return "Closed stage";
+    if (record.current_stage_code === "LP_CIRCULATION" && (
+      record.lp_timeline_has_gaps ||
+      record.lp_prerequisite_exception ||
+      record.lp_legacy_unverified
+    )) return "History needs review";
+    return "Stage age unavailable";
+  }
+  const days = Number(age);
+  return days + (days === 1 ? " day in stage" : " days in stage");
+}
+
+function currentStageAgeMeta(record) {
+  if (record.current_stage_started_on && record.current_stage_age_days !== null &&
+      record.current_stage_age_days !== undefined) {
+    return "Since " + fmt(record.current_stage_started_on);
+  }
+  return "Updated " + fmt(record.last_updated_date || record.updated_at);
+}
+
 function set(id, value) {
   const el = $(id);
   if (el) el.textContent = value == null ? "—" : String(value);
@@ -314,8 +344,9 @@ function renderAttention(rows) {
     return;
   }
   body.innerHTML = rows.map((r) => {
-    const age = r.lp_stage_age_days == null ? "—" :
-      r.lp_stage_age_days + (r.lp_stage_age_days === 1 ? " day in stage" : " days in stage");
+    const stage = currentStageLabel(r);
+    const age = currentStageAgeLabel(r);
+    const ageMeta = currentStageAgeMeta(r);
     const exception = r.lp_started_without_mi_gm_approval
       ? '<span class="exception-label">MI GM prerequisite exception</span>' : "";
     const waitingFor = r.waiting_for ||
@@ -324,11 +355,11 @@ function renderAttention(rows) {
       <td data-label="REQUEST / KHS"><span class="cell-primary">${esc(r.request_subject || "Untitled request")}</span>
       <span class="cell-secondary">${esc(r.khs_id)} · ${esc(r.request_id)}</span></td>
       <td data-label="VENDOR">${esc(r.vendor_name)}</td>
-      <td data-label="CURRENT STAGE">${esc(r.current_stage_name || r.current_stage_code)}${exception}</td>
+      <td data-label="CURRENT STAGE">${esc(stage)}${exception}</td>
       <td data-label="WAITING FOR / NEXT ACTION"><span class="cell-primary">${esc(waitingFor)}</span>
       ${r.waiting_reason ? '<span class="cell-secondary">' + esc(r.waiting_reason) + "</span>" : ""}</td>
       <td data-label="STAGE AGE / UPDATED"><span class="cell-primary">${esc(age)}</span>
-      <span class="cell-secondary">Updated ${esc(fmt(r.last_updated_date || r.updated_at))}</span></td>
+      <span class="cell-secondary">${esc(ageMeta)}</span></td>
       <td data-label="ACTION"><button class="view-button" data-view-khs="${esc(r.khs_id)}"
       aria-label="Open KHS ${esc(r.khs_id)}">View record</button></td>
     </tr>`;
@@ -485,10 +516,8 @@ async function loadRegister() {
   if (!body) return;
   if (!result.data.length) emptyRow("registerBody", 6, "No KHS records match the current filters.");
   else body.innerHTML = result.data.map((r) => {
-    const stage = r.lp_stage_label || r.current_stage_name || "Not started";
-    const stageAge = r.lp_stage_age_days == null
-      ? (r.lp_timeline_has_gaps ? "Historical dates need review" : "No active LP stage")
-      : r.lp_stage_age_days + (r.lp_stage_age_days === 1 ? " day in stage" : " days in stage");
+    const stage = currentStageLabel(r);
+    const stageAge = currentStageAgeLabel(r);
     const lpStatus = String(r.lp_status || "not_started").replace(/_/g, " ");
     const injection = r.khs_inject_completion_date
       ? '<span class="status-badge status-completed">Fully injected</span><span class="cell-secondary">' + esc(fmt(r.khs_inject_completion_date)) + "</span>"

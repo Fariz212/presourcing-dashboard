@@ -319,6 +319,9 @@ def test_lean_workspace_navigation_responsive_tables_and_activity_filters(monkey
     for marker in (
         b"function observeResponsiveTables()",
         b"function renderActiveRegisterFilters()",
+        b"function currentStageLabel(record)",
+        b"function currentStageAgeLabel(record)",
+        b"record.current_stage_age_days",
         b"data-workflow-stage",
         b"function renderWorkflowCards()",
         b"state.showEmptyWorkflowStages",

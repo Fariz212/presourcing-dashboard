@@ -294,6 +294,30 @@ SELECT
     derived.lp_stage_key,
     derived.lp_timeline_has_gaps,
 
+    CASE derived.current_stage_code
+        WHEN 'REQUEST_RECEIVED' THEN r.request_date
+        WHEN 'DISPATCH' THEN r.request_date
+        WHEN 'BOQ_CONFIRMATION' THEN k.dispatch_date
+        WHEN 'NEGOTIATION' THEN k.boq_confirmation_date
+        WHEN 'FINAL_NEGOTIATION' THEN k.negotiation_date
+        WHEN 'MI_HEAD_APPROVAL' THEN k.final_negotiation_date
+        WHEN 'MI_SM_APPROVAL' THEN k.mi_head_approval_date
+        WHEN 'MI_GM_APPROVAL' THEN k.mi_sm_approval_date
+        WHEN 'LEGAL_SUBMISSION' THEN k.mi_gm_approval_date
+        WHEN 'LEGAL_PROCESSING' THEN k.legal_submission_date
+        WHEN 'LP_CIRCULATION' THEN
+            CASE derived.lp_stage_key
+                WHEN 'contract_team' THEN k.lp_circulation_start_date
+                WHEN 'junior_manager' THEN k.lp_contract_team_completion_date
+                WHEN 'senior_manager' THEN k.lp_junior_manager_approval_date
+                WHEN 'general_manager' THEN k.lp_senior_manager_approval_date
+                WHEN 'director' THEN k.lp_gm_scm_approval_date
+                ELSE NULL
+            END
+        WHEN 'KHS_INJECTION' THEN k.lp_completion_date
+        ELSE NULL
+    END AS current_stage_started_on,
+
     (
         k.lp_circulation_start_date IS NOT NULL
         AND (
@@ -789,10 +813,25 @@ def _contract_lifecycle_data(record, today=None):
     }
 
 
-def _register_enriched(row):
+def _register_enriched(row, today=None):
+    today = today or _jakarta_today()
     record = _register_json_safe(row)
-    record.update(_lp_timeline_summary(row))
-    record["contract_lifecycle"] = _contract_lifecycle_data(row)
+    record.update(_lp_timeline_summary(row, today=today))
+
+    stage_started = (
+        None
+        if row.get("current_stage_code") == "COMPLETED"
+        else _date_only(row.get("current_stage_started_on"))
+    )
+    record["current_stage_started_on"] = (
+        stage_started.isoformat() if stage_started else None
+    )
+    record["current_stage_age_days"] = (
+        (today - stage_started).days
+        if stage_started and stage_started <= today
+        else None
+    )
+    record["contract_lifecycle"] = _contract_lifecycle_data(row, today=today)
     return record
 
 
@@ -1045,14 +1084,7 @@ def khs_register():
         FROM ({REGISTER_BASE_QUERY}) AS register
         {where_sql}
         ORDER BY register.lp_started_without_mi_gm_approval DESC,
-                 CASE register.lp_stage_key
-                     WHEN 'contract_team' THEN register.lp_circulation_start_date
-                     WHEN 'junior_manager' THEN register.lp_contract_team_completion_date
-                     WHEN 'senior_manager' THEN register.lp_junior_manager_approval_date
-                     WHEN 'general_manager' THEN register.lp_senior_manager_approval_date
-                     WHEN 'director' THEN register.lp_gm_scm_approval_date
-                     ELSE NULL
-                 END ASC NULLS LAST,
+                 register.current_stage_started_on ASC NULLS LAST,
                  (register.waiting_for IS NOT NULL) DESC,
                  register.updated_at ASC NULLS FIRST,
                  register.dispatch_date DESC NULLS LAST,
@@ -1966,21 +1998,7 @@ def workflow_monitoring():
         WITH register_state AS (
             SELECT
                 derived_register.*,
-                CASE derived_register.current_stage_code
-                    WHEN 'REQUEST_RECEIVED' THEN derived_register.request_date
-                    WHEN 'DISPATCH' THEN derived_register.request_date
-                    WHEN 'BOQ_CONFIRMATION' THEN derived_register.dispatch_date
-                    WHEN 'NEGOTIATION' THEN derived_register.boq_confirmation_date
-                    WHEN 'FINAL_NEGOTIATION' THEN derived_register.negotiation_date
-                    WHEN 'MI_HEAD_APPROVAL' THEN derived_register.final_negotiation_date
-                    WHEN 'MI_SM_APPROVAL' THEN derived_register.mi_head_approval_date
-                    WHEN 'MI_GM_APPROVAL' THEN derived_register.mi_sm_approval_date
-                    WHEN 'LEGAL_SUBMISSION' THEN derived_register.mi_gm_approval_date
-                    WHEN 'LEGAL_PROCESSING' THEN derived_register.legal_submission_date
-                    WHEN 'LP_CIRCULATION' THEN derived_register.lp_circulation_start_date
-                    WHEN 'KHS_INJECTION' THEN derived_register.lp_completion_date
-                    ELSE NULL
-                END AS stage_started_on
+                derived_register.current_stage_started_on AS stage_started_on
             FROM (""" + REGISTER_BASE_QUERY + """) AS derived_register
         )
         SELECT

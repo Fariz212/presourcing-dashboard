@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import date, datetime
 from pathlib import Path
 from time import time
+from zoneinfo import ZoneInfo
 
 from playwright.sync_api import sync_playwright
 
@@ -38,6 +40,26 @@ CAPTURES = [
     ("activity", "desktop", 1440, 1000),
     ("activity", "mobile", 390, 844),
 ]
+
+
+
+
+def assert_stage_and_age(page, body_id, khs_id, stage_text, age_days,
+                         stage_cell_index, age_cell_index):
+    row = page.locator(f"#{body_id} tr").filter(has_text=khs_id).first
+    row.wait_for(state="visible", timeout=15_000)
+    cells = row.locator("td")
+    actual_stage = cells.nth(stage_cell_index).inner_text()
+    actual_age = cells.nth(age_cell_index).inner_text()
+    if stage_text not in actual_stage:
+        raise AssertionError(
+            f"{body_id} {khs_id}: expected stage {stage_text!r}, got {actual_stage!r}"
+        )
+    expected_age = f"{age_days} day in stage" if age_days == 1 else f"{age_days} days in stage"
+    if expected_age not in actual_age:
+        raise AssertionError(
+            f"{body_id} {khs_id}: expected age {expected_age!r}, got {actual_age!r}"
+        )
 
 
 def main() -> int:
@@ -217,6 +239,44 @@ def main() -> int:
                 state="visible", timeout=15_000
             )
             page.locator("#resetFilters").click(timeout=10_000)
+            page.wait_for_load_state("networkidle", timeout=20_000)
+            page.locator('#registerBody [data-view-khs="KHS-VIS-004"]').wait_for(
+                state="visible", timeout=15_000
+            )
+
+            # The register must show overall workflow stages before LP and
+            # after LP, while retaining the fine-grained LP stage during LP.
+            page.set_viewport_size({"width": 1440, "height": 1000})
+            today = datetime.now(ZoneInfo("Asia/Jakarta")).date()
+            mi_gm_age = (today - date(2026, 9, 20)).days
+            injection_age = (today - date(2026, 11, 3)).days
+            assert_stage_and_age(
+                page, "registerBody", "KHS-VIS-002",
+                "MI Approval - GM", mi_gm_age, 1, 1,
+            )
+            assert_stage_and_age(
+                page, "registerBody", "KHS-VIS-009",
+                "KHS Inject", injection_age, 1, 1,
+            )
+
+            # The priority queue must use the same workflow stage and age
+            # derivation, including a record that has completed LP but not injection.
+            page.locator('a.nav-link[data-page="overview"]').first.click(timeout=10_000)
+            current_page = "overview"
+            page.locator("#page-overview.active").wait_for(state="visible", timeout=15_000)
+            page.wait_for_load_state("networkidle", timeout=20_000)
+            assert_stage_and_age(
+                page, "attentionBody", "KHS-VIS-002",
+                "MI Approval - GM", mi_gm_age, 2, 4,
+            )
+            assert_stage_and_age(
+                page, "attentionBody", "KHS-VIS-009",
+                "KHS Inject", injection_age, 2, 4,
+            )
+
+            page.locator('a.nav-link[data-page="register"]').first.click(timeout=10_000)
+            current_page = "register"
+            page.locator("#page-register.active").wait_for(state="visible", timeout=15_000)
             page.wait_for_load_state("networkidle", timeout=20_000)
             page.locator('#registerBody [data-view-khs="KHS-VIS-004"]').wait_for(
                 state="visible", timeout=15_000
