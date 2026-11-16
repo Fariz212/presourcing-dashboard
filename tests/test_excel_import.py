@@ -614,8 +614,14 @@ def test_current_workbook_calculated_columns_recalculate_and_waiting_dropdown_is
 
         khs_ws = output["02 - KHS Tracking"]
         khs_headers = {cell.value: cell.column for cell in khs_ws[5]}
-        for header in ("MI Status", "LP Status", "Workflow Status", "Current Stage", "LP Next Approver"):
+        for header in ("MI Status", "LP Status", "Workflow Status", "Current Stage", "LP Timeline Quality", "LP Next Approver"):
             assert khs_ws.cell(6, khs_headers[header]).data_type == "f", header
+        for row in khs_ws.iter_rows():
+            for cell in row:
+                if cell.data_type == "f":
+                    assert cell.value.count("(") == cell.value.count(")"), (
+                        cell.coordinate, cell.value
+                    )
 
         waiting_column = khs_headers["Waiting For"]
         expected_range = f"{get_column_letter(waiting_column)}6:{get_column_letter(waiting_column)}1048576"
