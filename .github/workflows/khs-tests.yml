@@ -1,10 +1,12 @@
 name: KHS application checks
 
 on:
+  workflow_dispatch:
   push:
     branches: [khs]
   pull_request:
     branches: [khs]
+    types: [opened, synchronize, reopened, ready_for_review]
 
 permissions:
   contents: read
@@ -56,3 +58,84 @@ jobs:
         run: node --check app/static/js/dashboard.js
       - name: Run test suite
         run: python -m pytest -q
+
+  visual-preview:
+    name: Browser visual preview
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SECRET_KEY: "ci-only-visual-preview-secret"
+      DATABASE_URL: postgresql://khs_preview:khs_preview_password@localhost:5432/khs_monitoring
+      UPLOAD_DIR: ${{ github.workspace }}/.ci-visual-preview-uploads
+      VISUAL_PREVIEW_URL: http://127.0.0.1:8000
+      VISUAL_PREVIEW_OUTPUT: artifacts/visual-preview
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: khs_monitoring
+          POSTGRES_USER: khs_preview
+          POSTGRES_PASSWORD: khs_preview_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U khs_preview -d khs_preview"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install application and browser dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt playwright
+          python -m playwright install --with-deps chromium
+
+      - name: Apply schema to disposable visual-preview database
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/001_initial_schema.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/002_import_change_classification.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/003_khs_injection_and_evidence.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/004_lp_milestones_and_contract_lifecycle.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/visual-preview-seed.sql
+
+      - name: Start isolated KHS application
+        run: |
+          mkdir -p "$UPLOAD_DIR"
+          nohup python run.py > ".ci-visual-preview.log" 2>&1 &
+          echo $! > ".ci-visual-preview.pid"
+          for attempt in $(seq 1 45); do
+            if curl --fail --silent http://127.0.0.1:8000/health/ready > /dev/null; then
+              echo "KHS visual-preview application is ready."
+              exit 0
+            fi
+            sleep 1
+          done
+          cat ".ci-visual-preview.log"
+          echo "KHS visual-preview application did not become ready."
+          exit 1
+
+      - name: Capture desktop, tablet, and mobile screenshots
+        run: python tests/visual_preview.py
+
+      - name: Upload visual preview gallery and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: khs-visual-preview-${{ github.event.pull_request.number || github.run_number }}
+          path: |
+            artifacts/visual-preview/
+            .ci-visual-preview.log
+          if-no-files-found: warn
+          retention-days: 14

@@ -26,9 +26,10 @@ def test_root_serves_dashboard_and_static_assets(monkeypatch, tmp_path):
     assert response.status_code == 200
     assert response.content_type.startswith("text/html")
     assert b"Contract Monitoring &amp; Tracking" in response.data
-    assert b"dashboard.css" in response.data
-    assert b"dashboard-premium.css" in response.data
-    assert b"dashboard-refresh.css" in response.data
+    assert b"dashboard-studio.css" in response.data
+    assert b"dashboard.css" not in response.data
+    assert b"dashboard-premium.css" not in response.data
+    assert b"dashboard-refresh.css" not in response.data
     assert b"dashboard.js" in response.data
 
     # API clients must retain the legacy JSON root response.
@@ -52,14 +53,15 @@ def test_root_serves_dashboard_and_static_assets(monkeypatch, tmp_path):
     assert premium_css.status_code == 200
     assert b".import-guide" in premium_css.data
     assert b".nav-icon" in premium_css.data
-    refresh_css = client.get("/static/css/dashboard-refresh.css")
-    assert refresh_css.status_code == 200
-    assert b"grid-template-columns: 252px minmax(0, 1fr)" in refresh_css.data
-    assert b"width: auto" in refresh_css.data
-    assert b"margin: 0" in refresh_css.data
-    assert b"@media (max-width: 680px)" in refresh_css.data
-    assert b".app-shell { display: block; grid-template-columns: 1fr; }" in refresh_css.data
-    assert b"table-layout: fixed" in refresh_css.data
+    studio_css = client.get("/static/css/dashboard-studio.css")
+    assert studio_css.status_code == 200
+    assert b".kpi-grid" in studio_css.data
+    assert b".vendor-count-badge" in studio_css.data
+    assert b"table-layout: fixed" in studio_css.data
+    assert b"--canvas: #f5f3ed" in studio_css.data
+    assert b".lp-quality-summary" in studio_css.data
+    assert b".filter-more-fields" in studio_css.data
+    assert b"@media (max-width: 920px)" in studio_css.data
 
 
     javascript = client.get("/static/js/dashboard.js")
@@ -185,3 +187,75 @@ def test_request_vendor_portfolio_is_compact_and_expandable(monkeypatch, tmp_pat
     assert b".lp-stage-summary" in css.data
     assert b".lp-timeline" in css.data
     assert b".contract-lifecycle-summary" in css.data
+
+
+def test_khs_register_uses_progressive_filter_disclosure(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        "app.init_db_pool",
+        lambda _app: DummyPool(),
+    )
+    flask_app = create_app({
+        "TESTING": True,
+        "SECRET_KEY": "dashboard-filter-test-secret",
+        "DATABASE_URL": "postgresql://test:test@localhost/test",
+        "UPLOAD_DIR": tmp_path / "uploads",
+    })
+    response = flask_app.test_client().get("/dashboard")
+    assert response.status_code == 200
+    body = response.data.decode("utf-8")
+    assert 'class="filter-more"' in body
+    assert 'id="searchInput"' in body
+    for control in ("statusFilter", "executorFilter", "subtypeFilter", "waitingFilter", "stageFilter"):
+        assert f'id="{control}"' in body
+
+
+def test_lp_summary_separates_live_stages_from_quality_overlays(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        "app.init_db_pool",
+        lambda _app: DummyPool(),
+    )
+    flask_app = create_app({
+        "TESTING": True,
+        "SECRET_KEY": "dashboard-lp-summary-test-secret",
+        "DATABASE_URL": "postgresql://test:test@localhost/test",
+        "UPLOAD_DIR": tmp_path / "uploads",
+    })
+    response = flask_app.test_client().get("/dashboard")
+    assert response.status_code == 200
+    body = response.data.decode("utf-8")
+    assert 'class="lp-stage-main"' in body
+    assert 'class="lp-quality-summary"' in body
+    assert 'data-lp-stage="prerequisite_exception"' in body
+    assert 'data-lp-stage="legacy_unverified"' in body
+    assert 'data-lp-stage="legacy_incomplete"' in body
+
+
+def test_dashboard_graphs_have_clear_labels_and_status_legend(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        "app.init_db_pool",
+        lambda _app: DummyPool(),
+    )
+    flask_app = create_app({
+        "TESTING": True,
+        "SECRET_KEY": "dashboard-graphs-test-secret",
+        "DATABASE_URL": "postgresql://test:test@localhost/test",
+        "UPLOAD_DIR": tmp_path / "uploads",
+    })
+    client = flask_app.test_client()
+    response = client.get("/dashboard")
+    assert response.status_code == 200
+    body = response.data.decode("utf-8")
+
+    assert 'role="img" aria-label="LP circulation distribution' in body
+    assert 'class="legend-item legend-completed"' in body
+    assert 'class="legend-item legend-progress"' in body
+    assert 'class="legend-item legend-not-started"' in body
+    assert 'aria-label="Share of KHS records with MI GM approval"' in body
+    assert 'aria-label="Share of KHS records submitted to Legal"' in body
+    assert 'aria-label="Share of KHS records with LP circulation started"' in body
+
+    stylesheet = client.get("/static/css/dashboard-studio.css")
+    assert stylesheet.status_code == 200
+    assert b".stacked-progress .segment-completed" in stylesheet.data
+    assert b".workflow-item .mini-track" in stylesheet.data
+    assert b".workflow-stage::after" in stylesheet.data
