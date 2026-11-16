@@ -274,6 +274,24 @@ def _date_fields(cells, header_map, field_map, epoch,
     return result
 
 
+def _reject_input_formulas(cells, header_map, ignored_headers, issues, entity, row_number):
+    """Reject Excel formulas in editable input fields; derived columns are allowed."""
+    for header, index in header_map.items():
+        if header in ignored_headers or index >= len(cells):
+            continue
+        cell = cells[index]
+        if getattr(cell, "data_type", None) == "f":
+            _add_issue(
+                issues,
+                "ERROR",
+                "FORMULA_IN_INPUT",
+                entity,
+                row_number,
+                header,
+                "Enter a stored value in this input field instead of an Excel formula.",
+            )
+
+
 def _source_row_number(value, issues, row_number):
     if value in (None, ""):
         return None
@@ -446,14 +464,6 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None, k
                 )
                 continue
 
-            if not request_id:
-                _add_issue(
-                    issues, "ERROR", "MISSING_REQUEST_ID",
-                    "REQUEST", row_number, "Request ID",
-                    "Request ID is required.",
-                )
-                continue
-
             if request_id in request_lookup:
                 _add_issue(
                     issues, "ERROR", "DUPLICATE_REQUEST_ID",
@@ -477,6 +487,15 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None, k
                     "Request / Subject is required.",
                 )
                 continue
+
+            _reject_input_formulas(
+                cells,
+                request_map,
+                {"Vendors", "Total KHS", "Fully Injected KHS", "Open KHS", "Request Status"},
+                issues,
+                "REQUEST",
+                row_number,
+            )
 
             dates = _date_fields(
                 cells,
@@ -664,6 +683,18 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None, k
                     "Subtype",
                     f"Unsupported subtype: {subtype_raw}.",
                 )
+
+            _reject_input_formulas(
+                cells,
+                khs_map,
+                {
+                    "MI Status", "LP Status", "Current Stage", "Workflow Status",
+                    "Processing Days", "LP Timeline Quality", "LP Next Approver",
+                },
+                issues,
+                "KHS_ITEM",
+                row_number,
+            )
 
             dates = _date_fields(
                 cells,
