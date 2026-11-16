@@ -825,6 +825,24 @@ def _lp_milestone_update_error(before, changes):
             f"{out_of_order_field} cannot precede an earlier LP milestone.",
         )
 
+    merged_dates = [_date_only(merged.get(field)) for field in milestone_fields]
+    last_populated = max(
+        (index for index, value in enumerate(merged_dates) if value is not None),
+        default=-1,
+    )
+    if milestones_changed and last_populated >= 0:
+        missing_prior = [
+            milestone_fields[index]
+            for index in range(last_populated + 1)
+            if merged_dates[index] is None
+        ]
+        if missing_prior:
+            return (
+                "LP_MILESTONE_GAP",
+                "LP milestones must be completed in sequence. Fill the missing earlier date(s): "
+                + ", ".join(missing_prior),
+            )
+
     if (
         merged.get("lp_completion_date")
         and not merged.get("lp_circulation_start_date")
@@ -1888,9 +1906,17 @@ def update_khs(khs_id):
                 before_lp_start
                 and (not before_mi_gm or before_lp_start < before_mi_gm)
             )
-            lp_start_changed = (
-                "lp_circulation_start_date" in data
-                and data["lp_circulation_start_date"] != before_lp_start
+            lp_milestone_fields = (
+                "lp_circulation_start_date",
+                "lp_contract_team_completion_date",
+                "lp_junior_manager_approval_date",
+                "lp_senior_manager_approval_date",
+                "lp_gm_scm_approval_date",
+                "lp_completion_date",
+            )
+            lp_milestones_changed = any(
+                field in data and data[field] != before.get(field)
+                for field in lp_milestone_fields
             )
             mi_gm_changed = (
                 "mi_gm_approval_date" in data
@@ -1901,7 +1927,7 @@ def update_khs(khs_id):
                 and (not merged_mi_gm or merged_lp_start < merged_mi_gm)
             )
             if prerequisite_invalid and (
-                not historic_lp_exception or lp_start_changed or mi_gm_changed
+                not historic_lp_exception or lp_milestones_changed or mi_gm_changed
             ):
                 return jsonify(
                     success=False,
