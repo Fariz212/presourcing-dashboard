@@ -78,7 +78,7 @@ INSERT INTO khs_items (
         DATE '2026-07-29', DATE '2026-08-01',
         DATE '2026-08-02', DATE '2026-08-03', DATE '2026-08-05',
         DATE '2026-08-07', DATE '2026-08-08', DATE '2026-08-10',
-        NULL, NULL, NULL, DATE '2026-08-10',
+        DATE '2026-08-11', NULL, NULL, DATE '2026-08-11',
         'Synthetic fully injected contract approaching renewal'
     ),
     (
@@ -89,7 +89,7 @@ INSERT INTO khs_items (
         DATE '2026-07-12', DATE '2026-07-14',
         DATE '2026-07-15', DATE '2026-07-16', DATE '2026-07-17',
         DATE '2026-07-20', DATE '2026-07-21', DATE '2026-07-23',
-        NULL, NULL, NULL, DATE '2026-07-23',
+        DATE '2026-07-24', NULL, NULL, DATE '2026-07-24',
         'Synthetic fully injected contract for lifecycle watch'
     ),
     (
@@ -100,7 +100,7 @@ INSERT INTO khs_items (
         DATE '2026-05-13', DATE '2026-05-15',
         DATE '2026-05-16', DATE '2026-05-18', DATE '2026-05-19',
         DATE '2026-05-21', DATE '2026-05-22', DATE '2026-05-24',
-        NULL, NULL, NULL, DATE '2026-05-24',
+        DATE '2026-05-25', NULL, NULL, DATE '2026-05-25',
         'Synthetic fully injected contract showing an expired lifecycle state'
     ),
     (
