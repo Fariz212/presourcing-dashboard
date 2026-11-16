@@ -84,6 +84,23 @@ ITEM_DATE_FIELDS = {
     "Original Source Column S (Audit Copy - LP Circulation Start Date)": "source_col_s_audit_date",
 }
 
+REQUEST_INPUT_HEADERS = {
+    "Request ID",
+    "Request Date",
+    "Request / Subject",
+    "Requester / Owner",
+}
+
+KHS_INPUT_HEADERS = (
+    set(ITEM_DATE_FIELDS)
+    | {
+        "KHS ID", "Request ID", "Source Row No.", "Request Date",
+        "Request / Subject", "Request Subject", "Executor", "Subtype",
+        "Vendor Name", "Waiting For", "Waiting Reason", "Remarks",
+        "Legacy Overall Status", "Legacy Detailed Status", "Migration Review",
+    }
+)
+
 SUBTYPE_MAP = {
     "renewal": "Renewal",
     "kontrak baru": "Kontrak Baru",
@@ -125,6 +142,37 @@ def _text(value):
 def _normalized_subject(value):
     text = _text(value)
     return re.sub(r"\s+", " ", text).casefold() if text else None
+
+
+def _row_has_values(cells):
+    return any(
+        cell.value is not None
+        and not (isinstance(cell.value, str) and not cell.value.strip())
+        for cell in cells
+    )
+
+
+def _check_formula_inputs(cells, header_map, allowed_headers, issues, entity, row_number):
+    """Reject formulas in source fields that must contain literal values.
+
+    Calculated/reference columns may contain formulas, but identifiers,
+    editable values, and workflow dates must be explicit Excel values.
+    """
+    for header in allowed_headers:
+        index = _header_index(header_map, header)
+        if index is None or index >= len(cells):
+            continue
+        cell = cells[index]
+        if getattr(cell, "data_type", None) == "f":
+            _add_issue(
+                issues,
+                "ERROR",
+                "FORMULA_IN_INPUT_FIELD",
+                entity,
+                row_number,
+                header,
+                "Replace the formula with a fixed value before importing this field.",
+            )
 
 
 def _find_header_row(ws, required_headers, label):
@@ -364,7 +412,7 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None, k
         workbook = load_workbook(
             file_object,
             read_only=True,
-            data_only=True,
+            data_only=False,
         )
 
     except Exception as exc:
@@ -420,6 +468,12 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None, k
             ),
             start=request_header_row + 1,
         ):
+            if not _row_has_values(cells):
+                continue
+            _check_formula_inputs(
+                cells, request_map, REQUEST_INPUT_HEADERS,
+                issues, "REQUEST", row_number,
+            )
             request_id = _text(
                 _value(cells, request_map, "Request ID")
             )
@@ -434,9 +488,6 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None, k
             )
             if not subject and existing_request:
                 subject = existing_request.get("request_subject")
-
-            if not request_id and not subject:
-                continue
 
             if not request_id:
                 _add_issue(
@@ -527,6 +578,12 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None, k
             ),
             start=khs_header_row + 1,
         ):
+            if not _row_has_values(cells):
+                continue
+            _check_formula_inputs(
+                cells, khs_map, KHS_INPUT_HEADERS,
+                issues, "KHS_ITEM", row_number,
+            )
             khs_id = _text(_value(cells, khs_map, "KHS ID"))
             existing_item = (
                 known_items.get(khs_id)
@@ -543,7 +600,16 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None, k
                 _value(cells, khs_map, "Request / Subject")
             )
 
-            if not any((khs_id, request_id, vendor, subject)):
+            if not khs_id:
+                _add_issue(
+                    issues,
+                    "ERROR",
+                    "MISSING_KHS_ID",
+                    "KHS_ITEM",
+                    row_number,
+                    "KHS ID",
+                    "KHS ID is required for every non-empty KHS row.",
+                )
                 continue
 
             row_has_error = False
@@ -813,6 +879,14 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None, k
                 and dates.get(field) != (existing_item or {}).get(field)
                 for field in all_lp_date_fields
             )
+            mi_gm_approval_changed = (
+                dates.get("mi_gm_approval_date") is not None
+                and dates.get("mi_gm_approval_date")
+                    != (existing_item or {}).get("mi_gm_approval_date")
+            )
+            lp_prerequisite_changed = (
+                lp_milestones_changed or mi_gm_approval_changed
+            )
             if (
                 any(effective_dates.get(field) for field in lp_milestone_fields)
                 and not lp_start
@@ -856,27 +930,36 @@ def parse_khs_workbook(file_object, known_executors=None, known_requests=None, k
             )
             mi_gm = effective_dates["mi_gm_approval_date"]
 
-            if lp_start and not mi_gm:
-                _add_issue(
-                    issues,
-                    "WARNING",
-                    "LP_START_WITHOUT_MI_GM_DATE",
-                    "KHS_ITEM",
-                    row_number,
-                    "LP Circulation Start Date",
-                    "LP circulation is recorded but MI GM Approval "
-                    "Date is missing. Verify the source data.",
+            if lp_start and (not mi_gm or lp_start < mi_gm):
+                # Preserve unchanged historical exceptions as warnings, but
+                # block new/changed LP milestones that violate the MI GM gate.
+                unchanged_legacy_exception = (
+                    existing_item is not None
+                    and not lp_prerequisite_changed
                 )
-
-            elif lp_start and mi_gm and lp_start < mi_gm:
+                severity = "WARNING" if unchanged_legacy_exception else "ERROR"
+                code = (
+                    "LP_START_WITHOUT_MI_GM_DATE"
+                    if not mi_gm
+                    else "LP_START_BEFORE_MI_GM"
+                )
+                message = (
+                    "LP circulation is recorded but MI GM Approval Date is missing."
+                    if not mi_gm
+                    else "LP circulation date precedes MI GM approval."
+                )
                 _add_issue(
                     issues,
-                    "WARNING",
-                    "LP_START_BEFORE_MI_GM",
+                    severity,
+                    code,
                     "KHS_ITEM",
                     row_number,
                     "LP Circulation Start Date",
-                    "LP circulation date precedes MI GM approval.",
+                    message + (
+                        " This unchanged historical exception is retained for review."
+                        if unchanged_legacy_exception
+                        else " Correct the MI GM approval date before importing LP changes."
+                    ),
                 )
 
             if lp_completion and not lp_start and lp_milestones_changed:
