@@ -2,7 +2,7 @@ name: KHS application checks
 
 on:
   push:
-    branches: [khs]
+    branches: [khs, 'design/khs-atelier-ux']
   pull_request:
     branches: [khs]
 
