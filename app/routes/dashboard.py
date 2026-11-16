@@ -969,6 +969,12 @@ def khs_register():
         filters.append("register.current_stage_code = %s")
         params.append(stage)
 
+    if lp_stage == "prerequisite_exception":
+        filters.append("register.lp_started_without_mi_gm_approval IS TRUE")
+    elif lp_stage:
+        filters.append("register.lp_stage_key = %s")
+        params.append(lp_stage)
+
     if waiting_role:
         filters.append(
             "((register.lp_circulation_start_date IS NOT NULL "
@@ -1071,6 +1077,7 @@ def khs_register():
             "stage": stage or None,
             "waiting_for": waiting_for or None,
             "waiting_role": waiting_role or None,
+            "lp_stage": lp_stage or None,
         },
     }), 200
 
@@ -1136,14 +1143,15 @@ def lp_circulation_register():
         {where_sql}
         ORDER BY
             CASE register.lp_stage_key
-                WHEN 'legacy_incomplete' THEN 0
-                WHEN 'contract_team' THEN 1
-                WHEN 'junior_manager' THEN 2
-                WHEN 'senior_manager' THEN 3
-                WHEN 'general_manager' THEN 4
-                WHEN 'director' THEN 5
-                WHEN 'completed' THEN 6
-                ELSE 7
+                WHEN 'legacy_unverified' THEN 0
+                WHEN 'legacy_incomplete' THEN 1
+                WHEN 'contract_team' THEN 2
+                WHEN 'junior_manager' THEN 3
+                WHEN 'senior_manager' THEN 4
+                WHEN 'general_manager' THEN 5
+                WHEN 'director' THEN 6
+                WHEN 'completed' THEN 7
+                ELSE 8
             END,
             register.lp_circulation_start_date ASC NULLS FIRST,
             register.khs_id
