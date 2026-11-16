@@ -214,7 +214,7 @@ async function loadOverview() {
   try {
     const results = await Promise.all([
       api("/api/dashboard/summary"),
-      api("/api/dashboard/khs?attention=true&per_page=8"),
+      api("/api/dashboard/khs?attention=true&per_page=5"),
       api("/api/dashboard/workflow/overview").catch(() => null),
       api("/api/dashboard/contracts/lifecycle?per_page=1").catch(() => null)
     ]);
@@ -311,20 +311,24 @@ function renderAttention(rows) {
     emptyRow("attentionBody", 6, "No records currently require attention.");
     return;
   }
-  body.innerHTML = rows.map((r) =>
-    "<tr><td data-label=\"REQUEST / KHS\"><span class=\"cell-primary\">" + esc(r.request_subject || "Untitled request") +
-    "</span><span class=\"cell-secondary\">" + esc(r.khs_id) + " · " + esc(r.request_id) + "</span></td>" +
-    "<td data-label=\"VENDOR\">" + esc(r.vendor_name) + "</td><td data-label=\"CURRENT STAGE\">" + esc(r.current_stage_name || r.current_stage_code) +
-    (r.lp_started_without_mi_gm_approval ? '<span class="exception-label">MI GM prerequisite exception</span>' : "") +
-    "</td><td data-label=\"WAITING FOR / NEXT ACTION\"><span class=\"cell-primary\">" +
-    esc(r.waiting_for || (r.lp_started_without_mi_gm_approval ? "Review prerequisite" : "Review next action")) +
-    "</span>" +
-    (r.waiting_reason ? '<span class="cell-secondary">' + esc(r.waiting_reason) + "</span>" : "") +
-    "</td><td data-label=\"UPDATED\">" + esc(fmt(r.last_updated_date || r.updated_at)) +
-    "</td><td data-label=\"ACTION\"><button class=\"view-button\" data-view-khs=\"" + esc(r.khs_id) +
-    "\" aria-label=\"Open KHS " + esc(r.khs_id) + "\">View record</button></td></tr>"
-  ).join("");
+  body.innerHTML = rows.map((r) => {
+    const age = r.lp_stage_age_days == null ? "—" :
+      r.lp_stage_age_days + (r.lp_stage_age_days === 1 ? " day in stage" : " days in stage");
+    return "<tr><td data-label=\\"REQUEST / KHS\\"><span class=\\"cell-primary\\">" + esc(r.request_subject || "Untitled request") +
+      "</span><span class=\\"cell-secondary\\">" + esc(r.khs_id) + " · " + esc(r.request_id) + "</span></td>" +
+      "<td data-label=\\"VENDOR\\">" + esc(r.vendor_name) + "</td><td data-label=\\"CURRENT STAGE\\">" + esc(r.current_stage_name || r.current_stage_code) +
+      (r.lp_started_without_mi_gm_approval ? '<span class=\\"exception-label\\">MI GM prerequisite exception</span>' : "") +
+      "</td><td data-label=\\"WAITING FOR / NEXT ACTION\\"><span class=\\"cell-primary\\">" +
+      esc(r.waiting_for || (r.lp_started_without_mi_gm_approval ? "Review prerequisite" : "Review next action")) +
+      "</span>" +
+      (r.waiting_reason ? '<span class=\\"cell-secondary\\">' + esc(r.waiting_reason) + "</span>" : "") +
+      "</td><td data-label=\\"STAGE AGE / UPDATED\\"><span class=\\"cell-primary\\">" + esc(age) +
+      "</span><span class=\\"cell-secondary\\">Updated " + esc(fmt(r.last_updated_date || r.updated_at)) + "</span></td>" +
+      "<td data-label=\\"ACTION\\"><button class=\\"view-button\\" data-view-khs=\\"" + esc(r.khs_id) +
+      "\\">View record</button></td></tr>";
+  }).join("");
 }
+
 async function loadFilters() {
   const result = await api("/api/dashboard/filters");
   state.filters = result.data;
