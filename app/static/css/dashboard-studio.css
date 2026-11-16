@@ -3015,3 +3015,17 @@ input:focus,select:focus,textarea:focus { border-color: #8db19a; outline: 3px so
   html { scroll-behavior: auto; }
   *,*::before,*::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+
+/* Visually hidden labels keep form controls accessible to assistive technology. */
+.sr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
