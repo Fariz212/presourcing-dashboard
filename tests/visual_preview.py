@@ -187,6 +187,10 @@ def main() -> int:
             page.locator("#registerBody tr").first.wait_for(state="visible", timeout=15_000)
             if page.locator("#activeRegisterFilters").is_hidden():
                 raise AssertionError("Workflow stage drilldown did not expose its active filter")
+            page.locator("#resetFilters").click(timeout=10_000)
+            page.locator('#registerBody [data-view-khs="KHS-VIS-004"]').wait_for(
+                state="visible", timeout=15_000
+            )
         except Exception as error:
             capture_errors.append(f"Workflow stage drilldown: {error}")
             print(f"FAILED workflow stage drilldown: {error}")
