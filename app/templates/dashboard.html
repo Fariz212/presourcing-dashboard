@@ -2,11 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#14233b"><meta name="description" content="KHS Contract Creation Management">
+<meta name="theme-color" content="#1f382e"><meta name="description" content="KHS Contract Creation Management">
 <title>Contract Monitoring &amp; Tracking</title>
-<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard-premium.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard-refresh.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard-studio.css') }}">
 <script src="{{ url_for('static', filename='js/dashboard.js') }}" defer></script>
 </head>
 <body>
@@ -135,27 +133,43 @@
 </section>
 <section class="page-view" id="page-register" data-title="KHS Register">
 <div class="page-heading"><div><div class="eyebrow">WORKSPACE / RECORDS</div><h1>KHS Register</h1><p>Manage each contract record, assign ownership, and update its milestones.</p></div><button class="primary-button" id="createKhsButton">+ Add KHS</button></div>
-<article class="panel"><div class="filter-toolbar"><input id="searchInput" type="search" placeholder="Search request subject, vendor, KHS…"><select id="statusFilter"><option value="">All LP statuses</option><option value="completed">Completed</option><option value="in_progress">In progress</option><option value="not_started">Not started</option></select><select id="executorFilter"><option value="">All executors</option></select><select id="subtypeFilter"><option value="">All subtypes</option></select><select id="waitingFilter"><option value="">All waiting parties</option></select><select id="stageFilter"><option value="">All workflow stages</option></select><button class="reset-button" id="resetFilters">Reset</button></div>
+<article class="panel"><div class="filter-toolbar register-toolbar" role="search" aria-label="Filter KHS records">
+<div class="register-search"><input id="searchInput" type="search" aria-label="Search KHS records" placeholder="Search by request, vendor or KHS ID…"></div>
+<label class="sr-only" for="statusFilter">Filter by LP status</label><select id="statusFilter" aria-label="Filter by LP status"><option value="">All LP statuses</option><option value="completed">Completed</option><option value="in_progress">In progress</option><option value="not_started">Not started</option></select>
+<details class="filter-more"><summary>More filters</summary><div class="filter-more-fields">
+<label for="executorFilter">Executor<select id="executorFilter"><option value="">All executors</option></select></label>
+<label for="subtypeFilter">Contract type<select id="subtypeFilter"><option value="">All subtypes</option></select></label>
+<label for="waitingFilter">Waiting for<select id="waitingFilter"><option value="">All waiting parties</option></select></label>
+<label for="stageFilter">Workflow stage<select id="stageFilter"><option value="">All workflow stages</option></select></label>
+</div></details>
+<button class="reset-button" id="resetFilters" type="button">Reset filters</button>
+</div>
 <div class="table-wrap"><table><thead><tr><th>REQUEST SUBJECT / VENDOR</th><th>EXECUTOR</th><th>WORKFLOW STAGE</th><th>WORKFLOW STATUS</th><th>LP STATUS</th><th>LP CURRENT STAGE / AGE</th><th>INJECT START</th><th>FULLY INJECTED</th><th>WAITING FOR</th><th></th></tr></thead><tbody id="registerBody"><tr><td colspan="10" class="table-message">Loading…</td></tr></tbody></table></div>
 <div class="register-footer"><span id="recordCount">—</span><div class="pagination"><span id="paginationText">—</span><button id="previousPage" type="button">‹</button><button id="nextPage" type="button">›</button></div></div></article>
 </section>
 <section class="page-view" id="page-lp" data-title="LP Circulation">
   <div class="page-heading"><div><div class="eyebrow">APPROVAL JOURNEY / LP</div><h1>LP Circulation</h1><p>Track every LP milestone from User submission through Director sign-off, with current stage and stage age.</p></div><button class="secondary-button" id="lpRefresh">Refresh</button></div>
   <div class="lp-stage-summary">
-    <button type="button" class="lp-stage-card" data-lp-stage=""><span>All LP records</span><strong id="lpTotalRecords">—</strong><small>Started or historically recorded</small></button>
-    <button type="button" class="lp-stage-card" data-lp-stage="contract_team"><span>Tim Kontrak</span><strong id="lpCountContractTeam">—</strong><small>Next milestone</small></button>
-    <button type="button" class="lp-stage-card" data-lp-stage="junior_manager"><span>Junior Manager</span><strong id="lpCountJunior">—</strong><small>Awaiting approval</small></button>
-    <button type="button" class="lp-stage-card" data-lp-stage="senior_manager"><span>Senior Manager</span><strong id="lpCountSenior">—</strong><small>Awaiting approval</small></button>
-    <button type="button" class="lp-stage-card" data-lp-stage="general_manager"><span>GM SCM</span><strong id="lpCountGm">—</strong><small>Awaiting approval</small></button>
-    <button type="button" class="lp-stage-card" data-lp-stage="director"><span>Director</span><strong id="lpCountDirector">—</strong><small>Final sign-off</small></button>
-    <button type="button" class="lp-stage-card" data-lp-stage="completed"><span>LP Completed</span><strong id="lpCountCompleted">—</strong><small>Director signed</small></button>
-    <button type="button" class="lp-stage-card" data-lp-stage="prerequisite_exception"><span>MI GM Exceptions</span><strong id="lpCountPrerequisite">—</strong><small>LP gate not met</small></button>
-    <button type="button" class="lp-stage-card" data-lp-stage="legacy_unverified"><span>Legacy Unverified</span><strong id="lpCountLegacyUnverified">—</strong><small>Director sign-off unverified</small></button>
-    <button type="button" class="lp-stage-card" data-lp-stage="legacy_incomplete"><span>Timeline Gaps</span><strong id="lpCountLegacy">—</strong><small>Missing historical dates</small></button>
-  </div>
-  <article class="panel">
+    <div class="lp-stage-main" aria-label="LP approval stages">
+          <button type="button" class="lp-stage-card" data-lp-stage=""><span>All LP records</span><strong id="lpTotalRecords">—</strong><small>Started or historically recorded</small></button>
+          <button type="button" class="lp-stage-card" data-lp-stage="contract_team"><span>Tim Kontrak</span><strong id="lpCountContractTeam">—</strong><small>Next milestone</small></button>
+          <button type="button" class="lp-stage-card" data-lp-stage="junior_manager"><span>Junior Manager</span><strong id="lpCountJunior">—</strong><small>Awaiting approval</small></button>
+          <button type="button" class="lp-stage-card" data-lp-stage="senior_manager"><span>Senior Manager</span><strong id="lpCountSenior">—</strong><small>Awaiting approval</small></button>
+          <button type="button" class="lp-stage-card" data-lp-stage="general_manager"><span>GM SCM</span><strong id="lpCountGm">—</strong><small>Awaiting approval</small></button>
+          <button type="button" class="lp-stage-card" data-lp-stage="director"><span>Director</span><strong id="lpCountDirector">—</strong><small>Final sign-off</small></button>
+          <button type="button" class="lp-stage-card" data-lp-stage="completed"><span>LP Completed</span><strong id="lpCountCompleted">—</strong><small>Director signed</small></button>
+    </div>
+    <section class="lp-quality-summary" aria-label="Historical data quality filters">
+      <div class="lp-quality-intro"><strong>Historical data quality</strong><small>Review these separately from the live approval route.</small></div>
+      <div class="lp-quality-cards">
+            <button type="button" class="lp-stage-card" data-lp-stage="prerequisite_exception"><span>MI GM Exceptions</span><strong id="lpCountPrerequisite">—</strong><small>LP gate not met</small></button>
+            <button type="button" class="lp-stage-card" data-lp-stage="legacy_unverified"><span>Legacy Unverified</span><strong id="lpCountLegacyUnverified">—</strong><small>Director sign-off unverified</small></button>
+            <button type="button" class="lp-stage-card" data-lp-stage="legacy_incomplete"><span>Timeline Gaps</span><strong id="lpCountLegacy">—</strong><small>Missing historical dates</small></button>
+      </div>
+    </section>
+  </div>  <article class="panel">
     <div class="filter-toolbar lp-filter-toolbar">
-      <input id="lpSearch" type="search" placeholder="Search KHS, request, vendor…">
+      <input id="lpSearch" type="search" aria-label="Search LP circulation records" placeholder="Search KHS, request, vendor…">
       <select id="lpStageFilter">
         <option value="">All LP stages</option>
         <option value="prerequisite_exception">MI GM prerequisite exception</option>
@@ -191,7 +205,7 @@
   </div>
   <article class="panel">
     <div class="filter-toolbar contract-filter-toolbar">
-      <input id="contractSearch" type="search" placeholder="Search KHS, request, vendor…">
+      <input id="contractSearch" type="search" aria-label="Search contract lifecycle records" placeholder="Search KHS, request, vendor…">
       <select id="contractStatusFilter">
         <option value="">All lifecycle statuses</option>
         <option value="upcoming">Upcoming contract</option>
