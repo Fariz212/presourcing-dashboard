@@ -211,10 +211,13 @@ def main() -> int:
             stage_card.click(timeout=10_000)
             current_page = "register"
             page.locator("#page-register.active").wait_for(state="visible", timeout=15_000)
+            page.wait_for_load_state("networkidle", timeout=20_000)
             page.locator("#registerBody tr").first.wait_for(state="visible", timeout=15_000)
-            if page.locator("#activeRegisterFilters").is_hidden():
-                raise AssertionError("Workflow stage drilldown did not expose its active filter")
+            page.locator("#activeRegisterFilters:not([hidden])").wait_for(
+                state="visible", timeout=15_000
+            )
             page.locator("#resetFilters").click(timeout=10_000)
+            page.wait_for_load_state("networkidle", timeout=20_000)
             page.locator('#registerBody [data-view-khs="KHS-VIS-004"]').wait_for(
                 state="visible", timeout=15_000
             )
