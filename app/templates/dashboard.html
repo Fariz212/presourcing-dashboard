@@ -57,7 +57,7 @@
 </div>
 
 <article class="panel attention-panel"><div class="panel-heading"><div><div class="eyebrow">ACTION REQUIRED</div><h2>Priority action queue</h2><p>Records awaiting approval, owner follow-up, or prerequisite review.</p></div><button class="text-button" data-go="register" data-attention-only="true">View attention queue →</button></div>
-<div class="table-wrap"><table><thead><tr><th>REQUEST / KHS</th><th>VENDOR</th><th>CURRENT STAGE</th><th>WAITING FOR / NEXT ACTION</th><th>STAGE AGE / UPDATED</th><th>ACTION</th></tr></thead><tbody id="attentionBody"><tr><td colspan="6" class="table-message">Loading…</td></tr></tbody></table></div></article>
+<div class="table-wrap"><table><thead><tr><th>REQUEST / KHS</th><th>VENDOR</th><th>CURRENT STAGE</th><th>WAITING FOR / NEXT ACTION</th><th>STAGE AGE / UPDATED</th><th>ACTION</th></tr></thead><tbody id="attentionBody"><tr><td colspan="6" class="table-message">Loading…</td></tr></tbody></table></div><p id="attentionMobileHint" class="attention-mobile-hint">Showing the three highest-priority items. Open the full queue to see every outstanding record.</p></article>
 <section class="approval-command" aria-labelledby="approvalCommandTitle">
   <div class="approval-command-heading">
     <div>
@@ -183,7 +183,11 @@
   </article>
 </section>
 <section class="page-view" id="page-workflow" data-title="Workflow Monitoring">
-<div class="page-heading"><div><div class="eyebrow">WORKSPACE / PROCESS CONTROL</div><h1>Workflow Monitoring</h1><p>Distribution by the next workflow checkpoint and work awaiting action.</p></div><button class="secondary-button" id="workflowRefresh">Refresh</button></div>
+<div class="page-heading"><div><div class="eyebrow">WORKSPACE / PROCESS CONTROL</div><h1>Workflow Monitoring</h1><p>See where records are waiting and open the matching worklist directly.</p></div><button class="secondary-button" id="workflowRefresh">Refresh</button></div>
+<div class="workflow-workbench-toolbar">
+  <p id="workflowStageSummary" aria-live="polite">Loading workflow stages…</p>
+  <button type="button" class="workflow-empty-toggle" id="workflowEmptyToggle" aria-expanded="false" hidden>Show empty stages</button>
+</div>
 <div class="workflow-cards" id="workflowCards"><div class="panel">Loading workflow…</div></div>
 <article class="panel"><div class="panel-heading"><div><div class="eyebrow">LP CIRCULATION</div><h2>LoA Sign-off Route</h2></div></div><div class="loa-route"><span>User</span><i>→</i><span>Tim Kontrak</span><i>→</i><span>Junior Manager Vendor Management</span><i>→</i><span>Senior Manager Strategic Sourcing</span><i>→</i><span>GM SCM</span><i>→</i><span>Direktur</span></div><p class="muted">LP circulation is gated by GM SCM MI approval. The route is shown for process visibility; individual sign-off dates remain tracked on each KHS record.</p></article>
 </section>
