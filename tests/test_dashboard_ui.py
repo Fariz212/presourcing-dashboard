@@ -115,7 +115,7 @@ def test_dashboard_contains_separate_operational_modules(monkeypatch, tmp_path):
     attention_js = client.get("/static/js/dashboard.js")
     assert attention_js.status_code == 200
     assert b'data-label="REQUEST / KHS"' in attention_js.data
-    assert b'aria-label=\\"Open KHS ' in attention_js.data
+    assert b'aria-label="Open KHS ' in attention_js.data
     assert "LP Circulation" in body
     assert "Contract Lifecycle" in body
     assert "Approval journey" in body
