@@ -444,6 +444,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .queue-steps { display: grid; gap: 7px; }
 .queue-steps-three { grid-template-columns: repeat(3, minmax(0,1fr)); }
 .queue-steps-four { grid-template-columns: repeat(4, minmax(0,1fr)); }
+.queue-steps-five { grid-template-columns: repeat(5, minmax(0,1fr)); }
 .queue-step {
   display: flex;
   flex-direction: column;
@@ -1356,3 +1357,30 @@ tbody td { font-size: 11px; line-height: 1.45; }
 .attention-panel tbody td { font-size: 11px; }
 .attention-panel .cell-primary { font-size: 12px; }
 .attention-panel .cell-secondary { font-size: 10px; }
+
+
+/* The fixed LP route has five dated approval steps. Keep all lanes readable
+   across tablet and mobile widths instead of forcing a horizontal overflow. */
+.queue-reconciliation .queue-step {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 40px;
+  padding: 7px 10px;
+  gap: 10px;
+}
+.queue-reconciliation .queue-step-label { margin: 0; }
+.queue-reconciliation .queue-step strong { margin: 0; }
+#changesBody details summary { cursor: pointer; color: var(--blue); font-weight: 680; }
+#changesBody details ul { margin: 7px 0 4px; padding-left: 18px; }
+#changesBody details li { margin: 3px 0; line-height: 1.45; }
+
+@media (max-width: 1100px) {
+  .queue-steps-five { grid-template-columns: repeat(3, minmax(0,1fr)); }
+}
+@media (max-width: 620px) {
+  .queue-steps-five { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .queue-reconciliation { align-items: stretch; flex-direction: column; }
+  .queue-reconciliation-note { margin-left: 0; text-align: left; }
+}
