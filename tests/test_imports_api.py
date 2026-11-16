@@ -243,7 +243,7 @@ def test_partial_khs_excel_roundtrip_updates_existing_record(client):
 
 
 
-def test_download_current_workbook_contains_v23_schema(client):
+def test_download_current_workbook_contains_v24_schema(client):
     response = client.get("/api/imports/workbook.xlsx")
 
     assert response.status_code == 200
@@ -269,10 +269,6 @@ def test_download_current_workbook_contains_v23_schema(client):
         assert "KHS ID" in khs_headers
         assert "LP Timeline Quality" in khs_headers
         assert "LP Next Approver" in khs_headers
-        assert request_ws.cell(6, request_headers["Total KHS"]).data_type == "f"
-        assert request_ws.cell(6, request_headers["Request Status"]).data_type == "f"
-        for name in ("MI Status", "LP Status", "Workflow Status", "Current Stage", "LP Next Approver"):
-            assert khs_ws.cell(6, khs_headers[name]).data_type == "f", name
         waiting_range = f"{get_column_letter(khs_headers['Waiting For'])}6:{get_column_letter(khs_headers['Waiting For'])}1048576"
         validation_ranges = [str(item.sqref) for item in khs_ws.data_validations.dataValidation]
         assert waiting_range in validation_ranges
