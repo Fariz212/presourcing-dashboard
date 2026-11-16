@@ -34,7 +34,7 @@ INSERT INTO khs_items (
         'Kontrak Baru', 'Meridian Technology Partners', DATE '2026-10-01', DATE '2027-12-31',
         DATE '2026-09-04', DATE '2026-09-10', DATE '2026-09-14',
         DATE '2026-09-17', DATE '2026-09-20', NULL,
-        NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+        NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
         'General Manager', 'GM approval is pending',
         DATE '2026-11-13', 'Synthetic visual-preview record'
     ),
@@ -44,7 +44,7 @@ INSERT INTO khs_items (
         DATE '2026-09-18', DATE '2026-09-22', DATE '2026-09-25',
         DATE '2026-09-26', DATE '2026-09-28', DATE '2026-10-20',
         DATE '2026-10-22', DATE '2026-10-25',
-        NULL, NULL, NULL, NULL, NULL, NULL,
+        NULL, NULL, NULL, NULL, NULL, NULL, NULL,
         'Tim Kontrak', 'LP package is being checked by the contract team',
         DATE '2026-11-14', 'Synthetic visual-preview record'
     ),
@@ -55,7 +55,7 @@ INSERT INTO khs_items (
         DATE '2026-08-29', DATE '2026-08-31', DATE '2026-09-28',
         DATE '2026-09-29', DATE '2026-10-01',
         DATE '2026-10-02', DATE '2026-10-05', NULL,
-        NULL, NULL, NULL,
+        NULL, NULL, NULL, NULL,
         'Senior Manager Strategic Sourcing', 'Awaiting senior manager approval',
         DATE '2026-11-12', 'Synthetic visual-preview record'
     ),
@@ -66,7 +66,7 @@ INSERT INTO khs_items (
         DATE '2026-08-19', DATE '2026-08-21', DATE '2026-09-18',
         DATE '2026-09-19', DATE '2026-09-20',
         DATE '2026-09-21', DATE '2026-09-22', DATE '2026-09-24',
-        NULL, NULL, NULL,
+        NULL, NULL, NULL, NULL,
         'GM SCM', 'Final LP approval is pending',
         DATE '2026-11-11', 'Synthetic visual-preview record'
     ),
@@ -78,7 +78,7 @@ INSERT INTO khs_items (
         DATE '2026-07-29', DATE '2026-08-01',
         DATE '2026-08-02', DATE '2026-08-03', DATE '2026-08-05',
         DATE '2026-08-07', DATE '2026-08-08', DATE '2026-08-10',
-        NULL, NULL, DATE '2026-08-10',
+        NULL, NULL, NULL, DATE '2026-08-10',
         'Synthetic fully injected contract approaching renewal'
     ),
     (
@@ -89,7 +89,7 @@ INSERT INTO khs_items (
         DATE '2026-07-12', DATE '2026-07-14',
         DATE '2026-07-15', DATE '2026-07-16', DATE '2026-07-17',
         DATE '2026-07-20', DATE '2026-07-21', DATE '2026-07-23',
-        NULL, NULL, DATE '2026-07-23',
+        NULL, NULL, NULL, DATE '2026-07-23',
         'Synthetic fully injected contract for lifecycle watch'
     ),
     (
@@ -100,7 +100,7 @@ INSERT INTO khs_items (
         DATE '2026-05-13', DATE '2026-05-15',
         DATE '2026-05-16', DATE '2026-05-18', DATE '2026-05-19',
         DATE '2026-05-21', DATE '2026-05-22', DATE '2026-05-24',
-        NULL, NULL, DATE '2026-05-24',
+        NULL, NULL, NULL, DATE '2026-05-24',
         'Synthetic fully injected contract showing an expired lifecycle state'
     ),
     (
@@ -110,7 +110,7 @@ INSERT INTO khs_items (
         DATE '2026-10-23', DATE '2026-10-24', DATE '2026-10-25',
         DATE '2026-10-27', DATE '2026-10-29',
         DATE '2026-10-30', DATE '2026-10-31', DATE '2026-11-01',
-        DATE '2026-11-03', DATE '2026-11-04', NULL,
+        DATE '2026-11-03', DATE '2026-11-04', NULL, NULL,
         'KHS Injection Team', 'Injection is in progress',
         DATE '2026-11-14', 'Synthetic visual-preview record'
     )
