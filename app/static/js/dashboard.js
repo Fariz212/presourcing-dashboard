@@ -229,8 +229,9 @@ function renderApprovalPipeline(data) {
   if (!data) {
     [
       "miQueueTotal", "miJuniorCount", "miSeniorCount", "miGeneralCount",
-      "lpQueueTotal", "lpJuniorCount", "lpSeniorCount", "lpGeneralCount",
-      "lpDirectorCount", "lpOtherCount"
+      "lpQueueTotal", "lpContractTeamCount", "lpJuniorCount", "lpSeniorCount",
+      "lpGeneralCount", "lpDirectorCount", "lpPrerequisiteCount",
+      "lpLegacyUnverifiedCount", "lpTimelineGapsCount"
     ].forEach((id) => set(id, "—"));
     set("lpQueueNote", "Approval queue data is temporarily unavailable.");
     return;
@@ -251,15 +252,18 @@ function renderApprovalPipeline(data) {
   set("miGeneralCount", miGeneral);
   set("miQueueTotal", miJunior + miSenior + miGeneral);
 
+  set("lpContractTeamCount", countFor(lp, "contract_team"));
   set("lpJuniorCount", countFor(lp, "junior_manager"));
   set("lpSeniorCount", countFor(lp, "senior_manager"));
   set("lpGeneralCount", countFor(lp, "general_manager"));
   set("lpDirectorCount", countFor(lp, "director"));
   set("lpQueueTotal", data.lp_active_total);
-  set("lpOtherCount", data.lp_unassigned_or_other);
+  set("lpPrerequisiteCount", data.lp_prerequisite_exceptions || 0);
+  set("lpLegacyUnverifiedCount", data.lp_legacy_unverified || 0);
+  set("lpTimelineGapsCount", data.lp_timeline_gaps || 0);
   set(
     "lpQueueNote",
-    "Active LP records not mapped to the four roles are retained in this bucket."
+    "Current LP stage is derived from the ordered milestone dates. Exceptions are kept outside the approval lanes."
   );
 }
 
@@ -433,6 +437,8 @@ async function loadLPCirculation() {
   set("lpCountGm", byStage.general_manager || 0);
   set("lpCountDirector", byStage.director || 0);
   set("lpCountCompleted", byStage.completed || 0);
+  set("lpCountPrerequisite", byStage.prerequisite_exception || 0);
+  set("lpCountLegacyUnverified", byStage.legacy_unverified || 0);
   set("lpCountLegacy", byStage.legacy_incomplete || 0);
 
   const body = $("lpBody");
@@ -1015,6 +1021,14 @@ function bind() {
       state.registerPage = 1;
       clearRegisterFilters();
       go("register");
+    })
+  );
+  document.querySelectorAll("[data-lp-queue-stage]").forEach((el) =>
+    el.addEventListener("click", () => {
+      const filter = $("lpStageFilter");
+      if (filter) filter.value = el.dataset.lpQueueStage;
+      state.lpPage = 1;
+      go("lp");
     })
   );
   $("refreshButton").addEventListener("click", () => loadPage(state.page).catch((e) => toast(e.message)));
