@@ -221,6 +221,7 @@ def test_current_v24_workbook_round_trips_lp_and_khs_inject_dates():
             "executor_code": "ALW",
             "subtype": "Renewal",
             "dispatch_date": date(2026, 11, 2),
+            "mi_gm_approval_date": date(2026, 11, 9),
             "lp_circulation_start_date": date(2026, 11, 10),
             "lp_contract_team_completion_date": date(2026, 11, 11),
             "lp_junior_manager_approval_date": date(2026, 11, 12),
