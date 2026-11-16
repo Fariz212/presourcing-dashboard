@@ -451,11 +451,16 @@ async function loadLPCirculation() {
       const history = r.lp_timeline_has_gaps
         ? '<span class="status-badge status-warning">Partial history</span>'
         : '<span class="status-badge status-completed">Recorded</span>';
+      const prerequisiteFlag = r.lp_prerequisite_exception
+        ? '<span class="exception-label">MI GM prerequisite exception</span>' : "";
+      const legacyFlag = r.lp_legacy_unverified
+        ? '<span class="exception-label">Legacy Director sign-off unverified</span>' : "";
       return "<tr><td><span class=\"cell-primary\">" + esc(r.khs_id) + "</span>" +
         "<span class=\"cell-secondary\">" + esc(r.vendor_name) + "</span></td>" +
         "<td><span class=\"cell-primary\">" + esc(r.request_subject || "Untitled request") + "</span>" +
         "<span class=\"cell-secondary\">" + esc(r.request_id) + "</span></td>" +
         "<td><span class=\"cell-primary\">" + esc(r.lp_stage_label || "—") + "</span>" +
+        prerequisiteFlag + legacyFlag +
         (r.waiting_for ? "<span class=\"cell-secondary\">Waiting for " + esc(r.waiting_for) + "</span>" : "") + "</td>" +
         "<td>" + esc(age) + "</td><td>" + esc(fmt(r.lp_circulation_start_date)) + "</td>" +
         "<td>" + esc(r.waiting_reason || "—") + "</td><td>" + history + "</td>" +
