@@ -420,8 +420,23 @@ def main() -> int:
             lp_form_section = page.locator("#dialogFields .form-section-lp-circulation")
             lp_form_section.wait_for(state="visible", timeout=10_000)
             lp_form_section.scroll_into_view_if_needed()
+            if page.locator(".date-format-hint").first.inner_text() != "Choose date":
+                raise AssertionError("English date-picker hint was not applied")
+            if page.locator('#dialogFields input[type="date"]').first.get_attribute("lang") != "en-GB":
+                raise AssertionError("English date input locale was not applied")
             capture_dialog("khs-form", "desktop", 1440, 1000)
             capture_dialog("khs-form", "mobile", 390, 844)
+            page.locator("#cancelRecord").click()
+            page.locator("#recordDialog").wait_for(state="hidden", timeout=10_000)
+
+            page.locator('[data-khs-language="id"]').click(timeout=10_000)
+            page.wait_for_function("document.documentElement.lang === 'id'")
+            page.locator("#createKhsButton").click(timeout=10_000)
+            page.locator("#recordDialog[open]").wait_for(state="visible", timeout=10_000)
+            if page.locator(".date-format-hint").first.inner_text() != "Pilih tanggal":
+                raise AssertionError("Indonesian date-picker hint was not applied")
+            if page.locator('#dialogFields input[type="date"]').first.get_attribute("lang") != "id-ID":
+                raise AssertionError("Indonesian date input locale was not applied")
             page.locator("#cancelRecord").click()
         except Exception as error:
             capture_errors.append(f"KHS detail/form interaction captures: {error}")
