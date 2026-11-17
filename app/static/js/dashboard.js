@@ -794,8 +794,7 @@ const I18N_ID = Object.freeze({
   "Active workflow":"Alur kerja aktif",
   "Stage age":"Umur tahap",
   "Aging":"Umur proses",
-  "Stage moved reminders remain in record history.":"Pengingat dari tahap sebelumnya tetap tersimpan dalam riwayat data."
-
+  "Stage moved reminders remain in record history.":"Pengingat dari tahap sebelumnya tetap tersimpan dalam riwayat data.",
   "Control Tower":"Pusat Kendali Operasi",
   "Request Intake":"Penerimaan Permintaan",
   "Work Queue":"Antrean Kerja",
