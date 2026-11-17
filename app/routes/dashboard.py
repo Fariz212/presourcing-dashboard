@@ -2043,6 +2043,17 @@ def khs_detail(khs_id):
                 history = cur.fetchall()
 
                 cur.execute(
+                    """SELECT id, stage_code, due_date, follow_up_to, note, status,
+                              created_at, created_by, completed_at, completed_by
+                       FROM khs_follow_ups
+                       WHERE khs_id=%s
+                       ORDER BY CASE WHEN status='OPEN' THEN 0 ELSE 1 END,
+                                due_date ASC, id DESC""",
+                    (khs_id,),
+                )
+                follow_ups = cur.fetchall()
+
+                cur.execute(
                     """SELECT id, document_type, original_file_name, mime_type,
                               uploaded_by, uploaded_at
                        FROM khs_documents
@@ -2062,6 +2073,7 @@ def khs_detail(khs_id):
             success=True,
             data=_register_enriched(item, include_duration_history=True),
             history=[_row_dict(x) for x in history],
+            follow_ups=[_row_dict(x) for x in follow_ups],
             documents=document_rows,
         ), 200
     except Exception:
@@ -2701,10 +2713,10 @@ def _operations_stage_query(as_of):
             COUNT(wip.khs_id) FILTER (WHERE wip.stage_age_days BETWEEN 15 AND 30)::int AS age_15_30,
             COUNT(wip.khs_id) FILTER (WHERE wip.stage_age_days > 30)::int AS age_over_30,
             COUNT(wip.khs_id) FILTER (WHERE wip.khs_id IS NOT NULL AND wip.stage_age_days IS NULL)::int AS age_unavailable,
-            percentile_disc(0.5) WITHIN GROUP (ORDER BY wip.stage_age_days)
-                FILTER (WHERE wip.stage_age_days IS NOT NULL)::int AS median_age_days,
-            percentile_disc(0.9) WITHIN GROUP (ORDER BY wip.stage_age_days)
-                FILTER (WHERE wip.stage_age_days IS NOT NULL)::int AS p90_age_days,
+            (percentile_disc(0.5) WITHIN GROUP (ORDER BY wip.stage_age_days)
+                FILTER (WHERE wip.stage_age_days IS NOT NULL))::int AS median_age_days,
+            (percentile_disc(0.9) WITHIN GROUP (ORDER BY wip.stage_age_days)
+                FILTER (WHERE wip.stage_age_days IS NOT NULL))::int AS p90_age_days,
             MAX(wip.stage_age_days)::int AS oldest_age_days,
             policy.warning_after_days,
             policy.target_days,
