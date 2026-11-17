@@ -52,6 +52,7 @@ jobs:
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/002_import_change_classification.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/003_khs_injection_and_evidence.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/004_lp_milestones_and_contract_lifecycle.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/005_khs_closure_and_process_duration.sql
       - name: Compile application and tests
         run: python -m compileall -q app tests
       - name: Check dashboard JavaScript syntax
@@ -108,6 +109,7 @@ jobs:
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/002_import_change_classification.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/003_khs_injection_and_evidence.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/004_lp_milestones_and_contract_lifecycle.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/005_khs_closure_and_process_duration.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/visual-preview-seed.sql
 
       - name: Start isolated KHS application
