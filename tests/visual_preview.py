@@ -147,8 +147,13 @@ def main() -> int:
                     navigation_link.click(timeout=10_000)
                     current_page = page_name
 
-                active_view = page.locator(f"#page-{page_name}.active")
+                active_page_name = "register" if page_name == "lp" else page_name
+                active_view = page.locator(f"#page-{active_page_name}.active")
                 active_view.wait_for(state="visible", timeout=15_000)
+                if page_name == "lp":
+                    selected_lp_view = page.locator('[data-work-queue-view="lp"]').get_attribute("aria-pressed")
+                    if selected_lp_view != "true":
+                        raise AssertionError("LP navigation must open the LP saved view inside Work Queue")
                 page.wait_for_load_state("networkidle", timeout=20_000)
                 page.set_viewport_size({"width": width, "height": height})
                 page.wait_for_timeout(500)

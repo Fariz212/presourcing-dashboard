@@ -1417,6 +1417,37 @@ def khs_register():
             "message": "Unsupported WIP age band filter.",
         }), 400
 
+    work_view = request.args.get("work_view", "all").strip().lower()
+    allowed_work_views = {"all", "active", "attention", "lp", "exceptions", "unassigned"}
+    if work_view not in allowed_work_views:
+        return jsonify({
+            "success": False,
+            "code": "INVALID_WORK_VIEW",
+            "message": "Unsupported Work Queue saved view.",
+        }), 400
+
+    lp_stage = request.args.get("lp_stage", "").strip().lower()
+    if lp_stage and lp_stage not in LP_STAGE_FILTERS:
+        return jsonify({
+            "success": False,
+            "code": "INVALID_LP_STAGE",
+            "message": "Unsupported LP stage filter.",
+        }), 400
+    if lp_stage and work_view != "lp":
+        return jsonify({
+            "success": False,
+            "code": "LP_STAGE_REQUIRES_LP_VIEW",
+            "message": "LP stage filtering is available in the LP Circulation saved view.",
+        }), 400
+
+    owner_status = request.args.get("owner_status", "").strip().lower()
+    if owner_status and owner_status not in {"assigned", "unassigned"}:
+        return jsonify({
+            "success": False,
+            "code": "INVALID_OWNER_STATUS",
+            "message": "Unsupported action-owner filter.",
+        }), 400
+
     # Construct parameterized filters. Age filters are based on the current
     # stage's recorded opening milestone and Jakarta-local calendar date.
     filters = []
@@ -1502,7 +1533,63 @@ def khs_register():
             today = _jakarta_today()
             params.extend([today, today])
 
-    attention = request.args.get("attention", "").strip().lower() in {"1", "true", "yes"}
+    # Saved views reuse the same KHS source of truth. LP view deliberately
+    # includes completed and legacy-partial LP records, not only active LP WIP.
+    lp_record_condition = """
+        (
+            register.lp_circulation_start_date IS NOT NULL
+            OR register.lp_contract_team_completion_date IS NOT NULL
+            OR register.lp_junior_manager_approval_date IS NOT NULL
+            OR register.lp_senior_manager_approval_date IS NOT NULL
+            OR register.lp_gm_scm_approval_date IS NOT NULL
+            OR register.lp_completion_date IS NOT NULL
+        )
+    """
+
+    if work_view == "active":
+        filters.append("""
+            register.process_status = 'ACTIVE'
+            AND register.workflow_status <> 'completed'
+        """)
+    elif work_view == "lp":
+        filters.append(lp_record_condition)
+    elif work_view == "exceptions":
+        filters.append("""
+            (
+                register.lp_started_without_mi_gm_approval IS TRUE
+                OR register.lp_stage_key IN (
+                    'prerequisite_exception',
+                    'legacy_unverified',
+                    'legacy_incomplete'
+                )
+                OR register.lp_timeline_has_gaps IS TRUE
+                OR register.milestone_chronology_valid IS FALSE
+            )
+        """)
+    elif work_view == "unassigned":
+        filters.append("""
+            register.process_status = 'ACTIVE'
+            AND register.workflow_status <> 'completed'
+            AND NULLIF(BTRIM(COALESCE(register.action_owner, '')), '') IS NULL
+        """)
+
+    if lp_stage == "legacy_incomplete":
+        filters.append("register.lp_timeline_has_gaps IS TRUE")
+    elif lp_stage == "prerequisite_exception":
+        filters.append("register.lp_started_without_mi_gm_approval IS TRUE")
+    elif lp_stage:
+        filters.append("register.lp_stage_key = %s")
+        params.append(lp_stage)
+
+    if owner_status == "unassigned":
+        filters.append("NULLIF(BTRIM(COALESCE(register.action_owner, '')), '') IS NULL")
+    elif owner_status == "assigned":
+        filters.append("NULLIF(BTRIM(COALESCE(register.action_owner, '')), '') IS NOT NULL")
+
+    attention = (
+        request.args.get("attention", "").strip().lower() in {"1", "true", "yes"}
+        or work_view == "attention"
+    )
     if attention:
         filters.append("""
             (
@@ -1598,6 +1685,9 @@ def khs_register():
             "waiting_role": waiting_role or None,
             "process_status": process_status or None,
             "age_band": age_band or None,
+            "work_view": work_view,
+            "lp_stage": lp_stage or None,
+            "owner_status": owner_status or None,
         },
     }), 200
 

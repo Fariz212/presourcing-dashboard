@@ -357,6 +357,49 @@ def test_lean_workspace_navigation_responsive_tables_and_activity_filters(monkey
     assert long_search.status_code == 400
 
 
+def test_lean_work_queue_uses_saved_views_and_separates_action_roles(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        "app.init_db_pool",
+        lambda _app: DummyPool(),
+    )
+    flask_app = create_app({
+        "TESTING": True,
+        "SECRET_KEY": "lean-work-queue-test-secret",
+        "DATABASE_URL": "postgresql://test:test@localhost/test",
+        "UPLOAD_DIR": tmp_path / "uploads",
+    })
+    client = flask_app.test_client()
+
+    response = client.get("/dashboard")
+    assert response.status_code == 200
+    body = response.data.decode("utf-8")
+
+    assert 'id="page-register" data-title="Work Queue"' in body
+    for view in ("all", "active", "attention", "lp", "exceptions", "unassigned"):
+        assert f'data-work-queue-view="{view}"' in body
+    assert 'class="nav-link nav-link-sub" href="#lp" data-page="lp"' in body
+    assert "ACTION OWNER" in body
+    assert "WAITING ON" in body
+    assert "NEXT ACTION / MILESTONE" in body
+    assert "LP / INJECTION" in body
+    assert 'id="lpWorkStageFilter"' in body
+
+    javascript = client.get("/static/js/dashboard.js")
+    assert javascript.status_code == 200
+    script = javascript.data.decode("utf-8")
+    assert 'p.set("work_view", state.workView || "active")' in script
+    assert 'p.set("lp_stage", state.workLpStageFilter)' in script
+    assert 'if (page === "lp")' in script
+    assert 'r.action_owner || ""' in script
+    assert 'r.waiting_for' in script
+    assert 'r.guided_progress && r.guided_progress.label' in script
+
+    stylesheet = client.get("/static/css/dashboard-studio.css")
+    assert stylesheet.status_code == 200
+    assert b".work-queue-views" in stylesheet.data
+    assert b".nav-link-sub" in stylesheet.data
+
+
 def test_overview_prioritizes_actions_without_duplicate_graph_panels(monkeypatch, tmp_path):
     monkeypatch.setattr(
         "app.init_db_pool",

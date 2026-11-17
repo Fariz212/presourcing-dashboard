@@ -795,6 +795,31 @@ const I18N_ID = Object.freeze({
   "Stage age":"Umur tahap",
   "Aging":"Umur proses",
   "Stage moved reminders remain in record history.":"Pengingat dari tahap sebelumnya tetap tersimpan dalam riwayat data."
+
+  "Control Tower":"Pusat Kendali Operasi",
+  "Request Intake":"Penerimaan Permintaan",
+  "Work Queue":"Antrean Kerja",
+  "Operations Analytics":"Analitik Operasional",
+  "DATA & GOVERNANCE":"DATA & TATA KELOLA",
+  "One operational list for active KHS, waiting approvals, LP circulation, and records that need ownership or data review.":"Satu daftar operasional untuk KHS aktif, persetujuan tertunda, sirkulasi LP, serta data yang memerlukan PIC atau pemeriksaan.",
+  "All KHS":"Semua KHS",
+  "Active WIP":"WIP Aktif",
+  "Waiting / Attention":"Menunggu / Perlu Perhatian",
+  "Data Exceptions":"Pengecualian Data",
+  "Unassigned PIC":"PIC Belum Ditentukan",
+  "ACTION OWNER":"PIC Tindakan",
+  "WAITING ON":"Menunggu Pihak",
+  "NEXT ACTION / MILESTONE":"Tindakan Berikutnya / Milestone",
+  "LP / INJECTION":"LP / Injeksi",
+  "Unassigned":"Belum Ditentukan",
+  "No waiting party recorded":"Belum ada pihak yang tercatat untuk ditunggu",
+  "No next action recorded":"Belum ada tindakan berikutnya yang dicatat",
+  "Review milestone history":"Periksa riwayat milestone",
+  "Process completed":"Proses selesai",
+  "Complete next milestone":"Selesaikan milestone berikutnya",
+  "LP stage":"Tahap LP",
+  "LP stage filtering is available in the LP Circulation saved view.":"Filter tahap LP tersedia pada tampilan Sirkulasi LP.",
+  "No KHS records match the current filters.":"Tidak ada data KHS yang sesuai dengan filter saat ini."
 });
 
 const I18N_ID_LOWER = Object.freeze(
@@ -993,7 +1018,9 @@ const state = {
   workflowRoleFilter: null,
   workflowRows: [],
   showEmptyWorkflowStages: false,
-  attentionOnly: false
+  attentionOnly: false,
+  workView: "active",
+  workLpStageFilter: null
 };
 
 const dateFields = [
@@ -1173,22 +1200,33 @@ function closeMobileNavigation() {
 }
 
 function go(page) {
-  const allowed = ["overview", "requests", "register", "lp", "contracts", "workflow", "imports", "activity"];
+  // Preserve legacy #lp links, but route them into the LP saved view in Work Queue.
+  if (page === "lp") {
+    state.workView = "lp";
+    page = "register";
+  }
+  const allowed = ["overview", "requests", "register", "contracts", "workflow", "imports", "activity"];
   if (allowed.indexOf(page) < 0) return;
   state.page = page;
   document.querySelectorAll(".page-view").forEach((el) => {
     el.classList.toggle("active", el.id === "page-" + page);
   });
   document.querySelectorAll(".nav-link[data-page]").forEach((el) => {
-    el.classList.toggle("active", el.dataset.page === page);
-    if (el.dataset.page === page) el.setAttribute("aria-current", "page");
+    const isActive = page === "register"
+      ? (state.workView === "lp" ? el.dataset.page === "lp" : el.dataset.page === "register")
+      : el.dataset.page === page;
+    el.classList.toggle("active", isActive);
+    if (isActive) el.setAttribute("aria-current", "page");
     else el.removeAttribute("aria-current");
   });
   const active = $("page-" + page);
-  set("breadcrumbCurrent", active ? active.dataset.title : page);
+  const title = page === "register" && state.workView === "lp"
+    ? "LP Circulation" : (active ? active.dataset.title : page);
+  set("breadcrumbCurrent", title);
   syncRefreshVisibility(page);
   closeMobileNavigation();
-  if (window.location.hash !== "#" + page) history.replaceState(null, "", "#" + page);
+  const hash = page === "register" && state.workView === "lp" ? "#lp" : "#" + page;
+  if (window.location.hash !== hash) history.replaceState(null, "", hash);
   loadPage(page).catch((err) => toast(err.message));
 }
 
@@ -1445,6 +1483,20 @@ function renderActiveRegisterFilters() {
   });
   if (state.workflowRoleFilter) filters.push({id:"workflowRoleFilter",label:"Approval role",value:state.workflowRoleFilter.replace(/_/g," ")});
   if (state.attentionOnly) filters.push({id:"attentionOnly",label:"Queue",value:"Needs attention"});
+  const workViewLabels = {
+    all: "All KHS",
+    active: "Active WIP",
+    attention: "Waiting / Attention",
+    lp: "LP Circulation",
+    exceptions: "Data Exceptions",
+    unassigned: "Unassigned PIC"
+  };
+  if (state.workView && state.workView !== "all") {
+    filters.push({id:"workView",label:"Saved view",value:workViewLabels[state.workView] || state.workView});
+  }
+  if (state.workView === "lp" && state.workLpStageFilter) {
+    filters.push({id:"workLpStageFilter",label:"LP stage",value:state.workLpStageFilter.replace(/_/g," ")});
+  }
   container.hidden = filters.length === 0;
   container.innerHTML = filters.map((filter) =>
     '<button type="button" class="filter-chip" data-clear-filter="' + esc(filter.id) + '">' +
@@ -1469,6 +1521,11 @@ function clearOneRegisterFilter(id) {
     state.workflowRoleFilter = null;
   } else if (id === "attentionOnly") {
     state.attentionOnly = false;
+  } else if (id === "workView") {
+    state.workView = "active";
+    state.workLpStageFilter = null;
+  } else if (id === "workLpStageFilter") {
+    state.workLpStageFilter = null;
   } else {
     const control = $(id);
     if (control) control.value = "";
@@ -1481,6 +1538,7 @@ function registerQuery() {
   const p = new URLSearchParams();
   p.set("page", String(state.registerPage));
   p.set("per_page", String(state.perPage));
+  p.set("work_view", state.workView || "active");
   [["q","searchInput"],["lp_status","statusFilter"],["executor_code","executorFilter"],
    ["subtype","subtypeFilter"],["waiting_for","waitingFilter"],["process_status","processStatusFilter"]].forEach((pair) => {
     const el = $(pair[1]);
@@ -1490,6 +1548,7 @@ function registerQuery() {
   else if ($("stageFilter") && $("stageFilter").value) p.set("stage", $("stageFilter").value);
   if (state.workflowAgeBandFilter) p.set("age_band", state.workflowAgeBandFilter);
   if (state.workflowRoleFilter) p.set("waiting_role", state.workflowRoleFilter);
+  if (state.workView === "lp" && state.workLpStageFilter) p.set("lp_stage", state.workLpStageFilter);
   if (state.attentionOnly) p.set("attention", "true");
   return p.toString();
 }
@@ -1498,7 +1557,18 @@ async function loadRegister() {
   const result = await api("/api/dashboard/khs?" + registerQuery());
   const body = $("registerBody");
   if (!body) return;
-  if (!result.data.length) emptyRow("registerBody", 6, "No KHS records match the current filters.");
+
+  document.querySelectorAll("[data-work-queue-view]").forEach((button) => {
+    const selected = button.dataset.workQueueView === state.workView;
+    button.classList.toggle("is-active", selected);
+    button.setAttribute("aria-pressed", String(selected));
+  });
+  const lpStageWrap = $("lpWorkStageFilterWrap");
+  if (lpStageWrap) lpStageWrap.hidden = state.workView !== "lp";
+  const lpStageSelect = $("lpWorkStageFilter");
+  if (lpStageSelect) lpStageSelect.value = state.workLpStageFilter || "";
+
+  if (!result.data.length) emptyRow("registerBody", 7, "No KHS records match the current filters.");
   else body.innerHTML = result.data.map((r) => {
     const stage = currentStageLabel(r);
     const stageAge = currentStageAgeLabel(r);
@@ -1510,23 +1580,51 @@ async function loadRegister() {
       : r.khs_inject_start_date
         ? '<span class="status-badge status-in_progress">Injection started</span><span class="cell-secondary">' + esc(fmt(r.khs_inject_start_date)) + "</span>"
         : '<span class="status-badge status-neutral">Not started</span>';
+    const lpBadge = '<span class="status-badge status-' + esc(r.lp_status || "not_started") + '">' + esc(lpStatus) + '</span>';
     const exception = r.lp_prerequisite_exception || r.lp_started_without_mi_gm_approval
       ? '<span class="exception-label">MI GM prerequisite review</span>'
       : r.lp_legacy_unverified
         ? '<span class="exception-label">Director sign-off unverified</span>'
-        : r.lp_timeline_has_gaps
-          ? '<span class="exception-label">Historical timeline gaps</span>' : "";
+        : r.lp_timeline_has_gaps || r.milestone_chronology_valid === false
+          ? '<span class="exception-label">Historical timeline needs review</span>' : "";
+    const requiresAction = r.process_status === "ACTIVE" && r.workflow_status !== "completed";
+    const actionOwner = requiresAction ? (r.action_owner || "") : "";
+    const ownerMarkup = requiresAction && !actionOwner
+      ? '<span class="status-badge status-warning">Unassigned</span>'
+      : '<span class="cell-primary">' + esc(actionOwner || "—") + '</span>';
+    const waitingOn = r.waiting_for
+      ? '<span class="cell-primary">' + esc(r.waiting_for) + '</span>'
+      : '<span class="cell-secondary">No waiting party recorded</span>';
+    const guidedLabel = r.guided_progress && r.guided_progress.label
+      ? r.guided_progress.label : "";
+    const nextAction = r.waiting_reason
+      ? r.waiting_reason
+      : guidedLabel
+        ? "Complete: " + guidedLabel
+        : r.milestone_chronology_valid === false
+          ? "Review milestone history"
+          : r.workflow_status === "completed"
+            ? "Process completed"
+            : r.process_status === "NOT_PROCEEDED"
+              ? "Not Proceeded"
+              : "No next action recorded";
+    const nextMeta = guidedLabel && r.waiting_reason
+      ? "Next milestone: " + guidedLabel
+      : r.process_status === "NOT_PROCEEDED"
+        ? "Closed " + fmt(r.closure_date)
+        : "";
+    const progressMarkup = lpBadge + '<span class="cell-secondary">' + injection + '</span>';
     return "<tr>" +
       '<td><span class="cell-primary">' + esc(r.request_subject || "Untitled request") + '</span>' +
       '<span class="cell-secondary">' + esc(r.vendor_name) + " · " + esc(r.khs_id) + '</span>' +
       '<span class="cell-tertiary">' + esc(r.executor_name || r.executor_code || "Unassigned") + "</span></td>" +
       '<td><span class="cell-primary">' + esc(stage) + '</span>' +
       '<span class="cell-secondary">' + esc(stageAge) + "</span>" + exception + "</td>" +
-      '<td><span class="status-badge status-' + esc(r.lp_status || "not_started") + '">' + esc(lpStatus) + "</span></td>" +
-      "<td>" + injection + "</td>" +
-      '<td><span class="cell-primary">' + esc(r.action_owner || r.waiting_for || (exception ? "Review data / prerequisite" : "No waiting owner recorded")) + '</span>' +
-      (r.action_owner && r.waiting_for ? '<span class="cell-secondary">Waiting for ' + esc(r.waiting_for) + "</span>" : "") +
-      (r.waiting_reason ? '<span class="cell-secondary">' + esc(r.waiting_reason) + "</span>" : "") + "</td>" +
+      "<td>" + ownerMarkup + "</td>" +
+      "<td>" + waitingOn + "</td>" +
+      '<td><span class="cell-primary">' + esc(nextAction) + '</span>' +
+      (nextMeta ? '<span class="cell-secondary">' + esc(nextMeta) + "</span>" : "") + "</td>" +
+      "<td>" + progressMarkup + "</td>" +
       '<td><button type="button" class="view-button" data-view-khs="' + esc(r.khs_id) + '">Details</button></td>' +
       "</tr>";
   }).join("");
@@ -2924,11 +3022,14 @@ function bind() {
   document.querySelectorAll(".nav-link[data-page]").forEach((el) => {
     el.addEventListener("click", (event) => {
       event.preventDefault();
-      if (el.dataset.page === "register") {
+      if (el.dataset.page === "register" || el.dataset.page === "lp") {
+        state.workView = el.dataset.page === "lp" ? "lp" : (el.dataset.workView || "active");
+        state.workLpStageFilter = null;
         state.workflowStageFilter = null;
         state.workflowAgeBandFilter = null;
         state.workflowRoleFilter = null;
         state.attentionOnly = false;
+        state.registerPage = 1;
       }
       go(el.dataset.page);
     });
@@ -2936,18 +3037,22 @@ function bind() {
   document.querySelectorAll("[data-go]").forEach((el) =>
     el.addEventListener("click", () => {
       if (el.dataset.go === "register") {
+        state.workView = el.dataset.attentionOnly === "true" ? "attention" : (el.dataset.workView || "active");
+        state.workLpStageFilter = null;
         state.workflowStageFilter = null;
         state.workflowAgeBandFilter = null;
         state.workflowRoleFilter = null;
-        state.attentionOnly = el.dataset.attentionOnly === "true";
+        state.attentionOnly = false;
         state.registerPage = 1;
-        if (state.attentionOnly) clearRegisterFilters();
+        if (state.workView === "attention") clearRegisterFilters();
       }
       go(el.dataset.go);
     })
   );
   document.querySelectorAll("[data-queue-stage]").forEach((el) =>
     el.addEventListener("click", () => {
+      state.workView = "active";
+      state.workLpStageFilter = null;
       state.workflowStageFilter = el.dataset.queueStage;
       state.workflowAgeBandFilter = null;
       state.workflowRoleFilter = null;
@@ -2959,6 +3064,8 @@ function bind() {
   );
   document.querySelectorAll("[data-queue-role]").forEach((el) =>
     el.addEventListener("click", () => {
+      state.workView = "active";
+      state.workLpStageFilter = null;
       state.workflowStageFilter = null;
       state.workflowAgeBandFilter = null;
       state.workflowRoleFilter = el.dataset.queueRole;
@@ -2970,9 +3077,13 @@ function bind() {
   );
   document.querySelectorAll("[data-lp-queue-stage]").forEach((el) =>
     el.addEventListener("click", () => {
-      const filter = $("lpStageFilter");
-      if (filter) filter.value = el.dataset.lpQueueStage;
-      state.lpPage = 1;
+      state.workView = "lp";
+      state.workLpStageFilter = el.dataset.lpQueueStage || null;
+      state.registerPage = 1;
+      state.workflowStageFilter = null;
+      state.workflowAgeBandFilter = null;
+      state.workflowRoleFilter = null;
+      clearRegisterFilters();
       go("lp");
     })
   );
@@ -2982,6 +3093,8 @@ function bind() {
   workflowCards.addEventListener("click", (event) => {
     const card = event.target.closest("[data-workflow-stage]");
     if (!card) return;
+    state.workView = "active";
+    state.workLpStageFilter = null;
     state.workflowStageFilter = card.dataset.workflowStage;
     state.workflowRoleFilter = null;
     state.attentionOnly = false;
@@ -3155,6 +3268,25 @@ function bind() {
     state.workflowAgeBandFilter = null;
     state.workflowRoleFilter = null;
     state.attentionOnly = false;
+    state.workView = "active";
+    state.workLpStageFilter = null;
+    state.registerPage = 1;
+    loadRegister().catch((e) => toast(e.message));
+  });
+  document.querySelectorAll("[data-work-queue-view]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.workView = button.dataset.workQueueView || "active";
+      state.workLpStageFilter = null;
+      state.workflowStageFilter = null;
+      state.workflowAgeBandFilter = null;
+      state.workflowRoleFilter = null;
+      state.attentionOnly = false;
+      state.registerPage = 1;
+      loadRegister().catch((e) => toast(e.message));
+    });
+  });
+  $("lpWorkStageFilter").addEventListener("change", () => {
+    state.workLpStageFilter = $("lpWorkStageFilter").value || null;
     state.registerPage = 1;
     loadRegister().catch((e) => toast(e.message));
   });

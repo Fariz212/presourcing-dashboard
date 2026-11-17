@@ -366,6 +366,54 @@ def test_khs_register_attention_filter_excludes_completed_and_includes_next_acti
 
     assert "LEFT JOIN khs_executors" in data_query
 
+def test_khs_register_supports_work_queue_saved_views(make_client):
+    cases = [
+        ("active", "register.process_status = 'ACTIVE'", "register.workflow_status <> 'completed'"),
+        ("attention", "register.waiting_for", "register.lp_started_without_mi_gm_approval IS TRUE"),
+        ("lp", "register.lp_circulation_start_date IS NOT NULL", "register.lp_completion_date IS NOT NULL"),
+        ("exceptions", "register.milestone_chronology_valid IS FALSE", "register.lp_timeline_has_gaps IS TRUE"),
+        ("unassigned", "register.action_owner", "register.process_status = 'ACTIVE'"),
+    ]
+    for view, expected_a, expected_b in cases:
+        pool = RegisterFakePool(rows=[], total=0)
+        response = make_client(pool).get(f"/api/dashboard/khs?work_view={view}")
+        assert response.status_code == 200, response.get_json()
+        count_query, _ = pool.queries[0]
+        data_query, _ = pool.queries[1]
+        assert expected_a in count_query
+        assert expected_b in count_query
+        assert expected_a in data_query
+        assert expected_b in data_query
+
+
+def test_khs_register_lp_saved_view_supports_lp_stage_filter(make_client):
+    pool = RegisterFakePool(rows=[], total=0)
+    response = make_client(pool).get(
+        "/api/dashboard/khs?work_view=lp&lp_stage=general_manager"
+    )
+    assert response.status_code == 200
+    count_query, count_params = pool.queries[0]
+    data_query, data_params = pool.queries[1]
+    assert "register.lp_stage_key = %s" in count_query
+    assert "general_manager" in count_params
+    assert "general_manager" in data_params
+
+
+def test_khs_register_rejects_invalid_work_view_and_incompatible_lp_stage(make_client):
+    pool = RegisterFakePool()
+    client = make_client(pool)
+
+    invalid_view = client.get("/api/dashboard/khs?work_view=not-a-view")
+    assert invalid_view.status_code == 400
+    assert invalid_view.get_json()["code"] == "INVALID_WORK_VIEW"
+
+    invalid_lp_view = client.get("/api/dashboard/khs?work_view=active&lp_stage=director")
+    assert invalid_lp_view.status_code == 400
+    assert invalid_lp_view.get_json()["code"] == "LP_STAGE_REQUIRES_LP_VIEW"
+
+    assert pool.queries == []
+
+
 class ExportCursor:
     def __init__(self):
         self.rows = [{
