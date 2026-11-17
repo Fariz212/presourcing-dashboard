@@ -3123,12 +3123,19 @@ function bind() {
       go("lp");
     })
   );
-  $("refreshButton").addEventListener("click", () => {
-    if ($("detailDialog").open && state.detail) {
-      openDetails(state.detail.khs_id);
-      return;
+  $("refreshButton").addEventListener("click", async () => {
+    try {
+      if ($("detailDialog").open && state.detail) {
+        const activePanel = document.querySelector("#detailDialog [data-workbench-panel]:not([hidden])");
+        const panelId = activePanel ? activePanel.id : "workSummarySection";
+        await openDetails(state.detail.khs_id);
+        setWorkbenchPanel(panelId);
+        return;
+      }
+      await loadPage(state.page);
+    } catch (error) {
+      toast(error.message);
     }
-    loadPage(state.page).catch((e) => toast(e.message));
   });
   const workflowCards = $("workflowCards");
   workflowCards.addEventListener("click", (event) => {

@@ -460,7 +460,11 @@ def test_khs_workbench_uses_progressive_single_panel_navigation(monkeypatch, tmp
         "detailGrid", "followUpSection", "documentSection",
     ):
         assert f'id="{panel_id}"' in body
-        assert f'id="{panel_id}"' in body and f'id="{panel_id}"' in body
+        panel_tag = next(
+            line for line in body.splitlines() if f'id="{panel_id}"' in line
+        )
+        assert "data-workbench-panel" in panel_tag
+        assert "hidden" in panel_tag
     assert 'id="closureSummary" class="closure-summary" hidden' in body
 
     script = flask_app.test_client().get("/static/js/dashboard.js").data.decode("utf-8")

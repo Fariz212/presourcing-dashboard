@@ -31,11 +31,9 @@ def test_dashboard_exposes_operations_analytics_and_workbench_controls(monkeypat
         'id="updateProgressButton"',
         'id="followUpSection"',
         'id="followUpForm"',
-        'id="workbench-nav"',
     ):
-        if marker == 'id="workbench-nav"':
-            continue
         assert marker in body
+    assert body.count('id="workbench-nav"') == 1
 
     script = client.get("/static/js/dashboard.js")
     assert script.status_code == 200
