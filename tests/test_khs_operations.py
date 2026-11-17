@@ -96,6 +96,7 @@ def test_guided_progress_rejects_chronology_and_lp_gate_violations():
 
     lp_record = {
         "mi_gm_approval_date": None,
+        "legal_submission_date": date(2026, 11, 10),
         "lp_circulation_start_date": None,
         "lp_contract_team_completion_date": None,
         "lp_junior_manager_approval_date": None,
