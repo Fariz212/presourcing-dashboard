@@ -159,6 +159,18 @@ def main() -> int:
                 page.set_viewport_size({"width": width, "height": height})
                 page.wait_for_timeout(500)
 
+                if page_name == "overview" and viewport_name == "desktop":
+                    if page.locator("#refreshButton:visible").count() != 1:
+                        raise AssertionError("One persistent global refresh control must be visible.")
+                    if page.locator("#overviewRefresh, #workflowRefresh, #refreshOperationsButton, #contractRefresh, #activityRefresh, #refreshHistoryButton").count():
+                        raise AssertionError("Duplicate page-specific refresh controls remain.")
+                    with page.expect_response(
+                        lambda response: response.url.endswith("/api/dashboard/summary")
+                        and response.request.method == "GET"
+                    ) as global_refresh:
+                        page.locator("#refreshButton").click(timeout=10_000)
+                    if global_refresh.value.status != 200:
+                        raise AssertionError("Global refresh did not reload the active Overview.")
                 if page_name == "overview" and viewport_name == "mobile":
                     total_attention_rows = page.locator("#attentionBody tr").count()
                     visible_attention_rows = page.locator("#attentionBody tr:visible").count()
@@ -242,6 +254,8 @@ def main() -> int:
             page.locator('a.nav-link[data-page="workflow"]').first.click(timeout=10_000)
             current_page = "workflow"
             page.locator("#page-workflow.active").wait_for(state="visible", timeout=15_000)
+            page.locator("#workflowStageDisclosure > summary").click(timeout=10_000)
+            page.wait_for_function("document.querySelector('#workflowStageDisclosure')?.open === true")
             default_stage_count = page.locator("#workflowCards [data-workflow-stage]").count()
             if default_stage_count == 0:
                 raise AssertionError("Workflow should show stages that currently contain records")
@@ -454,9 +468,11 @@ def main() -> int:
             # Phase 1 browser validation: WIP age profile and register drill-down.
             page.locator('a.nav-link[data-page="workflow"]').click()
             page.locator("#page-workflow.active").wait_for(state="visible", timeout=10_000)
-            age_drilldown = page.locator(
-                '#operationsStageBody [data-operations-stage="MI_GM_APPROVAL"][data-operations-age-band="31_plus"]'
+            mi_gm_details = page.locator(
+                '#operationsStageBody tr:has([data-operations-stage="MI_GM_APPROVAL"]) .stage-detail-disclosure'
             )
+            mi_gm_details.locator("summary").click(timeout=10_000)
+            age_drilldown = mi_gm_details.locator('[data-operations-age-band="31_plus"]')
             age_drilldown.wait_for(state="visible", timeout=15_000)
             page.wait_for_function(
                 "() => { const value = document.querySelector('#opsActiveWip')?.textContent.trim(); return value && value !== '—'; }",
@@ -470,17 +486,21 @@ def main() -> int:
                 raise AssertionError("No bottleneck ranks were rendered for occupied workflow stages.")
 
             # Every active WIP record must reconcile to exactly one age bucket.
+            # Buckets are disclosed per stage instead of occupying permanent table columns.
             bucket_totals = {"0_7": 0, "8_14": 0, "15_30": 0, "31_plus": 0, "unavailable": 0}
             stage_rows = page.locator("#operationsStageBody tr")
             for index in range(stage_rows.count()):
                 cells = stage_rows.nth(index).locator("td")
-                if cells.count() < 10:
+                if cells.count() != 6:
                     continue
                 wip_count = int(cells.nth(1).locator("button").inner_text().strip())
-                bucket_cells = [("0_7", 4), ("8_14", 5), ("15_30", 6), ("31_plus", 7), ("unavailable", 8)]
+                details = cells.nth(0).locator(".stage-detail-disclosure")
+                if not details.evaluate("(el) => el.open"):
+                    details.locator("summary").click(timeout=10_000)
                 stage_bucket_total = 0
-                for band, cell_index in bucket_cells:
-                    value = int(cells.nth(cell_index).locator("button").inner_text().strip())
+                for band in bucket_totals:
+                    button = details.locator(f'[data-operations-age-band="{band}"]')
+                    value = int(button.inner_text().split(":")[-1].strip())
                     bucket_totals[band] += value
                     stage_bucket_total += value
                 if stage_bucket_total != wip_count:
@@ -490,7 +510,7 @@ def main() -> int:
                     )
                 median_text = cells.nth(2).inner_text().strip().removesuffix("d")
                 p90_text = cells.nth(3).inner_text().strip().removesuffix("d")
-                oldest_text = cells.nth(9).inner_text().strip().removesuffix("d")
+                oldest_text = cells.nth(4).inner_text().strip().removesuffix("d")
                 if median_text != "—":
                     median, p90, oldest = int(median_text), int(p90_text), int(oldest_text)
                     if not (median <= p90 <= oldest):
@@ -520,9 +540,11 @@ def main() -> int:
 
             page.locator('a.nav-link[data-page="workflow"]').click()
             page.locator("#page-workflow.active").wait_for(state="visible", timeout=10_000)
-            unavailable_drilldown = page.locator(
-                '#operationsStageBody [data-operations-stage="NEGOTIATION"][data-operations-age-band="unavailable"]'
+            negotiation_details = page.locator(
+                '#operationsStageBody tr:has([data-operations-stage="NEGOTIATION"]) .stage-detail-disclosure'
             )
+            negotiation_details.locator("summary").click(timeout=10_000)
+            unavailable_drilldown = negotiation_details.locator('[data-operations-age-band="unavailable"]')
             unavailable_drilldown.wait_for(state="visible", timeout=10_000)
             with page.expect_response(
                 lambda response: "/api/dashboard/khs?" in response.url
@@ -542,16 +564,23 @@ def main() -> int:
 
             invalid_row.click()
             page.locator("#detailDialog[open]").wait_for(state="visible", timeout=10_000)
+            if not page.locator("#workSummarySection").is_visible():
+                raise AssertionError("Workbench did not open on its Overview panel.")
+            if page.locator("#processDurationSection").is_visible():
+                raise AssertionError("Workbench exposed Process History before it was selected.")
             if page.locator("#updateProgressButton").is_visible():
                 raise AssertionError("Guided Progress remained available for globally inconsistent history.")
+            page.locator('#workbench-nav [data-workbench-target="processDurationSection"]').click()
+            page.locator("#processDurationSection:not([hidden])").wait_for(state="visible", timeout=10_000)
             if page.locator("#totalProcessingDays").inner_text().strip() != "Unavailable":
                 raise AssertionError("Workbench displayed an overall duration for globally inconsistent history.")
             if page.locator("#lpProcessingDays").inner_text().strip() != "Unavailable":
                 raise AssertionError("Workbench displayed an LP duration for globally inconsistent history.")
             page.locator("#processDurationNotice").wait_for(state="visible", timeout=10_000)
-            page.locator("#workSummaryNotice").wait_for(state="visible", timeout=10_000)
             if "chronologically consistent" not in page.locator("#processDurationNotice").inner_text():
                 raise AssertionError("Workbench did not explain why duration totals are withheld.")
+            page.locator('#workbench-nav [data-workbench-target="workSummarySection"]').click()
+            page.locator("#workSummaryNotice").wait_for(state="visible", timeout=10_000)
             page.locator("#closeDialog").click()
 
             print(
@@ -626,6 +655,8 @@ def main() -> int:
                     "() => document.querySelector('#updateProgressButton')?.textContent.includes('Legal submission recorded')",
                     timeout=10_000,
                 )
+                page.locator('#workbench-nav [data-workbench-target="detailGrid"]').click()
+                page.locator("#detailGrid:not([hidden])").wait_for(state="visible", timeout=10_000)
                 if "PROGRESS_UPDATED" not in page.locator("#detailGrid").inner_text():
                     raise AssertionError("Guided progress update was not written to the KHS activity history.")
                 print("Guided progress browser check passed: chronology guard, MI GM update, next-stage derivation, and audit entry.")
@@ -644,6 +675,8 @@ def main() -> int:
             lp_detail_row.wait_for(state="visible", timeout=15_000)
             lp_detail_row.locator('[data-view-khs="KHS-VIS-003"]').click()
             page.locator("#detailDialog[open]").wait_for(state="visible", timeout=10_000)
+            page.locator('#workbench-nav [data-workbench-target="followUpSection"]').click()
+            page.locator("#followUpSection:not([hidden])").wait_for(state="visible", timeout=10_000)
             jakarta_today = page.evaluate(
                 "() => new Intl.DateTimeFormat('en-CA', {timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())"
             )

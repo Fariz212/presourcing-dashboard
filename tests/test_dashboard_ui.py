@@ -436,3 +436,35 @@ def test_overview_prioritizes_actions_without_duplicate_graph_panels(monkeypatch
     assert 'id="qualityAlert"' not in body
     assert body.index('class="panel attention-panel"') < body.index('class="approval-command"')
     assert body.index('class="approval-command"') < body.index('class="contract-watch"')
+
+
+def test_khs_workbench_uses_progressive_single_panel_navigation(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        "app.init_db_pool",
+        lambda _app: DummyPool(),
+    )
+    flask_app = create_app({
+        "TESTING": True,
+        "SECRET_KEY": "workbench-progressive-test-secret",
+        "DATABASE_URL": "postgresql://test:test@localhost/test",
+        "UPLOAD_DIR": tmp_path / "uploads",
+    })
+    response = flask_app.test_client().get("/dashboard")
+    assert response.status_code == 200
+    body = response.data.decode("utf-8")
+
+    assert 'id="workbench-nav"' in body
+    assert 'data-workbench-panel aria-labelledby="workSummaryTitle"' in body
+    for panel_id in (
+        "processDurationSection", "lpTimelineSection", "contractDetailSection",
+        "detailGrid", "followUpSection", "documentSection",
+    ):
+        assert f'id="{panel_id}"' in body
+        assert f'id="{panel_id}"' in body and f'id="{panel_id}"' in body
+    assert 'id="closureSummary" class="closure-summary" hidden' in body
+
+    script = flask_app.test_client().get("/static/js/dashboard.js").data.decode("utf-8")
+    assert "function setWorkbenchPanel(panelId)" in script
+    assert 'setWorkbenchPanel("workSummarySection")' in script
+    assert 'setWorkbenchPanel("followUpSection")' in script
+    assert "target.scrollIntoView" not in script
