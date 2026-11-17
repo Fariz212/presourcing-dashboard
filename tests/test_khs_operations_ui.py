@@ -22,6 +22,10 @@ def test_dashboard_exposes_operations_analytics_and_workbench_controls(monkeypat
         'id="operationsAnalytics"',
         'id="operationsStageBody"',
         'id="operationsFollowUpBody"',
+        'id="workflowStageDisclosure"',
+        'class="operations-summary-table"',
+        'data-workbench-panel',
+        'id="workbench-nav"',
         'id="progressDialog"',
         'id="progressForm"',
         'id="updateProgressButton"',
@@ -49,6 +53,9 @@ def test_dashboard_exposes_operations_analytics_and_workbench_controls(monkeypat
         b"workflowAgeBandFilter",
         b"age_band",
         b"bottleneck_rank",
+        b"stage-detail-disclosure",
+        b"setWorkbenchPanel",
+        b"data-workbench-panel",
     ):
         assert marker in script.data
 
@@ -61,5 +68,8 @@ def test_dashboard_exposes_operations_analytics_and_workbench_controls(monkeypat
         b".follow-up-form",
         b".status-sla-escalation_due",
         b".bottleneck-rank",
+        b".stage-detail-disclosure",
+        b".workflow-stage-disclosure",
+        b"[data-workbench-panel][hidden]",
     ):
         assert marker in stylesheet.data

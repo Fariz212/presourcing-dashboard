@@ -113,7 +113,16 @@ def test_dashboard_contains_separate_operational_modules(monkeypatch, tmp_path):
         assert module in body
     assert "Contract Monitoring &amp; Tracking" in body
     assert 'id="quickAddKhs"' not in body
-    assert 'id="overviewRefresh"' in body
+    assert 'id="refreshButton"' in body
+    for duplicate_refresh in (
+        'id="overviewRefresh"', 'id="workflowRefresh"',
+        'id="refreshOperationsButton"', 'id="contractRefresh"',
+        'id="activityRefresh"', 'id="refreshHistoryButton"',
+    ):
+        assert duplicate_refresh not in body
+    assert 'id="workflowStageDisclosure"' in body
+    assert 'class="operations-summary-table"' in body
+    assert 'id="workbench-nav"' in body
     assert "Priority action queue" in body
     assert "REQUEST / KHS" in body
     attention_js = client.get("/static/js/dashboard.js")
