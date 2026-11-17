@@ -151,7 +151,7 @@ INSERT INTO khs_items (
         'KHS-AGING-040', 'REQ-AGING-004', 4, CURRENT_DATE - 55, 'FZK',
         'Kontrak Baru', 'Aging Fixture 31+', CURRENT_DATE - 52, CURRENT_DATE - 50,
         CURRENT_DATE - 48, CURRENT_DATE - 45, CURRENT_DATE - 40,
-        'MI GM', 'Synthetic stage aging fixture', 'Synthetic Phase 1 age bucket fixture'
+        NULL, NULL, 'Synthetic Phase 1 age bucket fixture'
     ),
     (
         'KHS-AGING-INVALID', 'REQ-AGING-005', 5, CURRENT_DATE - 5, 'FZK',
