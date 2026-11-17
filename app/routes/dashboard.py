@@ -1043,6 +1043,7 @@ def _guided_progress_definition(record):
         "field": field,
         "label": GUIDED_MILESTONE_LABELS[field],
         "stage_code": stage,
+        "stage_key": (record.get("lp_stage_key") if stage == "LP_CIRCULATION" else stage) or "",
         "previous_milestone": previous,
         "current_stage_started_on": started.isoformat() if started else None,
     }
@@ -2043,7 +2044,7 @@ def khs_detail(khs_id):
                 history = cur.fetchall()
 
                 cur.execute(
-                    """SELECT id, stage_code, due_date, follow_up_to, note, status,
+                    """SELECT id, stage_code, stage_key, due_date, follow_up_to, note, status,
                               created_at, created_by, completed_at, completed_by
                        FROM khs_follow_ups
                        WHERE khs_id=%s
@@ -2267,12 +2268,22 @@ def update_khs(khs_id):
             if before_derived:
                 cur.execute(REGISTER_BASE_QUERY + " WHERE k.khs_id=%s", (khs_id,))
                 after_derived = cur.fetchone()
-                if after_derived and before_derived["workflow_stage_code"] != after_derived["workflow_stage_code"]:
+                before_stage_identity = (
+                    before_derived["workflow_stage_code"],
+                    (before_derived.get("lp_stage_key") if before_derived["workflow_stage_code"] == "LP_CIRCULATION"
+                     else before_derived["workflow_stage_code"]) or "",
+                )
+                after_stage_identity = (
+                    after_derived["workflow_stage_code"],
+                    (after_derived.get("lp_stage_key") if after_derived["workflow_stage_code"] == "LP_CIRCULATION"
+                     else after_derived["workflow_stage_code"]) or "",
+                ) if after_derived else None
+                if after_derived and before_stage_identity != after_stage_identity:
                     conn.execute(
                         """UPDATE khs_follow_ups
                            SET status='SUPERSEDED', cancelled_at=NOW(), cancelled_by='system'
-                           WHERE khs_id=%s AND stage_code=%s AND status='OPEN'""",
-                        (khs_id, before_derived["workflow_stage_code"]),
+                           WHERE khs_id=%s AND stage_code=%s AND stage_key=%s AND status='OPEN'""",
+                        (khs_id, before_stage_identity[0], before_stage_identity[1]),
                     )
         return jsonify(success=True,message="KHS updated."),200
     except ValueError as exc:
@@ -2329,8 +2340,8 @@ def update_khs_guided_progress(khs_id):
             conn.execute(
                 """UPDATE khs_follow_ups
                    SET status='SUPERSEDED', cancelled_at=NOW(), cancelled_by='system'
-                   WHERE khs_id=%s AND stage_code=%s AND status='OPEN'""",
-                (khs_id, definition["stage_code"]),
+                   WHERE khs_id=%s AND stage_code=%s AND stage_key=%s AND status='OPEN'""",
+                (khs_id, definition["stage_code"], definition["stage_key"]),
             )
         with get_db_pool().connection() as conn:
             with conn.cursor(row_factory=dict_row) as cur:
@@ -2768,7 +2779,12 @@ def operations_overview():
                               COUNT(*) FILTER (WHERE due_date > %s)::int AS upcoming
                        FROM khs_follow_ups f
                        JOIN khs_items k ON k.khs_id=f.khs_id
-                       WHERE f.status='OPEN' AND k.process_status='ACTIVE'""",
+                       JOIN (""" + REGISTER_BASE_QUERY + """) AS register ON register.khs_id=k.khs_id
+                       WHERE f.status='OPEN' AND k.process_status='ACTIVE'
+                         AND f.stage_code=register.workflow_stage_code
+                         AND f.stage_key=CASE WHEN register.workflow_stage_code='LP_CIRCULATION'
+                                               THEN COALESCE(register.lp_stage_key,'')
+                                               ELSE register.workflow_stage_code END""",
                     (today, today, today),
                 )
                 follow_up_summary = dict(cur.fetchone())
@@ -2840,12 +2856,29 @@ def list_khs_follow_ups():
                            SELECT * FROM (""" + REGISTER_BASE_QUERY + """) AS register
                        )
                        SELECT
-                           f.id, f.khs_id, f.stage_code, sc.stage_name,
+                           f.id, f.khs_id, f.stage_code, f.stage_key,
+                           CASE WHEN register.workflow_stage_code='LP_CIRCULATION' THEN
+                               CASE register.lp_stage_key
+                                   WHEN 'contract_team' THEN 'LP Contract Team'
+                                   WHEN 'junior_manager' THEN 'LP Junior Manager'
+                                   WHEN 'senior_manager' THEN 'LP Senior Manager'
+                                   WHEN 'general_manager' THEN 'LP GM SCM'
+                                   WHEN 'director' THEN 'LP Director Sign-off'
+                                   ELSE sc.stage_name
+                               END
+                           ELSE sc.stage_name END AS stage_name,
                            f.due_date, f.follow_up_to, f.note, f.status,
                            f.created_at, f.created_by, f.completed_at,
                            k.vendor_name, k.action_owner,
                            register.current_stage_code,
-                           (f.stage_code <> register.workflow_stage_code) AS stage_changed,
+                           (
+                             f.stage_code <> register.workflow_stage_code
+                             OR f.stage_key <> CASE
+                                 WHEN register.workflow_stage_code='LP_CIRCULATION'
+                                 THEN COALESCE(register.lp_stage_key,'')
+                                 ELSE register.workflow_stage_code
+                             END
+                           ) AS stage_changed,
                            (%s - f.due_date)::int AS days_from_due
                        FROM khs_follow_ups f
                        JOIN khs_items k ON k.khs_id=f.khs_id
@@ -2874,7 +2907,7 @@ def list_khs_record_follow_ups(khs_id):
         with get_db_pool().connection() as conn:
             with conn.cursor(row_factory=dict_row) as cur:
                 cur.execute(
-                    """SELECT id, khs_id, stage_code, due_date, follow_up_to, note,
+                    """SELECT id, khs_id, stage_code, stage_key, due_date, follow_up_to, note,
                               status, created_at, created_by, completed_at, completed_by,
                               cancelled_at, cancelled_by
                        FROM khs_follow_ups
@@ -2913,15 +2946,18 @@ def create_khs_follow_up(khs_id):
                     return jsonify(success=False, message="KHS not found."),404
                 record = dict(record)
             stage_code = record.get("workflow_stage_code")
+            stage_key = (
+                record.get("lp_stage_key") if stage_code == "LP_CIRCULATION" else stage_code
+            ) or ""
             if stage_code in (None, "COMPLETED", "NOT_PROCEEDED"):
                 return jsonify(success=False, code="NO_ACTIVE_STAGE",
                                message="This KHS has no active workflow stage."),409
             cur.execute(
                 """INSERT INTO khs_follow_ups
-                   (khs_id, stage_code, due_date, follow_up_to, note)
-                   VALUES (%s,%s,%s,%s,%s)
-                   RETURNING id, khs_id, stage_code, due_date, follow_up_to, note, status, created_at""",
-                (khs_id, stage_code, data["due_date"], data.get("follow_up_to"), data["note"]),
+                   (khs_id, stage_code, stage_key, due_date, follow_up_to, note)
+                   VALUES (%s,%s,%s,%s,%s,%s)
+                   RETURNING id, khs_id, stage_code, stage_key, due_date, follow_up_to, note, status, created_at""",
+                (khs_id, stage_code, stage_key, data["due_date"], data.get("follow_up_to"), data["note"]),
             )
             follow_up = _row_dict(dict(cur.fetchone()))
             if data.get("follow_up_to"):
