@@ -457,63 +457,67 @@ def main() -> int:
             if "MI GM APPROVAL" not in active_filters:
                 raise AssertionError("The active register stage filter was not displayed.")
             print("WIP analytics browser check passed: active WIP, bottleneck rank, unconfigured SLA state, and stage + 31+ day register drill-down.")
-            # Phase 2 browser validation: reject an out-of-order date, then
-            # record the next allowed MI milestone and verify the derived next step.
-            detail_row = page.locator("#registerBody tr").filter(has_text="KHS-VIS-002").first
-            detail_row.locator('[data-view-khs="KHS-VIS-002"]').click()
-            page.locator("#detailDialog[open]").wait_for(state="visible", timeout=10_000)
-            page.locator("#updateProgressButton").wait_for(state="visible", timeout=10_000)
-            page.locator("#updateProgressButton").click()
-            page.locator("#progressDialog[open]").wait_for(state="visible", timeout=10_000)
-            if page.locator("#progressMilestoneLabel").input_value() != "MI GM approval recorded":
-                raise AssertionError("Guided progress did not select the next MI GM milestone.")
-
-            # MI SM approval is 20 September 2026 in the synthetic seed.
-            page.locator("#progressMilestoneDate").fill("2026-09-19")
-            page.locator("#progressNote").fill("Synthetic chronology rejection check.")
-            with page.expect_response(
-                lambda response: "/progress" in response.url and response.request.method == "POST"
-            ) as invalid_progress_response:
-                page.locator("#confirmProgress").click()
-            if invalid_progress_response.value.status != 422:
-                raise AssertionError(
-                    f"Out-of-order guided progress returned {invalid_progress_response.value.status}, expected 422."
+        try:
+                # Phase 2 browser validation: reject an out-of-order date, then
+                # record the next allowed MI milestone and verify the derived next step.
+                detail_row = page.locator("#registerBody tr").filter(has_text="KHS-VIS-002").first
+                detail_row.locator('[data-view-khs="KHS-VIS-002"]').click()
+                page.locator("#detailDialog[open]").wait_for(state="visible", timeout=10_000)
+                page.locator("#updateProgressButton").wait_for(state="visible", timeout=10_000)
+                page.locator("#updateProgressButton").click()
+                page.locator("#progressDialog[open]").wait_for(state="visible", timeout=10_000)
+                if page.locator("#progressMilestoneLabel").input_value() != "MI GM approval recorded":
+                    raise AssertionError("Guided progress did not select the next MI GM milestone.")
+    
+                # MI SM approval is 20 September 2026 in the synthetic seed.
+                page.locator("#progressMilestoneDate").fill("2026-09-19")
+                page.locator("#progressNote").fill("Synthetic chronology rejection check.")
+                with page.expect_response(
+                    lambda response: "/progress" in response.url and response.request.method == "POST"
+                ) as invalid_progress_response:
+                    page.locator("#confirmProgress").click()
+                if invalid_progress_response.value.status != 422:
+                    raise AssertionError(
+                        f"Out-of-order guided progress returned {invalid_progress_response.value.status}, expected 422."
+                    )
+                invalid_payload = invalid_progress_response.value.json()
+                if invalid_payload.get("code") != "MILESTONE_BEFORE_PREVIOUS":
+                    raise AssertionError(
+                        "Chronology guard returned an unexpected error: " + repr(invalid_payload)
+                    )
+                page.locator("#progressError").wait_for(state="visible", timeout=10_000)
+    
+                jakarta_today = page.evaluate(
+                    "() => new Intl.DateTimeFormat('en-CA', {timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())"
                 )
-            invalid_payload = invalid_progress_response.value.json()
-            if invalid_payload.get("code") != "MILESTONE_BEFORE_PREVIOUS":
-                raise AssertionError(
-                    "Chronology guard returned an unexpected error: " + repr(invalid_payload)
+                page.locator("#progressMilestoneDate").fill(jakarta_today)
+                page.locator("#progressNote").fill("Synthetic guided-progress validation.")
+                with page.expect_response(
+                    lambda response: "/progress" in response.url and response.request.method == "POST"
+                ) as valid_progress_response:
+                    page.locator("#confirmProgress").click()
+                if valid_progress_response.value.status != 200:
+                    raise AssertionError(
+                        f"Valid guided progress returned {valid_progress_response.value.status}, expected 200."
+                    )
+                progress_payload = valid_progress_response.value.json()
+                next_progress = (progress_payload.get("data") or {}).get("guided_progress") or {}
+                if next_progress.get("field") != "legal_submission_date":
+                    raise AssertionError(
+                        "Completing MI GM approval did not derive Legal submission as the next milestone: "
+                        + repr(next_progress)
+                    )
+                page.locator("#progressDialog").wait_for(state="hidden", timeout=10_000)
+                page.wait_for_function(
+                    "() => document.querySelector('#updateProgressButton')?.textContent.includes('Legal submission recorded')",
+                    timeout=10_000,
                 )
-            page.locator("#progressError").wait_for(state="visible", timeout=10_000)
-
-            jakarta_today = page.evaluate(
-                "() => new Intl.DateTimeFormat('en-CA', {timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())"
-            )
-            page.locator("#progressMilestoneDate").fill(jakarta_today)
-            page.locator("#progressNote").fill("Synthetic guided-progress validation.")
-            with page.expect_response(
-                lambda response: "/progress" in response.url and response.request.method == "POST"
-            ) as valid_progress_response:
-                page.locator("#confirmProgress").click()
-            if valid_progress_response.value.status != 200:
-                raise AssertionError(
-                    f"Valid guided progress returned {valid_progress_response.value.status}, expected 200."
-                )
-            progress_payload = valid_progress_response.value.json()
-            next_progress = (progress_payload.get("data") or {}).get("guided_progress") or {}
-            if next_progress.get("field") != "legal_submission_date":
-                raise AssertionError(
-                    "Completing MI GM approval did not derive Legal submission as the next milestone: "
-                    + repr(next_progress)
-                )
-            page.locator("#progressDialog").wait_for(state="hidden", timeout=10_000)
-            page.wait_for_function(
-                "() => document.querySelector('#updateProgressButton')?.textContent.includes('Legal submission recorded')",
-                timeout=10_000,
-            )
-            if "PROGRESS_UPDATED" not in page.locator("#detailGrid").inner_text():
-                raise AssertionError("Guided progress update was not written to the KHS activity history.")
-            print("Guided progress browser check passed: chronology guard, MI GM update, next-stage derivation, and audit entry.")
+                if "PROGRESS_UPDATED" not in page.locator("#detailGrid").inner_text():
+                    raise AssertionError("Guided progress update was not written to the KHS activity history.")
+                print("Guided progress browser check passed: chronology guard, MI GM update, next-stage derivation, and audit entry.")
+        except Exception as error:
+            capture_errors.append(f"Guided progress browser interaction: {error}")
+            print(f"FAILED guided progress browser interaction: {error}")
             page.locator("#closeDialog").click()
 
         except Exception as error:
