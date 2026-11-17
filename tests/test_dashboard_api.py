@@ -1050,3 +1050,55 @@ def test_contract_operational_status_distinguishes_upcoming_active_and_expired()
     assert expired["contract_operational_status"] == "expired"
     assert expired["contract_renewal_alert_status"] == "expired"
 
+
+
+def test_khs_register_filters_wip_by_stage_and_age_band(make_client):
+    pool = RegisterFakePool(rows=[], total=0)
+    response = make_client(pool).get(
+        "/api/dashboard/khs?stage=mi_gm_approval&age_band=31_plus"
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["filters"]["stage"] == "MI_GM_APPROVAL"
+    assert payload["filters"]["age_band"] == "31_plus"
+
+    count_query, count_params = next(
+        (query, params) for query, params in pool.queries
+        if "SELECT COUNT(*) AS total" in query
+    )
+    assert "register.process_status = 'ACTIVE'" in count_query
+    assert "register.workflow_status <> 'completed'" in count_query
+    assert "register.current_stage_code = %s" in count_query
+    assert "(%s::date - register.current_stage_started_on) >= 31" in count_query
+    assert count_params[0] == "MI_GM_APPROVAL"
+    assert len(count_params) == 3
+    assert count_params[1] == count_params[2]
+
+
+def test_khs_register_filters_records_with_unavailable_stage_age(make_client):
+    pool = RegisterFakePool(rows=[], total=0)
+    response = make_client(pool).get(
+        "/api/dashboard/khs?stage=MI_GM_APPROVAL&age_band=unavailable"
+    )
+
+    assert response.status_code == 200
+    query, params = next(
+        (query, params) for query, params in pool.queries
+        if "SELECT COUNT(*) AS total" in query
+    )
+    assert (
+        "register.current_stage_started_on IS NULL "
+        "OR register.current_stage_started_on > %s"
+    ) in query
+    assert len(params) == 2
+    assert params[0] == "MI_GM_APPROVAL"
+
+
+def test_khs_register_rejects_unknown_age_band(make_client):
+    response = make_client(RegisterFakePool(rows=[], total=0)).get(
+        "/api/dashboard/khs?age_band=90_days"
+    )
+
+    assert response.status_code == 400
+    assert response.get_json()["code"] == "INVALID_AGE_BAND"
