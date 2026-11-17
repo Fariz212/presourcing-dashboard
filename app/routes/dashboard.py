@@ -1096,6 +1096,8 @@ def _guided_progress_date_error(record, field, value):
     next_field = following_fields.get(field)
     previous_date = _date_only(record.get(previous)) if previous else None
     next_date = _date_only(record.get(next_field)) if next_field else None
+    if previous and previous_date is None:
+        return "PREVIOUS_MILESTONE_REQUIRED", f"{previous} must be recorded before {field}."
     if previous_date and value < previous_date:
         return "MILESTONE_BEFORE_PREVIOUS", f"{field} cannot precede {previous}."
     if next_date and value > next_date:
