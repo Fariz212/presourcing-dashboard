@@ -22,15 +22,6 @@ CREATE TABLE IF NOT EXISTS khs_stage_sla_policies (
     )
 );
 
--- KHS injection is an operational stage that starts after Director sign-off.
--- Migration 005 reserves sequence 14 for Not Proceeded.
-INSERT INTO khs_stage_config(stage_code, stage_name, sequence_number, is_active)
-VALUES ('KHS_INJECTION', 'KHS Injection', 13, TRUE)
-ON CONFLICT (stage_code) DO UPDATE
-SET stage_name = EXCLUDED.stage_name,
-    sequence_number = EXCLUDED.sequence_number,
-    is_active = TRUE;
-
 -- Intentionally leave policy thresholds NULL: management must define the agreed SLA.
 INSERT INTO khs_stage_sla_policies(stage_code)
 SELECT stage_code
