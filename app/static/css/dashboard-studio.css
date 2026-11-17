@@ -4236,3 +4236,69 @@ button:disabled {
     overflow-wrap: anywhere;
   }
 }
+
+.analytics-filter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 27px;
+  min-height: 25px;
+  padding: 3px 6px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: #f1f5fa;
+  color: #365c91;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 750;
+  cursor: pointer;
+}
+.analytics-filter:hover,
+.analytics-filter:focus-visible {
+  border-color: #b8cbe5;
+  background: #eaf1fb;
+  outline: none;
+}
+.analytics-stage-filter {
+  justify-content: flex-start;
+  max-width: 210px;
+  min-height: 28px;
+  padding-left: 0;
+  background: transparent;
+  color: #304b70;
+  text-align: left;
+}
+.analytics-stage-filter:hover,
+.analytics-stage-filter:focus-visible {
+  padding-left: 6px;
+}
+.analytics-total-filter {
+  min-width: 32px;
+  background: #eaf0f8;
+  color: #1e395e;
+}
+.bottleneck-rank {
+  display: inline-grid;
+  width: 19px;
+  height: 19px;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #e9eff8;
+  color: #526b8d;
+  font-size: 9px;
+}
+.operational-table td {
+  vertical-align: middle;
+}
+.operational-table th:first-child {
+  min-width: 190px;
+}
+.operational-table td:first-child {
+  min-width: 190px;
+}
+@media (max-width: 920px) {
+  .operations-table-panel .table-wrap tbody td:first-child {
+    grid-column: 1 / -1;
+  }
+}
