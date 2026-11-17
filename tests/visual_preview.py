@@ -421,6 +421,56 @@ def main() -> int:
             if page.locator("#page-register h1").inner_text() != "KHS Register":
                 raise AssertionError("Switching back to English did not restore the original text.")
             print("Bilingual browser check passed: navigation, API-backed detail, closure dialog, placeholder, and preference persistence.")
+
+            # End-to-end workbench: advance one milestone, schedule a follow-up,
+            # complete it, then verify the workflow aging/SLA analytics load.
+            detail_row = page.locator("#registerBody tr").filter(has_text="KHS-VIS-002").first
+            detail_row.locator('[data-view-khs="KHS-VIS-002"]').click()
+            page.locator("#detailDialog[open]").wait_for(state="visible", timeout=10_000)
+            progress_button = page.locator("#updateProgressButton")
+            progress_button.wait_for(state="visible", timeout=10_000)
+            progress_button.click()
+            page.locator("#progressDialog[open]").wait_for(state="visible", timeout=10_000)
+            if page.locator("#progressMilestoneLabel").input_value() != "MI Senior Manager approval recorded":
+                raise AssertionError("Guided progress did not select the next MI Senior Manager milestone.")
+            jakarta_today = page.evaluate(
+                "() => new Intl.DateTimeFormat('en-CA', {timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())"
+            )
+            page.locator("#progressMilestoneDate").fill(jakarta_today)
+            page.locator("#progressNote").fill("Synthetic CI guided-progress validation.")
+            with page.expect_response(lambda response: "/progress" in response.url and response.request.method == "POST") as progress_response:
+                page.locator("#confirmProgress").click()
+            if progress_response.value.status != 200:
+                raise AssertionError(f"Guided progress returned {progress_response.value.status}.")
+            page.locator("#progressDialog").wait_for(state="hidden", timeout=10_000)
+            page.locator("#detailDialog[open]").wait_for(state="visible", timeout=10_000)
+            if not page.locator("#updateProgressButton").inner_text().startswith("Update: MI GM approval recorded"):
+                raise AssertionError("Guided progress did not advance to the next MI GM milestone.")
+
+            page.locator("#followUpDueDate").fill(jakarta_today)
+            page.locator("#followUpTo").fill("CI Operations Owner")
+            page.locator("#followUpNote").fill("Synthetic CI follow-up validation.")
+            with page.expect_response(lambda response: "/follow-ups" in response.url and response.request.method == "POST") as followup_response:
+                page.locator("#saveFollowUpButton").click()
+            if followup_response.value.status != 201:
+                raise AssertionError(f"Follow-up scheduling returned {followup_response.value.status}.")
+            page.locator("#followUpList").get_by_text("Synthetic CI follow-up validation.").wait_for(timeout=10_000)
+            complete_followup = page.locator("#followUpList [data-complete-followup]").first
+            with page.expect_response(lambda response: "/complete" in response.url and response.request.method == "POST") as completed_response:
+                complete_followup.click()
+            if completed_response.value.status != 200:
+                raise AssertionError(f"Follow-up completion returned {completed_response.value.status}.")
+            page.locator("#followUpList").get_by_text("COMPLETED").wait_for(timeout=10_000)
+            page.locator("#closeDialog").click()
+
+            page.locator('a.nav-link[data-page="workflow"]').click()
+            page.locator("#page-workflow.active").wait_for(state="visible", timeout=10_000)
+            page.locator("#operationsStageBody tr").first.wait_for(state="visible", timeout=15_000)
+            if page.locator("#slaConfigurationStatus").inner_text() != "SLA not configured":
+                raise AssertionError("Unconfigured SLA thresholds were incorrectly presented as approved.")
+            if page.locator("#opsActiveWip").inner_text() in ("—", ""):
+                raise AssertionError("WIP analytics did not return an active WIP total.")
+            print("Operations browser check passed: guided milestone, assigned follow-up, completion, WIP aging, and safe unconfigured-SLA state.")
         except Exception as error:
             capture_errors.append(f"Bilingual language switch interaction: {error}")
             print(f"FAILED bilingual language switch interaction: {error}")
