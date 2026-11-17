@@ -4471,5 +4471,39 @@ button:disabled {
 @media (max-width: 760px) {
   .workflow-stage-disclosure > summary { align-items: flex-start; flex-direction: column; gap: 4px; }
   .stage-detail-grid { grid-template-columns: 1fr; min-width: 0; }
-  .operations-summary-table { min-width: 620px !important; }
+  .operations-summary-table {
+    width: 100%;
+    min-width: 0 !important;
+    table-layout: fixed;
+  }
+  .operations-summary-table th,
+  .operations-summary-table td {
+    padding: 7px 4px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    font-size: 9px;
+  }
+  .operations-summary-table th:nth-child(1) { width: 34%; }
+  .operations-summary-table th:nth-child(2) { width: 10%; }
+  .operations-summary-table th:nth-child(3),
+  .operations-summary-table th:nth-child(4),
+  .operations-summary-table th:nth-child(5) { width: 11%; }
+  .operations-summary-table th:nth-child(6) { width: 23%; }
+  #operationsStageBody .analytics-stage-filter {
+    padding: 3px 4px;
+    font-size: 9px;
+    overflow-wrap: anywhere;
+  }
+  #operationsStageBody .stage-detail-disclosure > summary {
+    max-width: 100%;
+    white-space: normal;
+  }
+  #operationsStageBody .stage-detail-grid {
+    min-width: 0;
+    grid-template-columns: 1fr;
+  }
+  #operationsStageBody .stage-sla-detail {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
 }

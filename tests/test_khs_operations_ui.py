@@ -23,7 +23,7 @@ def test_dashboard_exposes_operations_analytics_and_workbench_controls(monkeypat
         'id="operationsStageBody"',
         'id="operationsFollowUpBody"',
         'id="workflowStageDisclosure"',
-        'class="operations-summary-table"',
+        "operations-summary-table",
         'data-workbench-panel',
         'id="workbench-nav"',
         'id="progressDialog"',

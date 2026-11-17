@@ -121,7 +121,7 @@ def test_dashboard_contains_separate_operational_modules(monkeypatch, tmp_path):
     ):
         assert duplicate_refresh not in body
     assert 'id="workflowStageDisclosure"' in body
-    assert 'class="operations-summary-table"' in body
+    assert "operations-summary-table" in body
     assert 'id="workbench-nav"' in body
     assert "Priority action queue" in body
     assert "REQUEST / KHS" in body

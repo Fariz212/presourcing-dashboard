@@ -345,6 +345,8 @@ def main() -> int:
             detail_button.wait_for(state="visible", timeout=15_000)
             detail_button.click(timeout=10_000)
             page.locator("#detailDialog[open]").wait_for(state="visible", timeout=10_000)
+            page.locator('#workbench-nav [data-workbench-target="lpTimelineSection"]').click()
+            page.locator("#lpTimelineSection:not([hidden])").wait_for(state="visible", timeout=10_000)
             page.locator("#lpTimeline .lp-timeline-item").first.wait_for(state="visible", timeout=10_000)
 
             current_stage = page.locator("#lpCurrentStage").inner_text()
@@ -731,6 +733,8 @@ def main() -> int:
                     )
                 page.locator("#progressDialog").wait_for(state="hidden", timeout=10_000)
                 if step_index == 0:
+                    page.locator('#workbench-nav [data-workbench-target="followUpSection"]').click()
+                    page.locator("#followUpSection:not([hidden])").wait_for(state="visible", timeout=10_000)
                     page.locator("#followUpList").get_by_text("SUPERSEDED").wait_for(timeout=10_000)
                 if step_index < len(lp_and_injection_steps) - 1:
                     page.wait_for_function(
@@ -741,6 +745,8 @@ def main() -> int:
 
                 if expected_field == "lp_completion_date":
                     # Director sign-off enters the Injection Preparation sub-stage.
+                    page.locator('#workbench-nav [data-workbench-target="followUpSection"]').click()
+                    page.locator("#followUpSection:not([hidden])").wait_for(state="visible", timeout=10_000)
                     page.locator("#followUpDueDate").fill(jakarta_today)
                     page.locator("#followUpTo").fill("CI Injection Preparation Owner")
                     page.locator("#followUpNote").fill("CI injection preparation reminder supersession.")
@@ -754,6 +760,8 @@ def main() -> int:
                         raise AssertionError("Injection Preparation reminder has the wrong sub-stage identity.")
 
                 if expected_field == "khs_inject_start_date":
+                    page.locator('#workbench-nav [data-workbench-target="followUpSection"]').click()
+                    page.locator("#followUpSection:not([hidden])").wait_for(state="visible", timeout=10_000)
                     page.locator("#followUpList").get_by_text("SUPERSEDED").nth(1).wait_for(timeout=10_000)
 
             page.locator("#updateProgressButton").wait_for(state="hidden", timeout=10_000)
@@ -767,6 +775,9 @@ def main() -> int:
         # P0 Work Queue saved-view and ownership-separation checks.
         try:
             page.set_viewport_size({"width": 1440, "height": 1000})
+            if page.locator("#detailDialog[open]").count():
+                page.locator("#closeDialog").click(timeout=10_000)
+                page.locator("#detailDialog").wait_for(state="hidden", timeout=10_000)
             page.locator('a.nav-link[data-page="register"]').click(timeout=10_000)
             page.locator("#page-register.active").wait_for(timeout=15_000)
             page.wait_for_load_state("networkidle", timeout=20_000)
