@@ -374,6 +374,9 @@ def main() -> int:
             print(f"FAILED KHS detail/form interaction captures: {error}")
 
         try:
+            # Use desktop navigation for this interaction check; mobile navigation
+            # is intentionally collapsed until its menu toggle is opened.
+            page.set_viewport_size({"width": 1440, "height": 1000})
             # Verify both languages on real, API-backed pages and persist the choice.
             page.goto(f"{BASE_URL}/dashboard", wait_until="networkidle", timeout=45_000)
             language_button = page.locator("#languageToggle")
