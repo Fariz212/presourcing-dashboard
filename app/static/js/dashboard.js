@@ -985,6 +985,7 @@ const state = {
   importCanRun: false,
   importWarnings: false,
   workflowStageFilter: null,
+  workflowAgeBandFilter: null,
   workflowRoleFilter: null,
   workflowRows: [],
   showEmptyWorkflowStages: false,
@@ -1429,6 +1430,14 @@ function renderActiveRegisterFilters() {
     filters.push({id, label, value});
   });
   if (state.workflowStageFilter) filters.push({id:"workflowStageFilter",label:"Stage",value:state.workflowStageFilter.replace(/_/g," ")});
+  if (state.workflowAgeBandFilter) filters.push({
+    id:"workflowAgeBandFilter",
+    label:"WIP age",
+    value:({
+      "0_7":"0–7 days","8_14":"8–14 days","15_30":"15–30 days",
+      "31_plus":"31+ days","unavailable":"Age unavailable"
+    })[state.workflowAgeBandFilter] || state.workflowAgeBandFilter
+  });
   if (state.workflowRoleFilter) filters.push({id:"workflowRoleFilter",label:"Approval role",value:state.workflowRoleFilter.replace(/_/g," ")});
   if (state.attentionOnly) filters.push({id:"attentionOnly",label:"Queue",value:"Needs attention"});
   container.hidden = filters.length === 0;
@@ -1444,10 +1453,13 @@ function clearOneRegisterFilter(id) {
   if (id === "all") {
     clearRegisterFilters();
     state.workflowStageFilter = null;
+    state.workflowAgeBandFilter = null;
     state.workflowRoleFilter = null;
     state.attentionOnly = false;
   } else if (id === "workflowStageFilter") {
     state.workflowStageFilter = null;
+  } else if (id === "workflowAgeBandFilter") {
+    state.workflowAgeBandFilter = null;
   } else if (id === "workflowRoleFilter") {
     state.workflowRoleFilter = null;
   } else if (id === "attentionOnly") {
@@ -1471,6 +1483,7 @@ function registerQuery() {
   });
   if (state.workflowStageFilter) p.set("stage", state.workflowStageFilter);
   else if ($("stageFilter") && $("stageFilter").value) p.set("stage", $("stageFilter").value);
+  if (state.workflowAgeBandFilter) p.set("age_band", state.workflowAgeBandFilter);
   if (state.workflowRoleFilter) p.set("waiting_role", state.workflowRoleFilter);
   if (state.attentionOnly) p.set("attention", "true");
   return p.toString();
@@ -1607,12 +1620,24 @@ function renderOperationsAnalytics(operations, followUps) {
       : "Target " + row.target_days + "d" +
         (row.warning_after_days == null ? "" : " · warn " + row.warning_after_days + "d") +
         (row.escalation_after_days == null ? "" : " · escalate " + row.escalation_after_days + "d");
-    return '<tr><td><strong>' + esc(row.stage_name) + '</strong><span class="cell-secondary">' +
-      esc(policy) + '</span></td><td>' + esc(row.wip_count) + '</td>' +
+    const stageButton = '<button type="button" class="analytics-filter analytics-stage-filter" data-operations-stage="' +
+      esc(row.stage_code) + '" aria-label="Filter KHS by ' + esc(row.stage_name) + '">' +
+      (row.bottleneck_rank ? '<span class="bottleneck-rank">#' + esc(row.bottleneck_rank) + '</span> ' : '') +
+      esc(row.stage_name) + '</button>';
+    const ageButton = (band, count, label) =>
+      '<button type="button" class="analytics-filter" data-operations-stage="' + esc(row.stage_code) +
+      '" data-operations-age-band="' + esc(band) + '" aria-label="Filter ' + esc(row.stage_name) +
+      ', ' + esc(label) + ', ' + esc(count) + ' records">' + esc(count) + '</button>';
+    return '<tr><td>' + stageButton + '<span class="cell-secondary">' +
+      esc(policy) + '</span></td><td><button type="button" class="analytics-filter analytics-total-filter" data-operations-stage="' +
+      esc(row.stage_code) + '">' + esc(row.wip_count) + '</button></td>' +
       '<td>' + esc(row.median_age_days == null ? "—" : row.median_age_days + "d") + '</td>' +
       '<td>' + esc(row.p90_age_days == null ? "—" : row.p90_age_days + "d") + '</td>' +
-      '<td>' + esc(row.age_0_7) + '</td><td>' + esc(row.age_8_14) + '</td>' +
-      '<td>' + esc(row.age_15_30) + '</td><td>' + esc(row.age_over_30) + '</td>' +
+      '<td>' + ageButton("0_7", row.age_0_7, "0–7 days") + '</td>' +
+      '<td>' + ageButton("8_14", row.age_8_14, "8–14 days") + '</td>' +
+      '<td>' + ageButton("15_30", row.age_15_30, "15–30 days") + '</td>' +
+      '<td>' + ageButton("31_plus", row.age_over_30, "31+ days") + '</td>' +
+      '<td>' + ageButton("unavailable", row.age_unavailable, "age unavailable") + '</td>' +
       '<td>' + esc(row.oldest_age_days == null ? "—" : row.oldest_age_days + "d") + '</td>' +
       '<td><span class="status-badge status-sla-' + esc(status) + '">' + esc(slaStatusLabel(status)) + '</span></td>' +
       '<td>' + esc(row.overdue_count || 0) + '</td><td>' + esc(row.escalation_count || 0) + '</td></tr>';
@@ -2885,6 +2910,17 @@ function bind() {
     const target = $(button.dataset.workbenchTarget);
     if (target) target.scrollIntoView({behavior:"smooth",block:"start"});
   }));
+  $("operationsStageBody").addEventListener("click", (event) => {
+    const filter = event.target.closest("[data-operations-stage]");
+    if (!filter) return;
+    state.workflowStageFilter = filter.dataset.operationsStage;
+    state.workflowAgeBandFilter = filter.dataset.operationsAgeBand || null;
+    state.workflowRoleFilter = null;
+    state.attentionOnly = false;
+    state.registerPage = 1;
+    clearRegisterFilters();
+    go("register");
+  });
   $("operationsFollowUpBody").addEventListener("click", (event) => {
     const complete = event.target.closest("[data-complete-followup]");
     if (complete) updateFollowUpStatus(complete.dataset.completeFollowup, "complete");
