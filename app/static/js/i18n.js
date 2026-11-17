@@ -198,6 +198,8 @@ const EN_ID = {
 "Contract Monitoring & Tracking":"Pemantauan & Pelacakan Kontrak",
 "KHS Contract Creation Management":"Pengelolaan Pembuatan Kontrak KHS",
 "Director":"Direktur",
+"Search LP circulation records":"Cari data sirkulasi LP",
+"Choose language":"Pilih bahasa",
 "CONTRACT OPERATIONS":"OPERASIONAL KONTRAK",
 "DATA MANAGEMENT":"PENGELOLAAN DATA",
 "Operations":"Operasional",
@@ -462,6 +464,8 @@ function getLanguage(){try{return localStorage.getItem("khs-language")==="en"?"e
 function setLanguage(language){
   const lang=language==="en"?"en":"id";
   document.documentElement.lang=lang;
+  const languageSwitch=document.querySelector(".language-switch");
+  if(languageSwitch) languageSwitch.setAttribute("aria-label",lang==="id"?"Pilih bahasa":"Choose language");
   document.title=tr("Contract Monitoring & Tracking",lang);
   const description=document.querySelector('meta[name="description"]');
   if(description) description.setAttribute("content",tr("KHS Contract Creation Management",lang));
