@@ -114,6 +114,9 @@ function currentStageLabel(record) {
 
 function currentStageAgeLabel(record) {
   const age = record.current_stage_age_days;
+  if (record.process_status === "NOT_PROCEEDED") {
+    return age == null ? "Closed · duration unavailable" : "Stopped after " + age + " days";
+  }
   if (age === null || age === undefined || !Number.isFinite(Number(age))) {
     if (record.current_stage_code === "COMPLETED") return "Closed stage";
     if (record.current_stage_code === "LP_CIRCULATION" && (
@@ -254,6 +257,7 @@ async function loadOverview() {
     const p = d.lp;
     set("totalRequests", d.total_requests);
     set("totalKhs", d.total_khs);
+    set("notProceededKhs", d.not_proceeded_khs || 0);
     set("sidebarTotal", d.total_khs);
     const inject = d.khs_inject || { completed: 0, in_progress: 0, pending: 0, completion_rate_percent: 0 };
     set("injectCompleted", inject.completed);
@@ -436,7 +440,7 @@ async function loadRequests() {
 }
 
 function clearRegisterFilters() {
-  ["searchInput", "statusFilter", "executorFilter", "subtypeFilter", "waitingFilter", "stageFilter"]
+  ["searchInput", "statusFilter", "executorFilter", "subtypeFilter", "waitingFilter", "stageFilter", "processStatusFilter"]
     .forEach((id) => {
       const control = $(id);
       if (control) control.value = "";
@@ -453,7 +457,8 @@ function renderActiveRegisterFilters() {
     ["executorFilter", "Executor"],
     ["subtypeFilter", "Contract type"],
     ["waitingFilter", "Waiting for"],
-    ["stageFilter", "Workflow stage"]
+    ["stageFilter", "Workflow stage"],
+    ["processStatusFilter", "Process status"]
   ];
   controls.forEach(([id, label]) => {
     const control = $(id);
@@ -499,7 +504,7 @@ function registerQuery() {
   p.set("page", String(state.registerPage));
   p.set("per_page", String(state.perPage));
   [["q","searchInput"],["lp_status","statusFilter"],["executor_code","executorFilter"],
-   ["subtype","subtypeFilter"],["waiting_for","waitingFilter"]].forEach((pair) => {
+   ["subtype","subtypeFilter"],["waiting_for","waitingFilter"],["process_status","processStatusFilter"]].forEach((pair) => {
     const el = $(pair[1]);
     if (el && el.value) p.set(pair[0], el.value);
   });
@@ -519,7 +524,9 @@ async function loadRegister() {
     const stage = currentStageLabel(r);
     const stageAge = currentStageAgeLabel(r);
     const lpStatus = String(r.lp_status || "not_started").replace(/_/g, " ");
-    const injection = r.khs_inject_completion_date
+    const injection = r.process_status === "NOT_PROCEEDED"
+      ? '<span class="status-badge status-not_proceeded">Not Proceeded</span><span class="cell-secondary">' + esc(fmt(r.closure_date)) + '</span>'
+      : r.khs_inject_completion_date
       ? '<span class="status-badge status-completed">Fully injected</span><span class="cell-secondary">' + esc(fmt(r.khs_inject_completion_date)) + "</span>"
       : r.khs_inject_start_date
         ? '<span class="status-badge status-in_progress">Injection started</span><span class="cell-secondary">' + esc(fmt(r.khs_inject_start_date)) + "</span>"
@@ -1115,6 +1122,128 @@ async function loadRegisterIfReady() {
   if (state.page === "register" && state.filters) await loadRegister();
 }
 
+
+function renderProcessDurationHistory(record) {
+  const stages = record.process_duration_history || [];
+  const labels = {
+    completed: "Completed",
+    in_progress: "In progress",
+    stopped: "Stopped",
+    history_incomplete: "History incomplete",
+    date_unavailable: "Date unavailable",
+    invalid_chronology: "Data needs review",
+    not_started: "Not started"
+  };
+  const days = record.total_processing_duration_days;
+  const lpDays = record.lp_circulation_duration_days;
+  set("totalProcessingDays", days == null ? "Unavailable" : days + " days");
+  set("lpProcessingDays", lpDays == null ? "Unavailable" : lpDays + " days");
+  const badge = $("totalProcessDuration");
+  if (badge) {
+    const status = record.total_processing_status || "date_unavailable";
+    badge.className = "status-badge " + (
+      status === "completed" ? "status-completed" :
+      status === "stopped" ? "status-not_proceeded" :
+      status === "in_progress" ? "status-in_progress" : "status-neutral"
+    );
+    badge.textContent = labels[status] || status;
+  }
+  const target = $("processDurationHistory");
+  if (!target) return;
+  target.innerHTML = stages.length ? stages.map((stage) => {
+    const status = stage.status || "history_incomplete";
+    return '<div class="process-duration-row">' +
+      '<div class="process-duration-main"><strong>' + esc(stage.stage_label) +
+      '</strong><span class="process-duration-status status-' + esc(status) + '">' +
+      esc(labels[status] || status) + '</span></div>' +
+      '<div class="process-duration-dates"><span>' + esc(fmt(stage.start_date)) +
+      '</span><span aria-hidden="true">→</span><span>' + esc(fmt(stage.end_date)) + '</span></div>' +
+      '<strong class="process-duration-days">' +
+      esc(stage.duration_days == null ? "—" : stage.duration_days + " days") +
+      '</strong></div>';
+  }).join("") : '<p class="muted">No process milestones are recorded.</p>';
+}
+
+function refreshClosureControls(record) {
+  const closed = record.process_status === "NOT_PROCEEDED";
+  const closeButton = $("closeKhsButton");
+  const reopenButton = $("reopenKhsButton");
+  if (closeButton) closeButton.hidden = closed || !!record.khs_inject_completion_date;
+  if (reopenButton) reopenButton.hidden = !closed;
+  const summary = $("closureSummary");
+  if (!summary) return;
+  summary.hidden = !closed;
+  summary.innerHTML = closed
+    ? '<div class="closure-summary-heading"><strong>Not Proceeded</strong><span>' +
+      esc(fmt(record.closure_date)) + '</span></div><p><strong>Reason:</strong> ' +
+      esc(String(record.closure_reason_code || "").replace(/_/g, " ")) +
+      '</p><p>' + esc(record.closure_notes || "No additional notes recorded.") +
+      '</p><small>Closed by ' + esc(record.closed_by || "manual-entry") +
+      (record.reopened_at ? ' · Reopened ' + esc(fmt(record.reopened_at)) : '') + '</small>'
+    : "";
+}
+
+function localDateInputValue() {
+  const now = new Date();
+  return [now.getFullYear(), String(now.getMonth() + 1).padStart(2, "0"), String(now.getDate()).padStart(2, "0")].join("-");
+}
+
+async function submitKhsClosure(event) {
+  event.preventDefault();
+  const record = state.detail;
+  if (!record) return;
+  const button = $("confirmClosure");
+  const error = $("closureError");
+  const data = Object.fromEntries(new FormData($("closureForm")).entries());
+  if (error) { error.hidden = true; error.textContent = ""; }
+  button.disabled = true;
+  button.textContent = "Closing…";
+  try {
+    await api("/api/dashboard/khs/" + encodeURIComponent(record.khs_id) + "/close", jsonOptions("POST", data));
+    $("closureDialog").close();
+    $("detailDialog").close();
+    toast("KHS closed as Not Proceeded.", true);
+    await Promise.all([loadOverview(), loadRegisterIfReady()]);
+    if (state.page === "lp") await loadLPCirculation();
+    if (state.page === "workflow") await loadWorkflow();
+    await openDetails(record.khs_id);
+  } catch (err) {
+    if (error) { error.textContent = err.message; error.hidden = false; }
+    toast(err.message);
+  } finally {
+    button.disabled = false;
+    button.textContent = "Confirm closure";
+  }
+}
+
+async function submitKhsReopen(event) {
+  event.preventDefault();
+  const record = state.detail;
+  if (!record) return;
+  const button = $("confirmReopen");
+  const error = $("reopenError");
+  const data = Object.fromEntries(new FormData($("reopenForm")).entries());
+  if (error) { error.hidden = true; error.textContent = ""; }
+  button.disabled = true;
+  button.textContent = "Reopening…";
+  try {
+    await api("/api/dashboard/khs/" + encodeURIComponent(record.khs_id) + "/reopen", jsonOptions("POST", data));
+    $("reopenDialog").close();
+    $("detailDialog").close();
+    toast("KHS reopened.", true);
+    await Promise.all([loadOverview(), loadRegisterIfReady()]);
+    if (state.page === "lp") await loadLPCirculation();
+    if (state.page === "workflow") await loadWorkflow();
+    await openDetails(record.khs_id);
+  } catch (err) {
+    if (error) { error.textContent = err.message; error.hidden = false; }
+    toast(err.message);
+  } finally {
+    button.disabled = false;
+    button.textContent = "Reopen KHS";
+  }
+}
+
 async function openDetails(id) {
   try {
     const result = await api("/api/dashboard/khs/" + encodeURIComponent(id));
@@ -1128,6 +1257,8 @@ async function openDetails(id) {
       (r.lp_prerequisite_exception ? '<span class="status-badge status-error">MI GM prerequisite exception</span>' : "");
     renderLPTimeline(r);
     renderContractDetail(r);
+    renderProcessDurationHistory(r);
+    refreshClosureControls(r);
 
     const detailGroups = [
       { title:"Supplier & request", items:[
@@ -1524,6 +1655,26 @@ function bind() {
   $("createKhsButton").addEventListener("click", () => openForm("khs").catch((e) => toast(e.message)));
   $("recordForm").addEventListener("submit", saveRecord);
   $("documentUploadForm").addEventListener("submit", uploadEvidence);
+  $("closureForm").addEventListener("submit", submitKhsClosure);
+  $("reopenForm").addEventListener("submit", submitKhsReopen);
+  $("closeKhsButton").addEventListener("click", () => {
+    if (!state.detail) return;
+    $("closureKhsLabel").textContent = state.detail.khs_id;
+    $("closureDate").value = localDateInputValue();
+    $("closureReason").value = "";
+    $("closureNotes").value = "";
+    $("closureError").hidden = true;
+    $("closureDialog").showModal();
+  });
+  $("reopenKhsButton").addEventListener("click", () => {
+    if (!state.detail) return;
+    $("reopenKhsLabel").textContent = state.detail.khs_id;
+    $("reopenReason").value = "";
+    $("reopenError").hidden = true;
+    $("reopenDialog").showModal();
+  });
+  ["closeClosureDialog", "cancelClosure"].forEach((id) => $(id).addEventListener("click", () => $("closureDialog").close()));
+  ["closeReopenDialog", "cancelReopen"].forEach((id) => $(id).addEventListener("click", () => $("reopenDialog").close()));
   ["closeRecordDialog", "cancelRecord"].forEach((id) => $(id).addEventListener("click", () => $("recordDialog").close()));
   $("closeDialog").addEventListener("click", () => $("detailDialog").close());
   $("closeDialogBottom").addEventListener("click", () => $("detailDialog").close());
@@ -1551,7 +1702,7 @@ function bind() {
     const chip = event.target.closest("[data-clear-filter]");
     if (chip) clearOneRegisterFilter(chip.dataset.clearFilter);
   });
-  ["statusFilter", "executorFilter", "subtypeFilter", "waitingFilter", "stageFilter"].forEach((id) =>
+  ["statusFilter", "executorFilter", "subtypeFilter", "waitingFilter", "stageFilter", "processStatusFilter"].forEach((id) =>
     $(id).addEventListener("change", () => { state.registerPage = 1; loadRegister().catch((e) => toast(e.message)); })
   );
   $("resetFilters").addEventListener("click", () => {
