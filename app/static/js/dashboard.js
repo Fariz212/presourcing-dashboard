@@ -642,6 +642,9 @@ const I18N_ID = Object.freeze({
   "Date unavailable":"Tanggal tidak tersedia",
   "Invalid chronology":"Urutan tanggal tidak valid",
   "history_incomplete":"Riwayat tidak lengkap",
+  "WORKFLOW STAGE / BOTTLENECK RANK":"TAHAP ALUR KERJA / PERINGKAT BOTTLENECK",
+  "AGE UNAVAILABLE":"UMUR TAHAP TIDAK TERSEDIA",
+  "BOTTLENECK RANK":"PERINGKAT BOTTLENECK",
   "No changes to save.":"Tidak ada perubahan untuk disimpan.",
   "Request created.":"Permintaan berhasil dibuat.",
   "Request updated.":"Permintaan berhasil diperbarui.",
@@ -1597,7 +1600,7 @@ function renderOperationsAnalytics(operations, followUps) {
   if (!operations || !operations.data) {
     ["opsActiveWip","opsOver30","opsAgeUnavailable","opsSlaOverdue","opsEscalations","opsFollowUpsOverdue"]
       .forEach((id) => set(id, "—"));
-    emptyRow("operationsStageBody", 12, "Operations analytics are temporarily unavailable.");
+    emptyRow("operationsStageBody", 13, "Operations analytics are temporarily unavailable.");
     return;
   }
   const summary = operations.data.summary || {};
@@ -2768,6 +2771,7 @@ function bind() {
       event.preventDefault();
       if (el.dataset.page === "register") {
         state.workflowStageFilter = null;
+        state.workflowAgeBandFilter = null;
         state.workflowRoleFilter = null;
         state.attentionOnly = false;
       }
@@ -2778,6 +2782,7 @@ function bind() {
     el.addEventListener("click", () => {
       if (el.dataset.go === "register") {
         state.workflowStageFilter = null;
+        state.workflowAgeBandFilter = null;
         state.workflowRoleFilter = null;
         state.attentionOnly = el.dataset.attentionOnly === "true";
         state.registerPage = 1;
@@ -2789,6 +2794,7 @@ function bind() {
   document.querySelectorAll("[data-queue-stage]").forEach((el) =>
     el.addEventListener("click", () => {
       state.workflowStageFilter = el.dataset.queueStage;
+      state.workflowAgeBandFilter = null;
       state.workflowRoleFilter = null;
       state.attentionOnly = false;
       state.registerPage = 1;
@@ -2799,6 +2805,7 @@ function bind() {
   document.querySelectorAll("[data-queue-role]").forEach((el) =>
     el.addEventListener("click", () => {
       state.workflowStageFilter = null;
+      state.workflowAgeBandFilter = null;
       state.workflowRoleFilter = el.dataset.queueRole;
       state.attentionOnly = false;
       state.registerPage = 1;
@@ -2984,6 +2991,7 @@ function bind() {
   $("resetFilters").addEventListener("click", () => {
     clearRegisterFilters();
     state.workflowStageFilter = null;
+    state.workflowAgeBandFilter = null;
     state.workflowRoleFilter = null;
     state.attentionOnly = false;
     state.registerPage = 1;
