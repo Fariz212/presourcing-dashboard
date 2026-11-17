@@ -4,6 +4,8 @@ from app.routes.dashboard import (
     _guided_progress_date_error,
     _guided_progress_definition,
     _operations_stage_query,
+    _operations_stage_totals,
+    _rank_operations_stages,
     _sla_status_for_age,
 )
 
@@ -126,3 +128,53 @@ def test_operations_aging_query_uses_active_milestone_ages_and_descriptive_bucke
     assert "BETWEEN 15 AND 30" in query
     assert "wip.stage_age_days >= COALESCE(policy.target_days, stage.default_sla_days)" in query
     assert "stage.stage_code NOT IN ('COMPLETED', 'NOT_PROCEEDED')" in query
+
+
+
+def test_operations_totals_reconcile_with_stage_age_buckets_including_future_dates():
+    # Per-stage age_unavailable includes both missing and future opening dates.
+    totals = _operations_stage_totals([
+        {
+            "wip_count": 3,
+            "age_over_30": 2,
+            "age_unavailable": 1,
+            "overdue_count": 0,
+            "escalation_count": 0,
+            "target_days": None,
+        },
+        {
+            "wip_count": 4,
+            "age_over_30": 1,
+            "age_unavailable": 2,
+            "overdue_count": 3,
+            "escalation_count": 1,
+            "target_days": 10,
+        },
+    ])
+    assert totals == {
+        "active_wip": 7,
+        "older_than_30_days": 3,
+        "stage_age_unavailable": 3,
+        "sla_overdue_records": 3,
+        "escalation_records": 1,
+        "sla_not_configured_stages": 1,
+    }
+
+
+def test_bottleneck_ranking_uses_wip_then_p90_then_oldest_and_leaves_empty_stages_unranked():
+    rows = [
+        {"stage_code": "LOW", "wip_count": 2, "p90_age_days": 40, "oldest_age_days": 50, "sequence_number": 1},
+        {"stage_code": "HIGH", "wip_count": 5, "p90_age_days": 10, "oldest_age_days": 20, "sequence_number": 2},
+        {"stage_code": "P90", "wip_count": 2, "p90_age_days": 45, "oldest_age_days": 46, "sequence_number": 3},
+        {"stage_code": "OLDEST", "wip_count": 2, "p90_age_days": 45, "oldest_age_days": 60, "sequence_number": 4},
+        {"stage_code": "EMPTY", "wip_count": 0, "p90_age_days": None, "oldest_age_days": None, "sequence_number": 5},
+    ]
+    ranked = _rank_operations_stages(rows)
+    rank_by_stage = {row["stage_code"]: row["bottleneck_rank"] for row in ranked}
+    assert rank_by_stage == {
+        "LOW": 4,
+        "HIGH": 1,
+        "P90": 3,
+        "OLDEST": 2,
+        "EMPTY": None,
+    }
