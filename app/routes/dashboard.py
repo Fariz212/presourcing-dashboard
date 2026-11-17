@@ -3096,21 +3096,86 @@ def create_khs_follow_up(khs_id):
                        message="Unable to schedule the follow-up."),500
 
 
+def _follow_up_matches_current_stage(follow_up, record):
+    """A reminder is actionable only while its original workflow stage is current."""
+    if not record or record.get("process_status") != "ACTIVE":
+        return False
+
+    stage_code, stage_key = _workflow_stage_identity(record)
+    if stage_code in (None, "COMPLETED", "NOT_PROCEEDED"):
+        return False
+
+    return (
+        follow_up.get("stage_code") == stage_code
+        and (follow_up.get("stage_key") or "") == (stage_key or "")
+    )
+
+
 def _set_follow_up_status(follow_up_id, status):
     with get_db_pool().connection() as conn, conn.transaction():
         with conn.cursor(row_factory=dict_row) as cur:
+            # Lock the KHS first, matching the lock order used by milestone
+            # updates and closure. This prevents a stage transition racing a
+            # completion/cancellation action.
+            cur.execute(
+                """SELECT k.khs_id
+                   FROM khs_items k
+                   JOIN khs_follow_ups f ON f.khs_id = k.khs_id
+                   WHERE f.id = %s
+                   FOR UPDATE OF k""",
+                (follow_up_id,),
+            )
+            owner = cur.fetchone()
+            if owner is None:
+                return None
+            khs_id = owner["khs_id"]
+
+            cur.execute(REGISTER_BASE_QUERY + " WHERE k.khs_id=%s", (khs_id,))
+            current_record = cur.fetchone()
+            if current_record is None:
+                return None
+            current_record = dict(current_record)
+
             cur.execute(
                 """SELECT f.*, k.process_status
-                   FROM khs_follow_ups f JOIN khs_items k ON k.khs_id=f.khs_id
-                   WHERE f.id=%s FOR UPDATE OF f""",
+                   FROM khs_follow_ups f
+                   JOIN khs_items k ON k.khs_id=f.khs_id
+                   WHERE f.id=%s
+                   FOR UPDATE OF f""",
                 (follow_up_id,),
             )
             before = cur.fetchone()
             if before is None:
                 return None
             before = dict(before)
+
         if before["status"] != "OPEN":
             return {"conflict": True}
+
+        if not _follow_up_matches_current_stage(before, current_record):
+            conn.execute(
+                """UPDATE khs_follow_ups
+                   SET status='SUPERSEDED',
+                       cancelled_at=NOW(),
+                       cancelled_by='system'
+                   WHERE id=%s AND status='OPEN'""",
+                (follow_up_id,),
+            )
+            after = {
+                **before,
+                "status": "SUPERSEDED",
+                "cancelled_by": "system",
+            }
+            _audit(
+                conn,
+                "KHS_ITEM",
+                before["khs_id"],
+                "FOLLOW_UP_SUPERSEDED",
+                before,
+                after,
+            )
+            return {"conflict": True, "superseded": True}
+
         actor_field = "completed_by" if status == "COMPLETED" else "cancelled_by"
         time_field = "completed_at" if status == "COMPLETED" else "cancelled_at"
         conn.execute(
@@ -3118,8 +3183,7 @@ def _set_follow_up_status(follow_up_id, status):
             (status, follow_up_id),
         )
         after = {**before, "status": status, actor_field: "manual-entry"}
-        _audit(conn, "KHS_ITEM", before["khs_id"],
-               "FOLLOW_UP_" + status, before, after)
+        _audit(conn, "KHS_ITEM", before["khs_id"], "FOLLOW_UP_" + status, before, after)
         return {"id": follow_up_id, "khs_id": before["khs_id"], "status": status}
 
 
@@ -3129,6 +3193,9 @@ def complete_khs_follow_up(follow_up_id):
         result = _set_follow_up_status(follow_up_id, "COMPLETED")
         if result is None:
             return jsonify(success=False, message="Follow-up not found."),404
+        if result.get("superseded"):
+            return jsonify(success=False, code="FOLLOW_UP_SUPERSEDED",
+                           message="This reminder belonged to a previous workflow stage and was superseded."),409
         if result.get("conflict"):
             return jsonify(success=False, code="FOLLOW_UP_NOT_OPEN",
                            message="Only open follow-ups can be completed."),409
@@ -3144,6 +3211,9 @@ def cancel_khs_follow_up(follow_up_id):
         result = _set_follow_up_status(follow_up_id, "CANCELLED")
         if result is None:
             return jsonify(success=False, message="Follow-up not found."),404
+        if result.get("superseded"):
+            return jsonify(success=False, code="FOLLOW_UP_SUPERSEDED",
+                           message="This reminder belonged to a previous workflow stage and was superseded."),409
         if result.get("conflict"):
             return jsonify(success=False, code="FOLLOW_UP_NOT_OPEN",
                            message="Only open follow-ups can be cancelled."),409
