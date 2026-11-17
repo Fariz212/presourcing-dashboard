@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS khs_follow_ups (
     completed_by TEXT,
     cancelled_at TIMESTAMPTZ,
     cancelled_by TEXT,
-    CONSTRAINT chk_khs_follow_up_status CHECK (status IN ('OPEN', 'COMPLETED', 'CANCELLED'))
+    CONSTRAINT chk_khs_follow_up_status CHECK (status IN ('OPEN', 'COMPLETED', 'CANCELLED', 'SUPERSEDED'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_khs_follow_ups_open_due
