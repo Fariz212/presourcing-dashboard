@@ -525,7 +525,130 @@ const I18N_ID = Object.freeze({
   "batches":"batch",
   "contracts":"kontrak",
   "days":"hari",
-  "day":"hari"
+  "day":"hari",
+  "Request date":"Tanggal permintaan",
+  "Request subject":"Subjek permintaan",
+  "Requester / owner":"Pemohon / PIC",
+  "Parent request":"Permintaan induk",
+  "Vendor name":"Nama vendor",
+  "Dispatch date":"Tanggal pengiriman",
+  "Contract start date":"Tanggal mulai kontrak",
+  "Contract end date":"Tanggal akhir kontrak",
+  "BOQ confirmation date":"Tanggal konfirmasi BOQ",
+  "Negotiation date":"Tanggal negosiasi",
+  "Final negotiation date":"Tanggal negosiasi final",
+  "MI Head approval":"Persetujuan MI Head",
+  "MI SM approval":"Persetujuan MI SM",
+  "MI GM approval":"Persetujuan MI GM",
+  "Legal submission date":"Tanggal pengajuan Legal",
+  "LP circulation start / User submitted":"Tanggal mulai LP / diajukan User",
+  "LP Contract Team completion":"Penyelesaian Tim Kontrak LP",
+  "LP Junior Manager approval":"Persetujuan Manajer Junior LP",
+  "LP Senior Manager approval":"Persetujuan Manajer Senior LP",
+  "LP GM SCM approval":"Persetujuan LP GM SCM",
+  "LP Director sign-off / LP completion":"Tanda tangan Direktur LP / penyelesaian LP",
+  "KHS injection start":"Mulai injeksi KHS",
+  "KHS fully injected date":"Tanggal KHS fully injected",
+  "Currently waiting for":"Saat ini menunggu",
+  "Waiting reason / next action":"Alasan menunggu / tindakan berikutnya",
+  "Supplier & contract":"Pemasok & kontrak",
+  "The request, supplier, owner, and contract identity.":"Identitas permintaan, pemasok, PIC, dan kontrak.",
+  "Commercial & MI approvals":"Persetujuan Komersial & MI",
+  "Commercial checkpoints and approvals required before LP circulation.":"Tahap komersial dan persetujuan yang diperlukan sebelum sirkulasi LP.",
+  "Record each submission, completion, and approval date only when supported by evidence.":"Catat tanggal pengajuan, penyelesaian, dan persetujuan hanya jika didukung bukti.",
+  "This phase starts only after Director-signed LP completion.":"Tahap ini hanya dimulai setelah LP ditandatangani Direktur.",
+  "Who currently holds the action, why it is waiting, and contextual notes.":"Siapa PIC tindakan saat ini, alasan tertunda, dan catatan pendukung.",
+  "Request date":"Tanggal permintaan",
+  "Request subject":"Subjek permintaan",
+  "Requester / owner":"Pemohon / PIC",
+  "Parent request":"Permintaan induk",
+  "Vendor name":"Nama vendor",
+  "Dispatch date":"Tanggal pengiriman",
+  "Contract start date":"Tanggal mulai kontrak",
+  "Contract end date":"Tanggal akhir kontrak",
+  "BOQ confirmation date":"Tanggal konfirmasi BOQ",
+  "Negotiation date":"Tanggal negosiasi",
+  "Final negotiation date":"Tanggal negosiasi final",
+  "Legal submission date":"Tanggal pengajuan Legal",
+  "LP circulation start / User submitted":"Tanggal mulai LP / diajukan User",
+  "LP Contract Team completion":"Penyelesaian Tim Kontrak LP",
+  "LP Junior Manager approval":"Persetujuan Manajer Junior LP",
+  "LP Senior Manager approval":"Persetujuan Manajer Senior LP",
+  "LP GM SCM approval":"Persetujuan LP GM SCM",
+  "LP Director sign-off / LP completion":"Tanda tangan Direktur LP / penyelesaian LP",
+  "KHS injection start":"Mulai injeksi KHS",
+  "KHS fully injected date":"Tanggal KHS fully injected",
+  "Currently waiting for":"Saat ini menunggu",
+  "Waiting reason / next action":"Alasan menunggu / tindakan berikutnya",
+  "No request records found.":"Tidak ada data permintaan.",
+  "Page":"Halaman",
+  "Page 1":"Halaman 1",
+  "No workflow stages currently contain records.":"Tidak ada tahap alur kerja yang memiliki data saat ini.",
+  "Open records →":"Buka data →",
+  "Search request":"Cari permintaan",
+  "Edit":"Ubah",
+  "Current / inactive":"Saat ini / tidak aktif",
+  "Expires today":"Berakhir hari ini",
+  "days in stage":"hari dalam tahap",
+  "Close this dialog":"Tutup dialog ini",
+  "Switch to Bahasa Indonesia":"Beralih ke Bahasa Indonesia",
+  "Switch to English":"Beralih ke bahasa Inggris",
+  "No contract records found.":"Tidak ada data kontrak.",
+  "All records":"Semua data",
+  "No records were found.":"Data tidak ditemukan.",
+  "View attention queue":"Lihat antrean perhatian",
+  "LP submission":"Pengajuan LP",
+  "Approval pending":"Menunggu persetujuan",
+  "The next approval or completion milestone is outstanding.":"Persetujuan atau milestone penyelesaian berikutnya masih tertunda.",
+  "A legacy completion label is not proof of a Director-signed LP.":"Label penyelesaian pada data lama bukan bukti bahwa LP telah ditandatangani Direktur.",
+  "Missing historical dates prevent a reliable current-stage assignment.":"Tanggal historis yang hilang membuat tahap saat ini belum dapat ditentukan secara andal.",
+  "The LP start date does not satisfy the MI GM approval prerequisite.":"Tanggal mulai LP tidak memenuhi prasyarat persetujuan MI GM.",
+  "There is no active LP stage.":"Tidak ada tahap LP yang sedang berjalan.",
+  "Director sign-off recorded on":"Tanda tangan Direktur tercatat pada",
+  "The post-LP contract phase.":"Tahap kontrak setelah LP.",
+  "The KHS process closed before LP Circulation began.":"Proses KHS ditutup sebelum sirkulasi LP dimulai.",
+  "Date not recorded":"Tanggal belum tercatat",
+  "No historical date on record":"Tidak ada tanggal historis yang tercatat",
+  "Current Stage":"Tahap Saat Ini",
+  "Upcoming":"Berikutnya",
+  "Next approval":"Persetujuan berikutnya",
+  "Approval":"Persetujuan",
+  "No waiting owner recorded":"Belum ada PIC yang tercatat",
+  "History needs review":"Riwayat perlu ditinjau",
+  "Date unavailable":"Tanggal tidak tersedia",
+  "Invalid chronology":"Urutan tanggal tidak valid",
+  "history_incomplete":"Riwayat tidak lengkap",
+  "No changes to save.":"Tidak ada perubahan untuk disimpan.",
+  "Request created.":"Permintaan berhasil dibuat.",
+  "Request updated.":"Permintaan berhasil diperbarui.",
+  "KHS created.":"KHS berhasil dibuat.",
+  "KHS updated.":"KHS berhasil diperbarui.",
+  "The workbook was imported successfully.":"Workbook berhasil diimpor.",
+  "Import preview generated.":"Pratinjau impor berhasil dibuat.",
+  "Confirm import":"Konfirmasi impor",
+  "Confirm Import":"Konfirmasi Impor",
+  "No changes detected.":"Tidak ada perubahan yang ditemukan.",
+  "Please select a file.":"Silakan pilih file.",
+  "Select a file first.":"Pilih file terlebih dahulu.",
+  "The file is too large.":"Ukuran file terlalu besar.",
+  "The file type is not supported.":"Jenis file tidak didukung.",
+  "Request ID":"ID Permintaan",
+  "KHS ID":"ID KHS",
+  "Request date":"Tanggal permintaan",
+  "Not Proceeded":"Tidak Dilanjutkan",
+  "NO_MUTUAL_AGREEMENT":"Tidak tercapai kesepakatan",
+  "REQUESTER_WITHDRAWAL":"Ditarik oleh pemohon",
+  "VENDOR_DECLINED":"Vendor menolak",
+  "INTERNAL_REJECTION":"Ditolak secara internal",
+  "DUPLICATE":"Duplikat",
+  "OTHER":"Lainnya",
+  "CLOSED_NOT_PROCEEDED":"Ditutup - Tidak Dilanjutkan",
+  "REOPENED":"Dibuka kembali",
+  "UPDATED":"Diperbarui",
+  "CREATED":"Dibuat",
+  "IMPORTED":"Diimpor",
+  "KHS_ITEM":"Data KHS",
+  "REQUEST":"Permintaan"
 });
 
 const originalTextNodes = new WeakMap();
@@ -545,6 +668,10 @@ function translateText(value, language = currentLanguage) {
   if (match) return leading + match[1] + (match[1] === "1" ? " hari dalam tahap" : " hari dalam tahap") + trailing;
   match = core.match(/^Stopped after (\d+) days?$/i);
   if (match) return leading + "Dihentikan setelah " + match[1] + " hari" + trailing;
+  match = core.match(/^(\d+) days?$/i);
+  if (match) return leading + match[1] + " hari" + trailing;
+  match = core.match(/^(\d+) year(s)?(?:, )?(\d+)? month(s)?$/i);
+  if (match) return leading + match[1] + " tahun" + (match[3] ? " " + match[3] + " bulan" : "") + trailing;
   match = core.match(/^(\d+) days? remaining$/i);
   if (match) return leading + "tersisa " + match[1] + " hari" + trailing;
   match = core.match(/^(\d+) days? overdue$/i);
@@ -565,6 +692,10 @@ function translateText(value, language = currentLanguage) {
   if (match) return leading + "Halaman " + match[1] + " dari " + match[2] + " · " + match[3] + " aktivitas" + trailing;
   match = core.match(/^Page (\d+) of (\d+) · (\d+) contracts$/);
   if (match) return leading + "Halaman " + match[1] + " dari " + match[2] + " · " + match[3] + " kontrak" + trailing;
+  match = core.match(/^Page (\d+) of (\d+) · (\d+) LP records$/);
+  if (match) return leading + "Halaman " + match[1] + " dari " + match[2] + " · " + match[3] + " data LP" + trailing;
+  match = core.match(/^Page (\d+) · (\d+) requests$/);
+  if (match) return leading + "Halaman " + match[1] + " · " + match[2] + " permintaan" + trailing;
   match = core.match(/^Page (\d+) · (\d+) batches$/);
   if (match) return leading + "Halaman " + match[1] + " · " + match[2] + " batch" + trailing;
   match = core.match(/^Page (\d+) of (\d+)$/);
@@ -603,6 +734,10 @@ function rememberAndTranslateAttribute(element, name, language) {
 
 function translateSubtree(root, language = currentLanguage) {
   if (!root) return;
+  if (root.nodeType === Node.TEXT_NODE) {
+    translateNode(root, language);
+    return;
+  }
   const attributes = ["placeholder", "aria-label", "aria-description", "title"];
   const elements = [];
   if (root.nodeType === Node.ELEMENT_NODE) elements.push(root);
