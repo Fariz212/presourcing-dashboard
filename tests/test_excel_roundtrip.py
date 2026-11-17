@@ -9,9 +9,10 @@ from app.services.import_confirmation import (
 
 
 class Result:
-    def __init__(self, one=None, many=None):
+    def __init__(self, one=None, many=None, rowcount=0):
         self.one = one
         self.many = many or []
+        self.rowcount = rowcount
 
     def fetchone(self):
         return self.one
@@ -33,6 +34,12 @@ class FakeConnection:
     def execute(self, query, params=None):
         self.queries.append((query, params))
         normalized = " ".join(query.split())
+
+        if "CROSS JOIN LATERAL" in normalized:
+            return Result(one=("ACTIVE", "KHS_INJECTION", "khs_injection"))
+
+        if normalized.startswith("UPDATE khs_follow_ups"):
+            return Result(rowcount=0)
 
         if "FROM khs_items" in normalized and "FOR UPDATE" in normalized:
             return Result(one=self.existing)
