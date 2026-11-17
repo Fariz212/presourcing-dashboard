@@ -774,6 +774,7 @@ const I18N_ID = Object.freeze({
   "Senior Manager approval recorded":"Persetujuan Senior Manager tercatat",
   "GM SCM approval recorded":"Persetujuan GM SCM tercatat",
   "Director sign-off recorded":"Tanda tangan Direktur tercatat",
+  "Injection Preparation":"Persiapan Injeksi",
   "KHS injection started":"Injeksi KHS dimulai",
   "KHS fully injected":"KHS selesai diinjeksi penuh",
   "Action owner / PIC":"PIC tindakan",
