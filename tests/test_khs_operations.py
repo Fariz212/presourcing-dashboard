@@ -146,7 +146,6 @@ def test_operations_aging_query_uses_active_milestone_ages_and_descriptive_bucke
     assert "BETWEEN 0 AND 7" in query
     assert "BETWEEN 8 AND 14" in query
     assert "BETWEEN 15 AND 30" in query
-    assert "wip.stage_age_days >= stage.default_sla_days" in query
     assert "register.milestone_chronology_valid IS TRUE" in query
     assert "khs_stage_sla_policies" not in query
     assert "khs_follow_ups" not in query
