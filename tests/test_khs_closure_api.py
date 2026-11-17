@@ -128,9 +128,9 @@ def test_close_khs_sets_not_proceeded_and_writes_audit(make_closure_client):
 @pytest.mark.parametrize(
     ("row", "closure_date", "expected_code"),
     [
-        (base_khs_row(khs_inject_completion_date=date(2026, 2, 1)), "2026-02-02", "KHS_ALREADY_INJECTED"),
-        (base_khs_row(parent_request_date=date(2026, 2, 1)), "2026-01-31", "CLOSURE_DATE_BEFORE_REQUEST"),
-        (base_khs_row(dispatch_date=date(2026, 2, 10)), "2026-02-09", "CLOSURE_DATE_BEFORE_LAST_MILESTONE"),
+        (base_khs_row(khs_inject_completion_date=date(2026, 2, 1)), "2026-02-02", "KHS_ALREADY_INJECTED", 409),
+        (base_khs_row(parent_request_date=date(2026, 2, 1)), "2026-01-31", "CLOSURE_DATE_BEFORE_REQUEST", 422),
+        (base_khs_row(dispatch_date=date(2026, 2, 10)), "2026-02-09", "CLOSURE_DATE_BEFORE_LAST_MILESTONE", 422),
     ],
 )
 def test_close_khs_rejects_invalid_terminal_transitions(
@@ -145,7 +145,7 @@ def test_close_khs_rejects_invalid_terminal_transitions(
         },
     )
 
-    assert response.status_code == 409 if expected_code == "KHS_ALREADY_INJECTED" else 422
+    assert response.status_code == expected_status
     assert response.get_json()["code"] == expected_code
     assert not any("UPDATE khs_items" in query for query, _ in pool.connection_object.calls)
 
