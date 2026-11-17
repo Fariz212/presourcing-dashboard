@@ -1313,7 +1313,7 @@ function renderAttention(rows) {
     const ageMeta = currentStageAgeMeta(r);
     const exception = r.lp_started_without_mi_gm_approval
       ? '<span class="exception-label">MI GM prerequisite exception</span>' : "";
-    const waitingFor = r.waiting_for ||
+    const waitingFor = r.action_owner || r.waiting_for ||
       (r.lp_started_without_mi_gm_approval ? "Review prerequisite" : "Review next action");
     return `<tr>
       <td data-label="REQUEST / KHS"><span class="cell-primary">${esc(r.request_subject || "Untitled request")}</span>
@@ -1505,7 +1505,8 @@ async function loadRegister() {
       '<span class="cell-secondary">' + esc(stageAge) + "</span>" + exception + "</td>" +
       '<td><span class="status-badge status-' + esc(r.lp_status || "not_started") + '">' + esc(lpStatus) + "</span></td>" +
       "<td>" + injection + "</td>" +
-      '<td><span class="cell-primary">' + esc(r.waiting_for || (exception ? "Review data / prerequisite" : "No waiting owner recorded")) + '</span>' +
+      '<td><span class="cell-primary">' + esc(r.action_owner || r.waiting_for || (exception ? "Review data / prerequisite" : "No waiting owner recorded")) + '</span>' +
+      (r.action_owner && r.waiting_for ? '<span class="cell-secondary">Waiting for ' + esc(r.waiting_for) + "</span>" : "") +
       (r.waiting_reason ? '<span class="cell-secondary">' + esc(r.waiting_reason) + "</span>" : "") + "</td>" +
       '<td><button type="button" class="view-button" data-view-khs="' + esc(r.khs_id) + '">Details</button></td>' +
       "</tr>";
