@@ -1701,7 +1701,7 @@ DATE_FIELDS = {
     "lp_contract_team_completion_date", "lp_junior_manager_approval_date",
     "lp_senior_manager_approval_date", "lp_gm_scm_approval_date", "lp_completion_date",
     "khs_inject_start_date", "khs_inject_completion_date",
-    "last_updated_date", "closure_date", "milestone_date",
+    "last_updated_date", "closure_date", "milestone_date", "due_date",
 }
 TEXT_LIMITS = {
     "request_id": 64, "request_subject": 300, "requester_owner": 160,
@@ -2394,6 +2394,12 @@ def close_khs(khs_id):
                    WHERE khs_id=%s""",
                 (closure_date, reason_code, data.get("closure_notes"), khs_id),
             )
+            conn.execute(
+                """UPDATE khs_follow_ups
+                   SET status='SUPERSEDED', cancelled_at=NOW(), cancelled_by='system'
+                   WHERE khs_id=%s AND status='OPEN'""",
+                (khs_id,),
+            )
             _audit(conn, "KHS_ITEM", khs_id, "CLOSED_NOT_PROCEEDED", before, after)
         return jsonify(success=True, message="KHS closed as Not Proceeded."),200
     except ValueError as exc:
@@ -2649,6 +2655,323 @@ def workflow_overview():
             code="WORKFLOW_OVERVIEW_UNAVAILABLE",
             message="Approval workflow overview is temporarily unavailable.",
         ), 503
+
+
+
+def _sla_status_for_age(age_days, warning_after_days=None, target_days=None, escalation_after_days=None):
+    if age_days is None or target_days is None:
+        return "not_configured" if target_days is None else "age_unavailable"
+    if escalation_after_days is not None and age_days > escalation_after_days:
+        return "escalation_due"
+    if age_days > target_days:
+        return "overdue"
+    if warning_after_days is not None and age_days > warning_after_days:
+        return "due_soon"
+    return "on_track"
+
+
+def _operations_stage_query(as_of):
+    as_of_sql = f"DATE '{as_of.isoformat()}'"
+    return """
+        WITH register_state AS (
+            SELECT *
+            FROM (""" + REGISTER_BASE_QUERY + """) AS register
+        ),
+        active_wip AS (
+            SELECT
+                register.*,
+                CASE
+                    WHEN register.current_stage_started_on IS NOT NULL
+                     AND register.current_stage_started_on <= """ + as_of_sql + """
+                    THEN (""" + as_of_sql + """ - register.current_stage_started_on)::int
+                    ELSE NULL
+                END AS stage_age_days
+            FROM register_state AS register
+            WHERE register.process_status = 'ACTIVE'
+              AND register.workflow_status <> 'completed'
+              AND register.current_stage_code NOT IN ('COMPLETED', 'NOT_PROCEEDED')
+        )
+        SELECT
+            stage.stage_code,
+            stage.stage_name,
+            stage.sequence_number,
+            COUNT(wip.khs_id)::int AS wip_count,
+            COUNT(wip.khs_id) FILTER (WHERE wip.stage_age_days BETWEEN 0 AND 7)::int AS age_0_7,
+            COUNT(wip.khs_id) FILTER (WHERE wip.stage_age_days BETWEEN 8 AND 14)::int AS age_8_14,
+            COUNT(wip.khs_id) FILTER (WHERE wip.stage_age_days BETWEEN 15 AND 30)::int AS age_15_30,
+            COUNT(wip.khs_id) FILTER (WHERE wip.stage_age_days > 30)::int AS age_over_30,
+            COUNT(wip.khs_id) FILTER (WHERE wip.khs_id IS NOT NULL AND wip.stage_age_days IS NULL)::int AS age_unavailable,
+            percentile_disc(0.5) WITHIN GROUP (ORDER BY wip.stage_age_days)
+                FILTER (WHERE wip.stage_age_days IS NOT NULL)::int AS median_age_days,
+            percentile_disc(0.9) WITHIN GROUP (ORDER BY wip.stage_age_days)
+                FILTER (WHERE wip.stage_age_days IS NOT NULL)::int AS p90_age_days,
+            MAX(wip.stage_age_days)::int AS oldest_age_days,
+            policy.warning_after_days,
+            policy.target_days,
+            policy.escalation_after_days,
+            COUNT(wip.khs_id) FILTER (
+                WHERE policy.target_days IS NOT NULL AND wip.stage_age_days > policy.target_days
+            )::int AS overdue_count,
+            COUNT(wip.khs_id) FILTER (
+                WHERE policy.escalation_after_days IS NOT NULL
+                  AND wip.stage_age_days > policy.escalation_after_days
+            )::int AS escalation_count
+        FROM khs_stage_config AS stage
+        LEFT JOIN active_wip AS wip ON wip.current_stage_code = stage.stage_code
+        LEFT JOIN khs_stage_sla_policies AS policy ON policy.stage_code = stage.stage_code
+        WHERE stage.is_active = TRUE
+          AND stage.stage_code NOT IN ('COMPLETED', 'NOT_PROCEEDED')
+        GROUP BY stage.stage_code, stage.stage_name, stage.sequence_number,
+                 policy.warning_after_days, policy.target_days, policy.escalation_after_days
+        ORDER BY stage.sequence_number
+    """
+
+
+
+@dashboard_bp.get("/operations/overview")
+def operations_overview():
+    today = _jakarta_today()
+    try:
+        with get_db_pool().connection() as conn:
+            with conn.cursor(row_factory=dict_row) as cur:
+                cur.execute(_operations_stage_query(today))
+                stage_rows = [dict(row) for row in cur.fetchall()]
+                cur.execute(
+                    """SELECT COUNT(*)::int AS total_open,
+                              COUNT(*) FILTER (WHERE due_date < %s)::int AS overdue,
+                              COUNT(*) FILTER (WHERE due_date = %s)::int AS due_today,
+                              COUNT(*) FILTER (WHERE due_date > %s)::int AS upcoming
+                       FROM khs_follow_ups f
+                       JOIN khs_items k ON k.khs_id=f.khs_id
+                       WHERE f.status='OPEN' AND k.process_status='ACTIVE'""",
+                    (today, today, today),
+                )
+                follow_up_summary = dict(cur.fetchone())
+                cur.execute(
+                    """WITH register_state AS (
+                           SELECT * FROM (""" + REGISTER_BASE_QUERY + """) AS register
+                       )
+                       SELECT COUNT(*)::int AS total
+                       FROM register_state
+                       WHERE process_status='ACTIVE'
+                         AND workflow_status <> 'completed'
+                         AND current_stage_code NOT IN ('COMPLETED','NOT_PROCEEDED')
+                         AND current_stage_started_on IS NULL"""
+                )
+                unknown_age = cur.fetchone()["total"]
+
+        for row in stage_rows:
+            age = row["oldest_age_days"]
+            row["sla_status"] = _sla_status_for_age(
+                age,
+                row.get("warning_after_days"),
+                row.get("target_days"),
+                row.get("escalation_after_days"),
+            )
+            row["sla_configured"] = row.get("target_days") is not None
+        active_wip = sum(row["wip_count"] for row in stage_rows)
+        older_than_30 = sum(row["age_over_30"] for row in stage_rows)
+        overdue = sum(row["overdue_count"] for row in stage_rows)
+        escalations = sum(row["escalation_count"] for row in stage_rows)
+        return jsonify(
+            success=True,
+            as_of_date=today.isoformat(),
+            data={
+                "summary": {
+                    "active_wip": active_wip,
+                    "older_than_30_days": older_than_30,
+                    "stage_age_unavailable": unknown_age,
+                    "sla_not_configured_stages": sum(1 for row in stage_rows if not row["sla_configured"]),
+                    "sla_overdue_records": overdue,
+                    "escalation_records": escalations,
+                    "follow_ups_open": follow_up_summary["total_open"],
+                    "follow_ups_due_today": follow_up_summary["due_today"],
+                    "follow_ups_overdue": follow_up_summary["overdue"],
+                    "follow_ups_upcoming": follow_up_summary["upcoming"],
+                },
+                "stages": [_row_dict(row) for row in stage_rows],
+                "follow_ups": follow_up_summary,
+                "aging_bucket_note": "Aging buckets (0-7, 8-14, 15-30, 31+ days) are descriptive, not SLA targets.",
+            },
+        ),200
+    except Exception:
+        current_app.logger.exception("Operations overview query failed.")
+        return jsonify(success=False, code="OPERATIONS_OVERVIEW_UNAVAILABLE",
+                       message="Operations analytics are temporarily unavailable."),503
+
+
+@dashboard_bp.get("/operations/follow-ups")
+def list_khs_follow_ups():
+    status = request.args.get("status", "OPEN").strip().upper()
+    if status not in {"OPEN", "COMPLETED", "CANCELLED", "SUPERSEDED", "ALL"}:
+        return jsonify(success=False, code="INVALID_FOLLOW_UP_STATUS",
+                       message="Unsupported follow-up status."),400
+    today = _jakarta_today()
+    try:
+        with get_db_pool().connection() as conn:
+            with conn.cursor(row_factory=dict_row) as cur:
+                cur.execute(
+                    """WITH register_state AS (
+                           SELECT * FROM (""" + REGISTER_BASE_QUERY + """) AS register
+                       )
+                       SELECT
+                           f.id, f.khs_id, f.stage_code, sc.stage_name,
+                           f.due_date, f.follow_up_to, f.note, f.status,
+                           f.created_at, f.created_by, f.completed_at,
+                           k.vendor_name, k.action_owner,
+                           register.current_stage_code,
+                           (f.stage_code <> register.workflow_stage_code) AS stage_changed,
+                           (%s - f.due_date)::int AS days_from_due
+                       FROM khs_follow_ups f
+                       JOIN khs_items k ON k.khs_id=f.khs_id
+                       JOIN khs_stage_config sc ON sc.stage_code=f.stage_code
+                       JOIN register_state register ON register.khs_id=f.khs_id
+                       WHERE (%s='ALL' OR f.status=%s)
+                       ORDER BY
+                           CASE WHEN f.status='OPEN' AND f.due_date < %s THEN 0
+                                WHEN f.status='OPEN' AND f.due_date = %s THEN 1
+                                WHEN f.status='OPEN' THEN 2 ELSE 3 END,
+                           f.due_date ASC, f.id DESC
+                       LIMIT 200""",
+                    (today, status, status, today, today),
+                )
+                rows = [_row_dict(dict(row)) for row in cur.fetchall()]
+        return jsonify(success=True, as_of_date=today.isoformat(), data=rows),200
+    except Exception:
+        current_app.logger.exception("KHS follow-up list failed.")
+        return jsonify(success=False, code="FOLLOW_UP_LIST_UNAVAILABLE",
+                       message="Follow-up reminders are temporarily unavailable."),503
+
+
+@dashboard_bp.get("/khs/<path:khs_id>/follow-ups")
+def list_khs_record_follow_ups(khs_id):
+    try:
+        with get_db_pool().connection() as conn:
+            with conn.cursor(row_factory=dict_row) as cur:
+                cur.execute(
+                    """SELECT id, khs_id, stage_code, due_date, follow_up_to, note,
+                              status, created_at, created_by, completed_at, completed_by,
+                              cancelled_at, cancelled_by
+                       FROM khs_follow_ups
+                       WHERE khs_id=%s
+                       ORDER BY CASE WHEN status='OPEN' THEN 0 ELSE 1 END,
+                                due_date ASC, id DESC""",
+                    (khs_id,),
+                )
+                rows = [_row_dict(dict(row)) for row in cur.fetchall()]
+        return jsonify(success=True, data=rows),200
+    except Exception:
+        current_app.logger.exception("KHS record follow-up query failed.")
+        return jsonify(success=False, message="Unable to load KHS follow-ups."),503
+
+
+@dashboard_bp.post("/khs/<path:khs_id>/follow-ups")
+def create_khs_follow_up(khs_id):
+    body = _body_object()
+    if body is None:
+        return jsonify(success=False, message="A JSON object is required."),400
+    try:
+        data = _validate_payload(body, {"due_date", "follow_up_to", "note"},
+                                 {"due_date", "note"})
+        with get_db_pool().connection() as conn, conn.transaction():
+            with conn.cursor(row_factory=dict_row) as cur:
+                cur.execute("SELECT process_status FROM khs_items WHERE khs_id=%s FOR UPDATE", (khs_id,))
+                locked = cur.fetchone()
+                if locked is None:
+                    return jsonify(success=False, message="KHS not found."),404
+                if locked["process_status"] != "ACTIVE":
+                    return jsonify(success=False, code="KHS_NOT_ACTIVE",
+                                   message="Follow-ups can only be scheduled for active KHS records."),409
+                cur.execute(REGISTER_BASE_QUERY + " WHERE k.khs_id=%s", (khs_id,))
+                record = cur.fetchone()
+                if record is None:
+                    return jsonify(success=False, message="KHS not found."),404
+                record = dict(record)
+            stage_code = record.get("workflow_stage_code")
+            if stage_code in (None, "COMPLETED", "NOT_PROCEEDED"):
+                return jsonify(success=False, code="NO_ACTIVE_STAGE",
+                               message="This KHS has no active workflow stage."),409
+            cur.execute(
+                """INSERT INTO khs_follow_ups
+                   (khs_id, stage_code, due_date, follow_up_to, note)
+                   VALUES (%s,%s,%s,%s,%s)
+                   RETURNING id, khs_id, stage_code, due_date, follow_up_to, note, status, created_at""",
+                (khs_id, stage_code, data["due_date"], data.get("follow_up_to"), data["note"]),
+            )
+            follow_up = _row_dict(dict(cur.fetchone()))
+            if data.get("follow_up_to"):
+                conn.execute(
+                    "UPDATE khs_items SET action_owner=%s, updated_at=NOW(), last_updated_date=CURRENT_DATE WHERE khs_id=%s",
+                    (data["follow_up_to"], khs_id),
+                )
+                after = {**record, "action_owner": data["follow_up_to"]}
+                _audit(conn, "KHS_ITEM", khs_id, "ACTION_OWNER_UPDATED", record, after)
+            _audit(conn, "KHS_ITEM", khs_id, "FOLLOW_UP_SCHEDULED", {},
+                   {"follow_up": follow_up})
+        return jsonify(success=True, data=follow_up),201
+    except ValueError as exc:
+        return jsonify(success=False, message=str(exc)),400
+    except Exception:
+        current_app.logger.exception("KHS follow-up scheduling failed.")
+        return jsonify(success=False, code="FOLLOW_UP_CREATE_UNAVAILABLE",
+                       message="Unable to schedule the follow-up."),500
+
+
+def _set_follow_up_status(follow_up_id, status):
+    with get_db_pool().connection() as conn, conn.transaction():
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """SELECT f.*, k.process_status
+                   FROM khs_follow_ups f JOIN khs_items k ON k.khs_id=f.khs_id
+                   WHERE f.id=%s FOR UPDATE OF f""",
+                (follow_up_id,),
+            )
+            before = cur.fetchone()
+            if before is None:
+                return None
+            before = dict(before)
+        if before["status"] != "OPEN":
+            return {"conflict": True}
+        actor_field = "completed_by" if status == "COMPLETED" else "cancelled_by"
+        time_field = "completed_at" if status == "COMPLETED" else "cancelled_at"
+        conn.execute(
+            f"UPDATE khs_follow_ups SET status=%s, {time_field}=NOW(), {actor_field}='manual-entry' WHERE id=%s",
+            (status, follow_up_id),
+        )
+        after = {**before, "status": status, actor_field: "manual-entry"}
+        _audit(conn, "KHS_ITEM", before["khs_id"],
+               "FOLLOW_UP_" + status, before, after)
+        return {"id": follow_up_id, "khs_id": before["khs_id"], "status": status}
+
+
+@dashboard_bp.post("/operations/follow-ups/<int:follow_up_id>/complete")
+def complete_khs_follow_up(follow_up_id):
+    try:
+        result = _set_follow_up_status(follow_up_id, "COMPLETED")
+        if result is None:
+            return jsonify(success=False, message="Follow-up not found."),404
+        if result.get("conflict"):
+            return jsonify(success=False, code="FOLLOW_UP_NOT_OPEN",
+                           message="Only open follow-ups can be completed."),409
+        return jsonify(success=True, data=result),200
+    except Exception:
+        current_app.logger.exception("Follow-up completion failed.")
+        return jsonify(success=False, message="Unable to complete follow-up."),503
+
+
+@dashboard_bp.post("/operations/follow-ups/<int:follow_up_id>/cancel")
+def cancel_khs_follow_up(follow_up_id):
+    try:
+        result = _set_follow_up_status(follow_up_id, "CANCELLED")
+        if result is None:
+            return jsonify(success=False, message="Follow-up not found."),404
+        if result.get("conflict"):
+            return jsonify(success=False, code="FOLLOW_UP_NOT_OPEN",
+                           message="Only open follow-ups can be cancelled."),409
+        return jsonify(success=True, data=result),200
+    except Exception:
+        current_app.logger.exception("Follow-up cancellation failed.")
+        return jsonify(success=False, message="Unable to cancel follow-up."),503
 
 
 @dashboard_bp.get("/activity")
