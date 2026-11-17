@@ -27,6 +27,18 @@ class ProgressCursor:
             self.row = {"process_status": self.connection.record["process_status"]}
         elif "WHERE k.khs_id=%s" in query:
             self.row = deepcopy(self.connection.record)
+        elif query.startswith("INSERT INTO khs_follow_ups"):
+            self.row = {
+                "id": 71,
+                "khs_id": params[0],
+                "stage_code": params[1],
+                "stage_key": params[2],
+                "due_date": params[3],
+                "follow_up_to": params[4],
+                "note": params[5],
+                "status": "OPEN",
+                "created_at": "2026-11-17T05:00:00+07:00",
+            }
         else:
             self.row = None
 
@@ -54,18 +66,6 @@ class ProgressConnection:
         if query.startswith("UPDATE khs_items SET"):
             field = re.search(r"SET\s+([a-z_]+)=", query).group(1)
             self.record[field] = params[0]
-        elif query.startswith("INSERT INTO khs_follow_ups"):
-            self.last_result = {
-                "id": 71,
-                "khs_id": params[0],
-                "stage_code": params[1],
-                "stage_key": params[2],
-                "due_date": params[3],
-                "follow_up_to": params[4],
-                "note": params[5],
-                "status": "OPEN",
-                "created_at": "2026-11-17T05:00:00+07:00",
-            }
         return self
 
     def fetchone(self):
