@@ -2222,6 +2222,8 @@ def update_khs(khs_id):
                 if before is None:
                     return jsonify(success=False,message="KHS not found."),404
                 before=dict(before)
+                cur.execute(REGISTER_BASE_QUERY + " WHERE k.khs_id=%s", (khs_id,))
+                before_derived = cur.fetchone()
             if before.get("process_status") == "NOT_PROCEEDED":
                 return jsonify(success=False, code="KHS_CLOSED",
                                message="Reopen this KHS before editing its milestones."),409
@@ -2262,6 +2264,16 @@ def update_khs(khs_id):
                          [data[c] for c in cols]+[khs_id])
             after={**before,**data}
             _audit(conn,"KHS_ITEM",khs_id,"UPDATED",before,after)
+            if before_derived:
+                cur.execute(REGISTER_BASE_QUERY + " WHERE k.khs_id=%s", (khs_id,))
+                after_derived = cur.fetchone()
+                if after_derived and before_derived["workflow_stage_code"] != after_derived["workflow_stage_code"]:
+                    conn.execute(
+                        """UPDATE khs_follow_ups
+                           SET status='SUPERSEDED', cancelled_at=NOW(), cancelled_by='system'
+                           WHERE khs_id=%s AND stage_code=%s AND status='OPEN'""",
+                        (khs_id, before_derived["workflow_stage_code"]),
+                    )
         return jsonify(success=True,message="KHS updated."),200
     except ValueError as exc:
         return jsonify(success=False,message=str(exc)),400
