@@ -356,12 +356,12 @@ function renderAttention(rows) {
     const waitingFor = r.waiting_for ||
       (r.lp_started_without_mi_gm_approval ? "Review prerequisite" : "Review next action");
     return `<tr>
-      <td data-label="REQUEST / KHS"><span class="cell-primary">${esc(r.request_subject || "Untitled request")}</span>
-      <span class="cell-secondary">${esc(r.khs_id)} · ${esc(r.request_id)}</span></td>
-      <td data-label="VENDOR">${esc(r.vendor_name)}</td>
+      <td data-label="REQUEST / KHS"><span class="cell-primary" data-no-translate>${esc(r.request_subject || "Untitled request")}</span>
+      <span class="cell-secondary" data-no-translate>${esc(r.khs_id)} · ${esc(r.request_id)}</span></td>
+      <td data-label="VENDOR"><span data-no-translate>${esc(r.vendor_name)}</span></td>
       <td data-label="CURRENT STAGE">${esc(stage)}${exception}</td>
-      <td data-label="WAITING FOR / NEXT ACTION"><span class="cell-primary">${esc(waitingFor)}</span>
-      ${r.waiting_reason ? '<span class="cell-secondary">' + esc(r.waiting_reason) + "</span>" : ""}</td>
+      <td data-label="WAITING FOR / NEXT ACTION"><span class="cell-primary" data-no-translate>${esc(waitingFor)}</span>
+      ${r.waiting_reason ? '<span class="cell-secondary" data-no-translate>' + esc(r.waiting_reason) + "</span>" : ""}</td>
       <td data-label="STAGE AGE / UPDATED"><span class="cell-primary">${esc(age)}</span>
       <span class="cell-secondary">${esc(ageMeta)}</span></td>
       <td data-label="ACTION"><button class="view-button" data-view-khs="${esc(r.khs_id)}"
@@ -405,7 +405,7 @@ function renderVendorPortfolio(record) {
   const count = vendors.length;
   const label = count + (count === 1 ? " vendor" : " vendors");
   const names = vendors.map((name) =>
-    '<span class="vendor-name-chip">' + esc(name) + '</span>'
+    '<span class="vendor-name-chip" data-no-translate>' + esc(name) + '</span>'
   ).join("");
 
   return '<div class="vendor-summary">' +
@@ -425,10 +425,10 @@ async function loadRequests() {
   if (!body) return;
   if (!state.requests.length) emptyRow("requestBody", 7, "No request records found.");
   else body.innerHTML = state.requests.map((r) =>
-    "<tr><td><span class=\"cell-primary\">" + esc(r.request_subject) + "</span>" +
-    "<span class=\"cell-secondary\">" + esc(r.request_id) + "</span></td>" +
+    "<tr><td><span class=\"cell-primary\" data-no-translate>" + esc(r.request_subject) + "</span>" +
+    "<span class=\"cell-secondary\" data-no-translate>" + esc(r.request_id) + "</span></td>" +
     "<td>" + renderVendorPortfolio(r) + "</td>" +
-    "<td>" + esc(fmt(r.request_date)) + "</td><td>" + esc(r.requester_owner || "—") +
+    "<td>" + esc(fmt(r.request_date)) + "</td><td><span data-no-translate>" + esc(r.requester_owner || "—") + "</span>" +
     "</td><td>" + esc(r.total_khs) + "</td><td>" + esc(r.completed_khs) +
     "</td><td><button class=\"view-button\" data-edit-request=\"" + esc(r.request_id) + "\">Edit</button> " +
     "<button class=\"view-button\" data-add-child=\"" + esc(r.request_id) + "\">+ KHS</button></td></tr>"
@@ -535,15 +535,15 @@ async function loadRegister() {
         : r.lp_timeline_has_gaps
           ? '<span class="exception-label">Historical timeline gaps</span>' : "";
     return "<tr>" +
-      '<td><span class="cell-primary">' + esc(r.request_subject || "Untitled request") + '</span>' +
-      '<span class="cell-secondary">' + esc(r.vendor_name) + " · " + esc(r.khs_id) + '</span>' +
-      '<span class="cell-tertiary">' + esc(r.executor_name || r.executor_code || "Unassigned") + "</span></td>" +
+      '<td><span class="cell-primary" data-no-translate>' + esc(r.request_subject || "Untitled request") + '</span>' +
+      '<span class="cell-secondary" data-no-translate>' + esc(r.vendor_name) + " · " + esc(r.khs_id) + '</span>' +
+      '<span class="cell-tertiary" data-no-translate>' + esc(r.executor_name || r.executor_code || "Unassigned") + "</span></td>" +
       '<td><span class="cell-primary">' + esc(stage) + '</span>' +
       '<span class="cell-secondary">' + esc(stageAge) + "</span>" + exception + "</td>" +
       '<td><span class="status-badge status-' + esc(r.lp_status || "not_started") + '">' + esc(lpStatus) + "</span></td>" +
       "<td>" + injection + "</td>" +
-      '<td><span class="cell-primary">' + esc(r.waiting_for || (exception ? "Review data / prerequisite" : "No waiting owner recorded")) + '</span>' +
-      (r.waiting_reason ? '<span class="cell-secondary">' + esc(r.waiting_reason) + "</span>" : "") + "</td>" +
+      '<td><span class="cell-primary" data-no-translate>' + esc(r.waiting_for || (exception ? "Review data / prerequisite" : "No waiting owner recorded")) + '</span>' +
+      (r.waiting_reason ? '<span class="cell-secondary" data-no-translate>' + esc(r.waiting_reason) + "</span>" : "") + "</td>" +
       '<td><button type="button" class="view-button" data-view-khs="' + esc(r.khs_id) + '">Details</button></td>' +
       "</tr>";
   }).join("");
@@ -644,15 +644,15 @@ async function loadLPCirculation() {
         ? '<span class="exception-label">MI GM prerequisite exception</span>' : "";
       const legacyFlag = r.lp_legacy_unverified
         ? '<span class="exception-label">Legacy Director sign-off unverified</span>' : "";
-      return "<tr><td><span class=\"cell-primary\">" + esc(r.khs_id) + "</span>" +
-        "<span class=\"cell-secondary\">" + esc(r.vendor_name) + "</span></td>" +
-        "<td><span class=\"cell-primary\">" + esc(r.request_subject || "Untitled request") + "</span>" +
-        "<span class=\"cell-secondary\">" + esc(r.request_id) + "</span></td>" +
+      return "<tr><td><span class=\"cell-primary\" data-no-translate>" + esc(r.khs_id) + "</span>" +
+        "<span class=\"cell-secondary\" data-no-translate>" + esc(r.vendor_name) + "</span></td>" +
+        "<td><span class=\"cell-primary\" data-no-translate>" + esc(r.request_subject || "Untitled request") + "</span>" +
+        "<span class=\"cell-secondary\" data-no-translate>" + esc(r.request_id) + "</span></td>" +
         "<td><span class=\"cell-primary\">" + esc(r.lp_stage_label || "—") + "</span>" +
         prerequisiteFlag + legacyFlag +
         (r.waiting_for ? "<span class=\"cell-secondary\">Waiting for " + esc(r.waiting_for) + "</span>" : "") + "</td>" +
         "<td>" + esc(age) + "</td><td>" + esc(fmt(r.lp_circulation_start_date)) + "</td>" +
-        "<td>" + esc(r.waiting_reason || "—") + "</td><td>" + history + "</td>" +
+        "<td><span data-no-translate>" + esc(r.waiting_reason || "—") + "</span></td><td>" + history + "</td>" +
         "<td><button type=\"button\" class=\"view-button\" data-view-khs=\"" + esc(r.khs_id) + "\">Details</button></td></tr>";
     }).join("");
   }
@@ -933,9 +933,9 @@ async function loadActivity() {
   if (!result.data.length) emptyRow("activityBody", 6, "No activity matches the current filters.");
   else body.innerHTML = result.data.map((r) => {
     const changes = typeof r.changes === "string" ? r.changes : JSON.stringify(r.changes || {});
-    return "<tr><td>" + esc(fmt(r.occurred_at)) + "</td><td>" + esc(r.entity_type) + "</td><td>" +
-      esc(r.entity_id) + "</td><td>" + esc(r.action) + "</td><td>" + esc(r.actor) +
-      '<td title="' + esc(changes) + '">' + esc(changes.length > 90 ? changes.slice(0, 90) + "…" : changes) + "</td></tr>";
+    return "<tr><td>" + esc(fmt(r.occurred_at)) + "</td><td data-no-translate>" + esc(r.entity_type) + "</td><td data-no-translate>" +
+      esc(r.entity_id) + "</td><td data-no-translate>" + esc(r.action) + "</td><td data-no-translate>" + esc(r.actor) +
+      '<td data-no-translate title="' + esc(changes) + '">' + esc(changes.length > 90 ? changes.slice(0, 90) + "…" : changes) + "</td></tr>";
   }).join("");
   const p = result.pagination || {};
   set("activityPagination", "Page " + p.page + " of " + p.total_pages + " · " + p.total_records + " activities");
@@ -952,7 +952,7 @@ async function loadImportHistory() {
     const inserted = Number(r.inserted_requests || 0) + Number(r.inserted_items || 0);
     const updated = Number(r.updated_requests || 0) + Number(r.updated_items || 0);
     const unchanged = Number(r.unchanged_requests || 0) + Number(r.unchanged_items || 0);
-    return "<tr><td>" + esc(r.id) + "</td><td>" + esc(r.original_file_name) + "</td><td>" +
+    return "<tr><td data-no-translate>" + esc(r.id) + "</td><td data-no-translate>" + esc(r.original_file_name) + "</td><td>" +
       esc(r.status) + "</td><td>" + esc(r.total_rows) + "</td><td>" + inserted +
       "</td><td>" + updated + "</td><td>" + unchanged + "</td><td>" + esc(fmt(r.uploaded_at)) + "</td></tr>";
   }).join("");
@@ -1124,7 +1124,7 @@ async function openDetails(id) {
     const result = await api("/api/dashboard/khs/" + encodeURIComponent(id));
     state.detail = result.data;
     const r = result.data;
-    set("detailTitle", r.vendor_name || r.khs_id);
+    const detailTitle = $("detailTitle");\n    if (detailTitle) detailTitle.setAttribute("data-no-translate", "");\n    const detailSubtitle = $("detailSubtitle");\n    if (detailSubtitle) detailSubtitle.setAttribute("data-no-translate", "");\n    set("detailTitle", r.vendor_name || r.khs_id);
     set("detailSubtitle", (r.request_subject || "No request subject") + " · " + r.khs_id);
     $("detailStatus").innerHTML =
       '<span class="status-badge status-' + esc(r.workflow_status || "not_started") + '">' +
@@ -1156,7 +1156,7 @@ async function openDetails(id) {
       '</h4><div class="detail-group-fields">' +
       group.items.map((item) =>
         '<div class="detail-item"><span class="detail-label">' + esc(item[0]) +
-        '</span><span class="detail-value">' + esc(fmt(item[1])) + "</span></div>"
+        '</span><span class="detail-value" data-no-translate>' + esc(fmt(item[1])) + "</span></div>"
       ).join("") + "</div></section>"
     ).join("");
 
