@@ -83,6 +83,38 @@ def test_not_proceeded_stops_current_stage_at_closure_date_and_preserves_prior_h
     assert result["total_processing_status"] == "stopped"
 
 
+def test_global_chronology_error_withholds_workbench_totals_and_current_stage_duration():
+    row = {
+        "process_status": "ACTIVE",
+        "workflow_stage_code": "LP_CIRCULATION",
+        "current_stage_code": "LP_CIRCULATION",
+        "lp_stage_key": "general_manager",
+        "milestone_chronology_valid": False,
+        "request_date": date(2026, 1, 1),
+        "dispatch_date": date(2026, 1, 5),
+        "boq_confirmation_date": date(2026, 1, 4),
+        "lp_circulation_start_date": date(2026, 1, 10),
+        "lp_contract_team_completion_date": date(2026, 1, 11),
+        "lp_junior_manager_approval_date": date(2026, 1, 12),
+        "lp_senior_manager_approval_date": date(2026, 1, 13),
+        "lp_gm_scm_approval_date": None,
+        "lp_completion_date": None,
+        "khs_inject_start_date": None,
+        "khs_inject_completion_date": None,
+    }
+
+    result = _process_duration_history(row, today=date(2026, 1, 18))
+    stages = {stage["stage_code"]: stage for stage in result["process_duration_history"]}
+
+    assert result["total_processing_duration_days"] is None
+    assert result["total_processing_status"] == "invalid_chronology"
+    assert result["lp_circulation_duration_days"] is None
+    assert result["lp_circulation_duration_status"] == "invalid_chronology"
+    assert stages["LP_GM_SCM"]["status"] == "invalid_chronology"
+    assert stages["LP_GM_SCM"]["duration_days"] is None
+    assert stages["LP_GM_SCM"]["end_date"] is None
+
+
 def test_register_enrichment_stops_current_stage_age_on_closure_date():
     result = _register_enriched({
         "process_status": "NOT_PROCEEDED",

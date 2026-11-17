@@ -1877,10 +1877,11 @@ function renderLPTimeline(record) {
   const prerequisiteException = !!record.lp_prerequisite_exception;
   const legacyUnverified = !!record.lp_legacy_unverified;
   const hasGaps = !!record.lp_timeline_has_gaps;
+  const chronologyInvalid = record.milestone_chronology_valid === false;
   const completed = record.lp_stage_key === "completed";
   const notStarted = record.lp_stage_key === "not_started";
   const processStopped = record.process_status === "NOT_PROCEEDED";
-  const reviewRequired = prerequisiteException || legacyUnverified || hasGaps;
+  const reviewRequired = chronologyInvalid || prerequisiteException || legacyUnverified || hasGaps;
   const lastRecordedIndex = stages.reduce((last, stage, index) => record[stage[0]] ? index : last, -1);
 
   let currentTitle = "Review required";
@@ -1890,7 +1891,14 @@ function renderLPTimeline(record) {
   let ageTitle = "Not calculated";
   let ageMeta = "Stage age is withheld until the current stage can be established.";
 
-  if (currentIndex >= 1 && !reviewRequired) {
+  if (chronologyInvalid && lastRecordedIndex >= 1) {
+    currentTitle = "History needs review";
+    currentMeta = "Recorded milestone dates are not chronologically consistent. Verify the source history before assigning the next LP approver.";
+    upcomingTitle = "Review source dates";
+    upcomingMeta = "No next LP approver is inferred from inconsistent chronology.";
+    ageTitle = "Unavailable";
+    ageMeta = "Stage age is withheld until the recorded milestone order is verified.";
+  } else if (currentIndex >= 1 && !reviewRequired) {
     currentTitle = stages[currentIndex][1];
     currentMeta = "The next approval or completion milestone is outstanding.";
     const age = record.lp_stage_age_days;
@@ -2023,9 +2031,11 @@ function renderLPTimeline(record) {
 
   const notice = $("lpTimelineNotice");
   if (notice) {
-    const noticeText = prerequisiteException
-      ? "Prerequisite exception: LP circulation was recorded before MI GM approval, or the approval date is missing. The active approver is not inferred."
-      : legacyUnverified
+    const noticeText = chronologyInvalid
+      ? "Recorded milestone dates are not chronologically consistent. Verify the source dates before interpreting the LP sequence or assigning the next approver."
+      : prerequisiteException
+        ? "Prerequisite exception: LP circulation was recorded before MI GM approval, or the approval date is missing. The active approver is not inferred."
+        : legacyUnverified
         ? "Legacy completion is not equivalent to Director sign-off. LP remains unverified until the Director-signed completion date is supported by evidence."
         : hasGaps
           ? "Historical timeline contains missing milestone dates. Recorded dates are preserved, and the current approver is not inferred from incomplete history."
@@ -2091,6 +2101,9 @@ function renderWorkSummary(record) {
   }
   if (record.lp_timeline_has_gaps) {
     notices.push("The LP history has missing milestone dates. The next approver is not inferred from incomplete history.");
+  }
+  if (record.milestone_chronology_valid === false) {
+    notices.push("Recorded milestone dates are not chronologically consistent. Guided progress is disabled and process-duration totals are withheld until the source dates are reviewed.");
   }
   const notice = $("workSummaryNotice");
   if (notice) {
@@ -2500,14 +2513,22 @@ function renderProcessDurationHistory(record) {
   const lpDays = record.lp_circulation_duration_days;
   set("totalProcessingDays", days == null ? "Unavailable" : durationDaysLabel(days));
   set("lpProcessingDays", lpDays == null ? "Unavailable" : durationDaysLabel(lpDays));
+  const chronologyInvalid = record.milestone_chronology_valid === false;
   const invalidStages = stages.filter((stage) => stage.status === "invalid_chronology");
+  const durationNotices = [];
+  if (chronologyInvalid) {
+    durationNotices.push("Recorded milestone dates are not chronologically consistent. Overall and LP durations are withheld until the source dates are reviewed.");
+  }
+  if (invalidStages.length) {
+    durationNotices.push(
+      "Chronology needs review in: " + invalidStages.map((stage) => stage.stage_label).join(", ") +
+      ". Durations are not estimated for these intervals."
+    );
+  }
   const durationNotice = $("processDurationNotice");
   if (durationNotice) {
-    durationNotice.hidden = invalidStages.length === 0;
-    durationNotice.textContent = invalidStages.length
-      ? "Chronology needs review in: " + invalidStages.map((stage) => stage.stage_label).join(", ") +
-        ". Durations are not estimated for these intervals. Verify the source milestone dates before interpreting the overall and LP totals."
-      : "";
+    durationNotice.hidden = durationNotices.length === 0;
+    durationNotice.textContent = durationNotices.join(" ");
   }
   const badge = $("totalProcessDuration");
   if (badge) {

@@ -39,6 +39,9 @@ def test_dashboard_exposes_khs_closure_and_process_duration_controls(monkeypatch
         b"/reopen",
         b"renderProcessDurationHistory",
         b"total_processing_duration_days",
+        b"milestone_chronology_valid",
+        b"Overall and LP durations are withheld",
+        b"History needs review",
         b"NOT_PROCEEDED",
     ):
         assert marker in script.data

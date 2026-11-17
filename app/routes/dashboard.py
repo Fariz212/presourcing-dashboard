@@ -693,6 +693,7 @@ def _lp_timeline_summary(record, today=None):
         and not any(values[1:])
         and legacy_status in {"done", "completed"}
     )
+    chronology_valid = record.get("milestone_chronology_valid", True) is not False
 
     if completion_date is not None:
         stage_key = "completed"
@@ -734,7 +735,12 @@ def _lp_timeline_summary(record, today=None):
         stage_key = stage_keys[next_index]
         prior_dates = [value for value in values[:next_index] if value is not None]
         stage_started = prior_dates[-1] if prior_dates else start_date
-        stage_age = max((today - stage_started).days, 0) if stage_started else None
+        stage_age = (
+            max((today - stage_started).days, 0)
+            if chronology_valid and stage_started else None
+        )
+        if not chronology_valid:
+            stage_started = None
 
     if has_gaps:
         data_status = "legacy_incomplete"
@@ -918,6 +924,7 @@ def _process_duration_history(record, today=None):
     today = today or _jakarta_today()
     process_status = record.get("process_status") or "ACTIVE"
     closure_date = _date_only(record.get("closure_date"))
+    chronology_valid = record.get("milestone_chronology_valid", True) is not False
     stages = []
     for stage_code, label, start_field, end_field in PROCESS_DURATION_STAGES:
         start, end = _date_only(record.get(start_field)), _date_only(record.get(end_field))
@@ -944,6 +951,8 @@ def _process_duration_history(record, today=None):
                 status = "invalid_chronology"
         elif not start and not end and is_current:
             status = "date_unavailable"
+        if not chronology_valid and is_current:
+            status, duration_days, display_end = "invalid_chronology", None, None
         stages.append({
             "stage_code": stage_code, "stage_label": label,
             "start_date": start.isoformat() if start else None,
@@ -965,6 +974,8 @@ def _process_duration_history(record, today=None):
             total_days = (process_end - request_date).days
         else:
             total_status = "invalid_chronology"
+    if not chronology_valid:
+        total_days, total_status = None, "invalid_chronology"
 
     lp_start, lp_end = _date_only(record.get("lp_circulation_start_date")), _date_only(record.get("lp_completion_date"))
     lp_status, lp_days = "not_started", None
@@ -980,6 +991,8 @@ def _process_duration_history(record, today=None):
             lp_status = "date_unavailable"
     elif lp_start:
         lp_status, lp_days = "in_progress", (today - lp_start).days if today >= lp_start else None
+    if not chronology_valid and (lp_start or lp_end):
+        lp_status, lp_days = "invalid_chronology", None
 
     return {
         "process_duration_history": stages,
@@ -1072,6 +1085,8 @@ def _workflow_stage_identity(record):
 
 
 def _guided_progress_definition(record):
+    if record.get("milestone_chronology_valid", True) is False:
+        return None
     stage, stage_key = _workflow_stage_identity(record)
     field = GUIDED_STAGE_FIELD.get(stage)
     lp_fields = {
@@ -2470,6 +2485,12 @@ def update_khs_guided_progress(khs_id):
                 if record is None:
                     return jsonify(success=False, message="KHS not found."),404
                 record = dict(record)
+            if record.get("milestone_chronology_valid") is False:
+                return jsonify(
+                    success=False,
+                    code="HISTORY_INCONSISTENT",
+                    message="Milestone history is not chronologically consistent. Review the recorded dates before continuing guided progress.",
+                ),409
             definition = _guided_progress_definition(record)
             if not definition:
                 return jsonify(success=False, code="NO_GUIDED_MILESTONE",

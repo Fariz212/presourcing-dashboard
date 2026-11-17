@@ -534,6 +534,20 @@ def main() -> int:
             if "History needs review" not in invalid_row.locator("xpath=ancestor::tr").inner_text():
                 raise AssertionError("Chronologically inconsistent history was not labelled for review.")
 
+            invalid_row.locator('[data-view-khs="KHS-AGING-INVALID"]').click()
+            page.locator("#detailDialog[open]").wait_for(state="visible", timeout=10_000)
+            if page.locator("#updateProgressButton").is_visible():
+                raise AssertionError("Guided Progress remained available for globally inconsistent history.")
+            if page.locator("#totalProcessingDays").inner_text().strip() != "Unavailable":
+                raise AssertionError("Workbench displayed an overall duration for globally inconsistent history.")
+            if page.locator("#lpProcessingDays").inner_text().strip() != "Unavailable":
+                raise AssertionError("Workbench displayed an LP duration for globally inconsistent history.")
+            page.locator("#processDurationNotice").wait_for(state="visible", timeout=10_000)
+            page.locator("#workSummaryNotice").wait_for(state="visible", timeout=10_000)
+            if "chronologically consistent" not in page.locator("#processDurationNotice").inner_text():
+                raise AssertionError("Workbench did not explain why duration totals are withheld.")
+            page.locator("#closeDialog").click()
+
             print(
                 "WIP analytics browser check passed: bucket reconciliation, median/P90/oldest ordering, "
                 "all five aging bands, normal 31+ drill-down, and inconsistent-history drill-down."

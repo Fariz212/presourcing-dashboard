@@ -185,6 +185,24 @@ def test_guided_progress_rejects_out_of_order_and_future_dates_without_writing(
     assert not any("INSERT INTO khs_activity_logs" in query for query, _ in _api_calls(pool))
 
 
+def test_guided_progress_rejects_globally_inconsistent_history_without_writing(make_progress_client):
+    record = _progress_record(
+        dispatch_date=date(2026, 11, 3),
+        boq_confirmation_date=date(2026, 11, 2),
+        milestone_chronology_valid=False,
+    )
+    client, pool = make_progress_client(record)
+    response = client.post(
+        "/api/dashboard/khs/KHS-PROGRESS-001/progress",
+        json={"milestone_date": "2026-11-11", "note": "Must not advance inconsistent history."},
+    )
+
+    assert response.status_code == 409
+    assert response.get_json()["code"] == "HISTORY_INCONSISTENT"
+    assert not any(query.startswith("UPDATE khs_items SET") for query, _ in _api_calls(pool))
+    assert not any("INSERT INTO khs_activity_logs" in query for query, _ in _api_calls(pool))
+
+
 def test_guided_progress_rejects_a_closed_khs_before_reading_or_writing_milestones(make_progress_client):
     client, pool = make_progress_client(_progress_record(process_status="NOT_PROCEEDED"))
     response = client.post(
