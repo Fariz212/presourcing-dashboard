@@ -2012,6 +2012,74 @@ function renderLPTimeline(record) {
 }
 
 
+
+function renderWorkSummary(record) {
+  const closed = record.process_status === "NOT_PROCEEDED";
+  const completed = !!record.khs_inject_completion_date;
+  const stage = closed
+    ? (record.current_stage_name || "Not Proceeded")
+    : currentStageLabel(record);
+  const stageAge = closed
+    ? currentStageAgeLabel(record)
+    : completed
+      ? "KHS fully injected " + fmt(record.khs_inject_completion_date)
+      : currentStageAgeLabel(record);
+  set("workSummaryStage", stage || "—");
+  set("workSummaryStageAge", stageAge || "Date unavailable");
+  set("workSummaryOwner", record.action_owner || "No action owner assigned");
+  set("workSummaryOwnerMeta", record.action_owner
+    ? "Responsible for coordinating the next action"
+    : "Assign an action owner in Edit record or when scheduling a follow-up");
+  set("workSummaryWaitingFor", record.waiting_for || "No waiting party recorded");
+  set("workSummaryWaitingReason", record.waiting_reason || "No waiting reason recorded");
+
+  let next = "No next milestone inferred";
+  let nextMeta = "Review the recorded history before assigning another action.";
+  if (record.guided_progress) {
+    next = record.guided_progress.label;
+    nextMeta = "Next milestone in the recorded workflow sequence";
+  } else if (closed) {
+    next = "Process stopped";
+    nextMeta = "Closed " + fmt(record.closure_date);
+  } else if (completed) {
+    next = "KHS fully injected";
+    nextMeta = "Contract lifecycle monitoring is now the next control";
+  }
+  set("workSummaryNextMilestone", next);
+  set("workSummaryNextMeta", nextMeta);
+
+  const stateBadge = $("workSummaryState");
+  if (stateBadge) {
+    stateBadge.className = "status-badge " + (
+      closed ? "status-not_proceeded" :
+      completed ? "status-completed" :
+      "status-in_progress"
+    );
+    stateBadge.textContent = closed ? "Not Proceeded" :
+      completed ? "Fully Injected" : "Active";
+  }
+  const notices = [];
+  if (record.lp_prerequisite_exception) {
+    notices.push("LP circulation has an MI GM prerequisite exception. Verify the approval evidence before treating the route as valid.");
+  }
+  if (record.lp_legacy_unverified) {
+    notices.push("Legacy Director sign-off is unverified. A legacy completion label is not proof of a signed LP.");
+  }
+  if (record.lp_timeline_has_gaps) {
+    notices.push("The LP history has missing milestone dates. The next approver is not inferred from incomplete history.");
+  }
+  const notice = $("workSummaryNotice");
+  if (notice) {
+    notice.hidden = notices.length === 0;
+    notice.textContent = notices.join(" ");
+  }
+}
+
+function durationDaysLabel(value) {
+  const days = Number(value);
+  return days + (days === 1 ? " day" : " days");
+}
+
 function renderWorkbenchFollowUps(rows) {
   const list = $("followUpList");
   if (!list) return;
@@ -2021,12 +2089,31 @@ function renderWorkbenchFollowUps(rows) {
   }
   list.innerHTML = rows.map((row) => {
     const open = row.status === "OPEN";
+    const stale = open && !!row.stage_changed;
+    const dueState = row.due_state || (
+      row.days_from_due == null ? "date_unavailable" :
+      Number(row.days_from_due) > 0 ? "overdue" :
+      Number(row.days_from_due) === 0 ? "due_today" : "upcoming"
+    );
+    const dueLabels = {
+      overdue: "Overdue", due_today: "Due today",
+      upcoming: "Upcoming", date_unavailable: "Date unavailable"
+    };
+    const statusLabel = stale ? "Stage changed · review" :
+      open ? (dueLabels[dueState] || "Open") :
+      String(row.status || "Closed").replace(/_/g, " ").toLowerCase();
+    const badgeClass = stale || dueState === "overdue"
+      ? "status-warning" : open ? "status-in_progress" : "status-neutral";
+    const stageLabel = row.stage_name || row.stage_code || "Unknown stage";
     return '<article class="follow-up-item ' + (open ? "follow-up-open" : "follow-up-closed") + '">' +
-      '<div class="follow-up-item-main"><strong>' + esc(fmt(row.due_date)) + ' · ' +
-      esc(row.follow_up_to || "Unassigned") + '</strong><p>' + esc(row.note) + '</p>' +
-      '<small>' + esc(row.stage_code) + ' · ' + esc(row.status) + '</small></div>' +
-      (open ? '<div class="follow-up-item-actions"><button type="button" class="view-button" data-complete-followup="' +
-        esc(row.id) + '">Complete</button><button type="button" class="view-button" data-cancel-followup="' +
+      '<div class="follow-up-item-main"><div class="follow-up-item-title"><strong>' +
+      esc(fmt(row.due_date)) + ' · ' + esc(row.follow_up_to || "Unassigned") +
+      '</strong><span class="status-badge ' + badgeClass + '">' + esc(statusLabel) + '</span></div>' +
+      '<p>' + esc(row.note) + '</p><small>' + esc(stageLabel) + '</small></div>' +
+      (open ? '<div class="follow-up-item-actions">' +
+        (!stale ? '<button type="button" class="view-button" data-complete-followup="' +
+          esc(row.id) + '">Complete</button>' : "") +
+        '<button type="button" class="view-button" data-cancel-followup="' +
         esc(row.id) + '">Cancel</button></div>' : "") +
       '</article>';
   }).join("");
@@ -2040,8 +2127,20 @@ function refreshGuidedProgressControl(record) {
     button.textContent = definition ? "Update: " + definition.label : "No pending milestone";
   }
   const schedule = $("scheduleFollowUpButton");
-  if (schedule) schedule.hidden = record.process_status !== "ACTIVE" ||
-    record.workflow_status === "completed";
+  const followUpAllowed = record.process_status === "ACTIVE" &&
+    record.workflow_status !== "completed";
+  if (schedule) schedule.hidden = !followUpAllowed;
+  const composer = $("followUpComposer");
+  const readOnlyNotice = $("followUpReadOnlyNotice");
+  if (composer) composer.hidden = !followUpAllowed;
+  if (readOnlyNotice) readOnlyNotice.hidden = followUpAllowed;
+  const stage = record.lp_stage_key === "contract_team" ? "LP Contract Team" :
+    record.lp_stage_key === "junior_manager" ? "LP Junior Manager Vendor Management" :
+    record.lp_stage_key === "senior_manager" ? "LP Senior Manager Strategic Sourcing" :
+    record.lp_stage_key === "general_manager" ? "LP GM SCM" :
+    record.lp_stage_key === "director" ? "LP Director Sign-off" :
+    (record.current_stage_name || record.current_stage_code || "No active stage");
+  set("followUpCurrentStage", stage);
   set("progressKhsLabel", record.khs_id);
   const milestoneInput = $("progressMilestoneLabel");
   if (milestoneInput) {
@@ -2108,6 +2207,7 @@ async function submitWorkbenchFollowUp(event) {
     state.detail = fresh.data;
     renderWorkbenchFollowUps(fresh.follow_ups || []);
     refreshGuidedProgressControl(fresh.data);
+    renderWorkSummary(fresh.data);
     if (state.page === "workflow") await loadWorkflow();
   } catch (err) {
     toast(err.message);
@@ -2128,6 +2228,7 @@ async function updateFollowUpStatus(id, action) {
       state.detail = fresh.data;
       renderWorkbenchFollowUps(fresh.follow_ups || []);
       refreshGuidedProgressControl(fresh.data);
+      renderWorkSummary(fresh.data);
     }
   } catch (err) {
     toast(err.message);
@@ -2373,8 +2474,17 @@ function renderProcessDurationHistory(record) {
   };
   const days = record.total_processing_duration_days;
   const lpDays = record.lp_circulation_duration_days;
-  set("totalProcessingDays", days == null ? "Unavailable" : days + " days");
-  set("lpProcessingDays", lpDays == null ? "Unavailable" : lpDays + " days");
+  set("totalProcessingDays", days == null ? "Unavailable" : durationDaysLabel(days));
+  set("lpProcessingDays", lpDays == null ? "Unavailable" : durationDaysLabel(lpDays));
+  const invalidStages = stages.filter((stage) => stage.status === "invalid_chronology");
+  const durationNotice = $("processDurationNotice");
+  if (durationNotice) {
+    durationNotice.hidden = invalidStages.length === 0;
+    durationNotice.textContent = invalidStages.length
+      ? "Chronology needs review in: " + invalidStages.map((stage) => stage.stage_label).join(", ") +
+        ". Durations are not estimated for these intervals. Verify the source milestone dates before interpreting the overall and LP totals."
+      : "";
+  }
   const badge = $("totalProcessDuration");
   if (badge) {
     const status = record.total_processing_status || "date_unavailable";
@@ -2396,7 +2506,7 @@ function renderProcessDurationHistory(record) {
       '<div class="process-duration-dates"><span>' + esc(fmt(stage.start_date)) +
       '</span><span aria-hidden="true">→</span><span>' + esc(fmt(stage.end_date)) + '</span></div>' +
       '<strong class="process-duration-days">' +
-      esc(stage.duration_days == null ? "—" : stage.duration_days + " days") +
+      esc(stage.duration_days == null ? "—" : durationDaysLabel(stage.duration_days)) +
       '</strong></div>';
   }).join("") : '<p class="muted">No process milestones are recorded.</p>';
 }
@@ -2495,6 +2605,7 @@ async function openDetails(id) {
     renderLPTimeline(r);
     renderContractDetail(r);
     renderProcessDurationHistory(r);
+    renderWorkSummary(r);
     refreshClosureControls(r);
     refreshGuidedProgressControl(r);
     renderWorkbenchFollowUps(result.follow_ups || []);
@@ -2504,8 +2615,7 @@ async function openDetails(id) {
     const detailGroups = [
       { title:"Supplier & request", items:[
         ["Request subject",r.request_subject],["Request ID",r.request_id],
-        ["Vendor",r.vendor_name],["Executor",r.executor_name || r.executor_code],["Contract type",r.subtype],
-        ["Action owner / PIC",r.action_owner]
+        ["Vendor",r.vendor_name],["Executor",r.executor_name || r.executor_code],["Contract type",r.subtype]
       ]},
       { title:"Commercial & approval history", items:[
         ["Dispatch",r.dispatch_date],["BOQ confirmation",r.boq_confirmation_date],
@@ -2515,7 +2625,7 @@ async function openDetails(id) {
         ["MI GM approval",r.mi_gm_approval_date],["Legal submission",r.legal_submission_date]
       ]},
       { title:"Coordination & next action", items:[
-        ["Waiting for",r.waiting_for],["Waiting reason",r.waiting_reason],
+        ["Action owner / PIC",r.action_owner],["Waiting for",r.waiting_for],["Waiting reason",r.waiting_reason],
         ["Remarks",r.remarks],["Last updated",r.last_updated_date || r.updated_at]
       ]}
     ];
@@ -2915,7 +3025,13 @@ function bind() {
   $("refreshOperationsButton").addEventListener("click", () => loadWorkflow().catch((err) => toast(err.message)));
   document.querySelectorAll("[data-workbench-target]").forEach((button) => button.addEventListener("click", () => {
     const target = $(button.dataset.workbenchTarget);
-    if (target) target.scrollIntoView({behavior:"smooth",block:"start"});
+    if (!target) return;
+    target.scrollIntoView({behavior:"smooth",block:"start"});
+    document.querySelectorAll("[data-workbench-target]").forEach((item) => {
+      item.classList.toggle("active", item === button);
+      if (item === button) item.setAttribute("aria-current", "location");
+      else item.removeAttribute("aria-current");
+    });
   }));
   $("operationsStageBody").addEventListener("click", (event) => {
     const filter = event.target.closest("[data-operations-stage]");
