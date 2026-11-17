@@ -833,13 +833,31 @@ function renderLPTimeline(record) {
   }
 
   if (processStopped) {
-    currentTitle = "Not Proceeded";
-    currentMeta = "The KHS process was closed on " + fmt(record.closure_date) + ".";
-    upcomingTitle = "No further LP milestone";
-    upcomingMeta = "The approval route stopped when the KHS was closed.";
-    const stoppedAge = record.current_stage_age_days;
-    ageTitle = stoppedAge == null ? "Unavailable" : stoppedAge + (Number(stoppedAge) === 1 ? " day" : " days");
-    ageMeta = "Stopped on " + fmt(record.closure_date);
+    if (completed) {
+      currentTitle = "LP completed";
+      currentMeta = "Director sign-off recorded on " + fmt(record.lp_completion_date) +
+        "; the KHS process was later closed on " + fmt(record.closure_date) + ".";
+      upcomingTitle = "KHS process stopped";
+      upcomingMeta = "No fully-injected completion was recorded.";
+      ageTitle = "—";
+      ageMeta = "LP had no active stage. See Process Duration History for the later stoppage.";
+    } else if (currentIndex >= 1) {
+      currentTitle = "Not Proceeded";
+      currentMeta = "The LP route stopped at " + stages[currentIndex][1] +
+        " when the KHS was closed on " + fmt(record.closure_date) + ".";
+      upcomingTitle = "No further LP milestone";
+      upcomingMeta = "The approval route stopped when the KHS was closed.";
+      const stoppedAge = record.current_stage_age_days;
+      ageTitle = stoppedAge == null ? "Unavailable" : stoppedAge + (Number(stoppedAge) === 1 ? " day" : " days");
+      ageMeta = "Stopped on " + fmt(record.closure_date);
+    } else {
+      currentTitle = "LP not reached";
+      currentMeta = "The KHS process closed before LP Circulation began.";
+      upcomingTitle = "No further LP milestone";
+      upcomingMeta = "The LP approval route was not started.";
+      ageTitle = "—";
+      ageMeta = "No LP stage was opened.";
+    }
   }
 
   const badge = $("lpTimelineStage");
