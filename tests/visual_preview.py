@@ -68,6 +68,9 @@ def assert_stage_and_age(page, body_id, khs_id, stage_text, expected_age_text,
 
 def main() -> int:
     api_failures: list[dict[str, object]] = []
+    expected_api_validations: list[dict[str, object]] = []
+    expected_validation_console_messages: list[str] = []
+    expected_validation_in_flight = False
     page_errors: list[str] = []
     console_errors: list[str] = []
     capture_errors: list[str] = []
@@ -83,20 +86,40 @@ def main() -> int:
         )
 
         def inspect_response(response) -> None:
-            if "/api/" in response.url and response.status >= 400:
-                api_failures.append({
+            if "/api/" not in response.url or response.status < 400:
+                return
+            expected_progress_rejection = (
+                expected_validation_in_flight
+                and response.status == 422
+                and response.url.endswith("/api/dashboard/khs/KHS-VIS-002/progress")
+            )
+            if expected_progress_rejection:
+                expected_api_validations.append({
                     "status": response.status,
                     "url": response.url,
+                    "reason": "MILESTONE_BEFORE_PREVIOUS",
                 })
+                return
+            api_failures.append({
+                "status": response.status,
+                "url": response.url,
+            })
+
+        def inspect_console(message) -> None:
+            expected_rejection_message = (
+                expected_validation_in_flight
+                and message.type == "error"
+                and "server responded with a status of 422" in message.text
+                and "UNPROCESSABLE ENTITY" in message.text
+            )
+            if expected_rejection_message:
+                expected_validation_console_messages.append(message.text)
+            elif message.type == "error":
+                console_errors.append(message.text)
 
         page.on("response", inspect_response)
         page.on("pageerror", lambda error: page_errors.append(str(error)))
-        page.on(
-            "console",
-            lambda message: console_errors.append(message.text)
-            if message.type == "error"
-            else None,
-        )
+        page.on("console", inspect_console)
 
         current_page: str | None = None
 
@@ -472,10 +495,12 @@ def main() -> int:
                 # MI SM approval is 20 September 2026 in the synthetic seed.
                 page.locator("#progressMilestoneDate").fill("2026-09-19")
                 page.locator("#progressNote").fill("Synthetic chronology rejection check.")
+                expected_validation_in_flight = True
                 with page.expect_response(
                     lambda response: "/progress" in response.url and response.request.method == "POST"
                 ) as invalid_progress_response:
                     page.locator("#confirmProgress").click()
+                expected_validation_in_flight = False
                 if invalid_progress_response.value.status != 422:
                     raise AssertionError(
                         f"Out-of-order guided progress returned {invalid_progress_response.value.status}, expected 422."
@@ -533,6 +558,8 @@ def main() -> int:
         "expected_capture_count": len(CAPTURES) + 4,
         "captures": captures,
         "api_failures": api_failures,
+        "expected_api_validations": expected_api_validations,
+        "expected_validation_console_messages": expected_validation_console_messages,
         "uncaught_page_errors": page_errors,
         "console_errors": console_errors,
         "capture_errors": capture_errors,
@@ -548,6 +575,8 @@ def main() -> int:
              "", "=== Uncaught page errors ===", *page_errors,
              "", "=== API failures ===",
              *[f'{item["status"]} {item["url"]}' for item in api_failures],
+             "", "=== Expected API validations ===",
+             *[f'{item["status"]} {item["reason"]} {item["url"]}' for item in expected_api_validations],
              "", "=== Capture errors ===", *capture_errors]
         ),
         encoding="utf-8",
