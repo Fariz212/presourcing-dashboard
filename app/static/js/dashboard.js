@@ -1124,7 +1124,11 @@ async function openDetails(id) {
     const result = await api("/api/dashboard/khs/" + encodeURIComponent(id));
     state.detail = result.data;
     const r = result.data;
-    const detailTitle = $("detailTitle");\n    if (detailTitle) detailTitle.setAttribute("data-no-translate", "");\n    const detailSubtitle = $("detailSubtitle");\n    if (detailSubtitle) detailSubtitle.setAttribute("data-no-translate", "");\n    set("detailTitle", r.vendor_name || r.khs_id);
+    const detailTitle = $("detailTitle");
+    if (detailTitle) detailTitle.setAttribute("data-no-translate", "");
+    const detailSubtitle = $("detailSubtitle");
+    if (detailSubtitle) detailSubtitle.setAttribute("data-no-translate", "");
+    set("detailTitle", r.vendor_name || r.khs_id);
     set("detailSubtitle", (r.request_subject || "No request subject") + " · " + r.khs_id);
     $("detailStatus").innerHTML =
       '<span class="status-badge status-' + esc(r.workflow_status || "not_started") + '">' +
