@@ -419,6 +419,8 @@ def test_overview_prioritizes_actions_without_duplicate_graph_panels(monkeypatch
     body = response.data.decode("utf-8")
 
     assert "Priority action queue" in body
+    assert "<th>ACTION OWNER</th>" in body
+    assert "<th>WAITING ON / CONTEXT</th>" in body
     assert "Approval Pipeline" in body
     assert "Contract Lifecycle Watch" in body
     assert 'class="overview-grid"' not in body

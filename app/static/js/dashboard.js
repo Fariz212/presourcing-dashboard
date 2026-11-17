@@ -809,6 +809,7 @@ const I18N_ID = Object.freeze({
   "Unassigned PIC":"PIC Belum Ditentukan",
   "ACTION OWNER":"PIC Tindakan",
   "WAITING ON":"Menunggu Pihak",
+  "WAITING ON / CONTEXT":"Menunggu Pihak / Konteks",
   "NEXT ACTION / MILESTONE":"Tindakan Berikutnya / Milestone",
   "LP / INJECTION":"LP / Injeksi",
   "Unassigned":"Belum Ditentukan",
@@ -1349,7 +1350,7 @@ function renderAttention(rows) {
   const body = $("attentionBody");
   if (!body) return;
   if (!rows.length) {
-    emptyRow("attentionBody", 6, "No records currently require attention.");
+    emptyRow("attentionBody", 7, "No records currently require attention.");
     return;
   }
   body.innerHTML = rows.map((r) => {
@@ -1358,14 +1359,15 @@ function renderAttention(rows) {
     const ageMeta = currentStageAgeMeta(r);
     const exception = r.lp_started_without_mi_gm_approval
       ? '<span class="exception-label">MI GM prerequisite exception</span>' : "";
-    const waitingFor = r.action_owner || r.waiting_for ||
-      (r.lp_started_without_mi_gm_approval ? "Review prerequisite" : "Review next action");
+    const actionOwner = r.action_owner || "Unassigned";
+    const waitingFor = r.waiting_for || "No waiting party recorded";
     return `<tr>
       <td data-label="REQUEST / KHS"><span class="cell-primary">${esc(r.request_subject || "Untitled request")}</span>
       <span class="cell-secondary">${esc(r.khs_id)} · ${esc(r.request_id)}</span></td>
       <td data-label="VENDOR">${esc(r.vendor_name)}</td>
       <td data-label="CURRENT STAGE">${esc(stage)}${exception}</td>
-      <td data-label="WAITING FOR / NEXT ACTION"><span class="cell-primary">${esc(waitingFor)}</span>
+      <td data-label="ACTION OWNER"><span class="cell-primary">${esc(actionOwner)}</span></td>
+      <td data-label="WAITING ON / CONTEXT"><span class="cell-primary">${esc(waitingFor)}</span>
       ${r.waiting_reason ? '<span class="cell-secondary">' + esc(r.waiting_reason) + "</span>" : ""}</td>
       <td data-label="STAGE AGE / UPDATED"><span class="cell-primary">${esc(age)}</span>
       <span class="cell-secondary">${esc(ageMeta)}</span></td>

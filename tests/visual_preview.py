@@ -748,7 +748,7 @@ def main() -> int:
                         f"Work Queue view {view_name} returned {saved_view_response.value.status}"
                     )
                 page.wait_for_function(
-                    "(name) => document.querySelector('[data-work-queue-view="' + name + '"]')?.getAttribute('aria-pressed') === 'true'",
+                    "(name) => Array.from(document.querySelectorAll('[data-work-queue-view]')).some((el) => el.dataset.workQueueView === name && el.getAttribute('aria-pressed') === 'true')",
                     arg=view_name,
                     timeout=10_000,
                 )
@@ -786,7 +786,7 @@ def main() -> int:
             choose_work_view("lp")
             page.locator("#activeRegisterFilters .clear-all-filters").click(timeout=10_000)
             page.wait_for_function(
-                "document.querySelector('[data-work-queue-view="active"]')?.getAttribute('aria-pressed') === 'true'",
+                "Array.from(document.querySelectorAll('[data-work-queue-view]')).some((el) => el.dataset.workQueueView === 'active' && el.getAttribute('aria-pressed') === 'true')",
                 timeout=10_000,
             )
 
@@ -797,7 +797,7 @@ def main() -> int:
             page.locator("#operationsStageBody [data-operations-stage]").first.click(timeout=10_000)
             page.locator("#page-register.active").wait_for(timeout=15_000)
             page.wait_for_function(
-                "document.querySelector('[data-work-queue-view="active"]')?.getAttribute('aria-pressed') === 'true'",
+                "Array.from(document.querySelectorAll('[data-work-queue-view]')).some((el) => el.dataset.workQueueView === 'active' && el.getAttribute('aria-pressed') === 'true')",
                 timeout=10_000,
             )
             print("Lean P0 Work Queue browser checks passed: saved views, completed LP inclusion, explicit unassigned PIC, separate waiting party/next action, clear-all reset, and analytics drill-down.")
