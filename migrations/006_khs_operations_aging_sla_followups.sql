@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS khs_follow_ups (
     id BIGSERIAL PRIMARY KEY,
     khs_id TEXT NOT NULL REFERENCES khs_items(khs_id) ON UPDATE CASCADE ON DELETE RESTRICT,
     stage_code TEXT NOT NULL REFERENCES khs_stage_config(stage_code) ON UPDATE CASCADE ON DELETE RESTRICT,
+    stage_key TEXT NOT NULL DEFAULT '',
     due_date DATE NOT NULL,
     follow_up_to TEXT,
     note TEXT NOT NULL,
@@ -53,6 +54,10 @@ CREATE INDEX IF NOT EXISTS idx_khs_follow_ups_open_due
 
 CREATE INDEX IF NOT EXISTS idx_khs_follow_ups_khs
     ON khs_follow_ups(khs_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_khs_follow_ups_current_stage
+    ON khs_follow_ups(khs_id, stage_code, stage_key)
+    WHERE status = 'OPEN';
 
 INSERT INTO schema_migrations(version)
 VALUES ('006_khs_operations_aging_sla_followups')
