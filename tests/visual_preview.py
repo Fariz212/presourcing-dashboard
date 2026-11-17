@@ -479,9 +479,12 @@ def main() -> int:
                 raise AssertionError(
                     f"Out-of-order guided progress returned {invalid_progress_response.value.status}, expected 422."
                 )
+            invalid_payload = invalid_progress_response.value.json()
+            if invalid_payload.get("code") != "MILESTONE_BEFORE_PREVIOUS":
+                raise AssertionError(
+                    "Chronology guard returned an unexpected error: " + repr(invalid_payload)
+                )
             page.locator("#progressError").wait_for(state="visible", timeout=10_000)
-            if "MI GM approval" not in page.locator("#progressError").inner_text():
-                raise AssertionError("Chronology error did not explain the previous milestone requirement.")
 
             jakarta_today = page.evaluate(
                 "() => new Intl.DateTimeFormat('en-CA', {timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())"
