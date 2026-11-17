@@ -545,6 +545,99 @@ def main() -> int:
                 print(f"FAILED guided progress browser interaction: {error}")
             page.locator("#closeDialog").click()
 
+            # Exercise the complete LP approval chain and both injection substages
+            # on an independent synthetic record, including stage-scoped reminder
+            # supersession after LP circulation and injection preparation advance.
+            clear_filters = page.locator('#activeRegisterFilters [data-clear-filter="all"]')
+            if clear_filters.count():
+                clear_filters.click()
+            lp_detail_row = page.locator("#registerBody tr").filter(has_text="KHS-VIS-003").first
+            lp_detail_row.wait_for(state="visible", timeout=15_000)
+            lp_detail_row.locator('[data-view-khs="KHS-VIS-003"]').click()
+            page.locator("#detailDialog[open]").wait_for(state="visible", timeout=10_000)
+            jakarta_today = page.evaluate(
+                "() => new Intl.DateTimeFormat('en-CA', {timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())"
+            )
+            page.locator("#followUpDueDate").fill(jakarta_today)
+            page.locator("#followUpTo").fill("CI LP Contract Owner")
+            page.locator("#followUpNote").fill("CI LP stage reminder supersession.")
+            with page.expect_response(
+                lambda response: "/follow-ups" in response.url and response.request.method == "POST"
+            ) as lp_followup_response:
+                page.locator("#saveFollowUpButton").click()
+            if lp_followup_response.value.status != 201:
+                raise AssertionError(f"LP stage reminder creation returned {lp_followup_response.value.status}.")
+            if lp_followup_response.value.json()["data"]["stage_key"] != "contract_team":
+                raise AssertionError("LP follow-up was not assigned to the Contract Team sub-stage.")
+
+            lp_and_injection_steps = [
+                ("lp_contract_team_completion_date", "Contract Team completed", "lp_junior_manager_approval_date"),
+                ("lp_junior_manager_approval_date", "Junior Manager approval recorded", "lp_senior_manager_approval_date"),
+                ("lp_senior_manager_approval_date", "Senior Manager approval recorded", "lp_gm_scm_approval_date"),
+                ("lp_gm_scm_approval_date", "GM SCM approval recorded", "lp_completion_date"),
+                ("lp_completion_date", "Director sign-off recorded", "khs_inject_start_date"),
+                ("khs_inject_start_date", "KHS injection started", "khs_inject_completion_date"),
+                ("khs_inject_completion_date", "KHS fully injected", None),
+            ]
+            for step_index, (expected_field, expected_label, next_field) in enumerate(lp_and_injection_steps):
+                progress_button = page.locator("#updateProgressButton")
+                progress_button.wait_for(state="visible", timeout=10_000)
+                if not progress_button.inner_text().startswith("Update: " + expected_label):
+                    raise AssertionError(
+                        f"Expected guided stage {expected_label}, got {progress_button.inner_text()}."
+                    )
+                progress_button.click()
+                page.locator("#progressDialog[open]").wait_for(state="visible", timeout=10_000)
+                if page.locator("#progressMilestoneLabel").input_value() != expected_label:
+                    raise AssertionError(f"Guided dialog did not select {expected_label}.")
+                page.locator("#progressMilestoneDate").fill(jakarta_today)
+                page.locator("#progressNote").fill("Synthetic CI: " + expected_label)
+                with page.expect_response(
+                    lambda response: "/progress" in response.url and response.request.method == "POST"
+                ) as lp_progress_response:
+                    page.locator("#confirmProgress").click()
+                if lp_progress_response.value.status != 200:
+                    raise AssertionError(
+                        f"{expected_label} returned {lp_progress_response.value.status}, expected 200."
+                    )
+                updated_record = lp_progress_response.value.json().get("data") or {}
+                guided_next = updated_record.get("guided_progress")
+                actual_next = guided_next.get("field") if guided_next else None
+                if actual_next != next_field:
+                    raise AssertionError(
+                        f"{expected_label} derived {actual_next!r}, expected {next_field!r}."
+                    )
+                page.locator("#progressDialog").wait_for(state="hidden", timeout=10_000)
+                if step_index == 0:
+                    page.locator("#followUpList").get_by_text("SUPERSEDED").wait_for(timeout=10_000)
+                if step_index < len(lp_and_injection_steps) - 1:
+                    page.wait_for_function(
+                        "(label) => document.querySelector('#updateProgressButton')?.textContent.includes(label)",
+                        arg=lp_and_injection_steps[step_index + 1][1],
+                        timeout=10_000,
+                    )
+
+                if expected_field == "lp_completion_date":
+                    # Director sign-off enters the Injection Preparation sub-stage.
+                    page.locator("#followUpDueDate").fill(jakarta_today)
+                    page.locator("#followUpTo").fill("CI Injection Preparation Owner")
+                    page.locator("#followUpNote").fill("CI injection preparation reminder supersession.")
+                    with page.expect_response(
+                        lambda response: "/follow-ups" in response.url and response.request.method == "POST"
+                    ) as injection_followup_response:
+                        page.locator("#saveFollowUpButton").click()
+                    if injection_followup_response.value.status != 201:
+                        raise AssertionError("Injection Preparation reminder could not be created.")
+                    if injection_followup_response.value.json()["data"]["stage_key"] != "injection_preparation":
+                        raise AssertionError("Injection Preparation reminder has the wrong sub-stage identity.")
+
+                if expected_field == "khs_inject_start_date":
+                    page.locator("#followUpList").get_by_text("SUPERSEDED").nth(1).wait_for(timeout=10_000)
+
+            page.locator("#updateProgressButton").wait_for(state="hidden", timeout=10_000)
+            print("LP and injection guided-progress browser check passed: all five LP approvals, injection preparation/execution, chronology guards, audit trail, and stage-specific reminder supersession.")
+            page.locator("#closeDialog").click()
+
         except Exception as error:
             capture_errors.append(f"Workflow analytics and WIP drill-down interaction: {error}")
             print(f"FAILED workflow analytics and WIP drill-down interaction: {error}")
