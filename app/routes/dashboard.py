@@ -2790,6 +2790,33 @@ def _sla_status_for_age(age_days, warning_after_days=None, target_days=None, esc
     return "on_track"
 
 
+def _rank_operations_stages(stage_rows):
+    ranked = sorted(
+        (row for row in stage_rows if int(row.get("wip_count") or 0) > 0),
+        key=lambda row: (
+            -int(row.get("wip_count") or 0),
+            -(row.get("p90_age_days") if row.get("p90_age_days") is not None else -1),
+            -(row.get("oldest_age_days") if row.get("oldest_age_days") is not None else -1),
+            int(row.get("sequence_number") or 0),
+        ),
+    )
+    ranks = {row["stage_code"]: rank for rank, row in enumerate(ranked, start=1)}
+    for row in stage_rows:
+        row["bottleneck_rank"] = ranks.get(row["stage_code"])
+    return stage_rows
+
+
+def _operations_stage_totals(stage_rows):
+    return {
+        "active_wip": sum(int(row.get("wip_count") or 0) for row in stage_rows),
+        "older_than_30_days": sum(int(row.get("age_over_30") or 0) for row in stage_rows),
+        "stage_age_unavailable": sum(int(row.get("age_unavailable") or 0) for row in stage_rows),
+        "sla_overdue_records": sum(int(row.get("overdue_count") or 0) for row in stage_rows),
+        "escalation_records": sum(int(row.get("escalation_count") or 0) for row in stage_rows),
+        "sla_not_configured_stages": sum(1 for row in stage_rows if row.get("target_days") is None),
+    }
+
+
 def _operations_stage_query(as_of):
     as_of_sql = f"DATE '{as_of.isoformat()}'"
     return """
@@ -2873,32 +2900,9 @@ def operations_overview():
                     (today, today, today),
                 )
                 follow_up_summary = dict(cur.fetchone())
-                cur.execute(
-                    """WITH register_state AS (
-                           SELECT * FROM (""" + REGISTER_BASE_QUERY + """) AS register
-                       )
-                       SELECT COUNT(*)::int AS total
-                       FROM register_state
-                       WHERE process_status='ACTIVE'
-                         AND workflow_status <> 'completed'
-                         AND current_stage_code NOT IN ('COMPLETED','NOT_PROCEEDED')
-                         AND current_stage_started_on IS NULL"""
-                )
-                unknown_age = cur.fetchone()["total"]
-
-        ranked_stages = sorted(
-            (row for row in stage_rows if row["wip_count"] > 0),
-            key=lambda row: (
-                -row["wip_count"],
-                -(row["p90_age_days"] if row["p90_age_days"] is not None else -1),
-                -(row["oldest_age_days"] if row["oldest_age_days"] is not None else -1),
-                row["sequence_number"],
-            ),
-        )
-        for rank, row in enumerate(ranked_stages, start=1):
-            row["bottleneck_rank"] = rank
+        stage_rows = _rank_operations_stages(stage_rows)
+        totals = _operations_stage_totals(stage_rows)
         for row in stage_rows:
-            row.setdefault("bottleneck_rank", None)
             age = row["oldest_age_days"]
             row["sla_status"] = _sla_status_for_age(
                 age,
@@ -2907,21 +2911,11 @@ def operations_overview():
                 row.get("escalation_after_days"),
             )
             row["sla_configured"] = row.get("target_days") is not None
-        active_wip = sum(row["wip_count"] for row in stage_rows)
-        older_than_30 = sum(row["age_over_30"] for row in stage_rows)
-        overdue = sum(row["overdue_count"] for row in stage_rows)
-        escalations = sum(row["escalation_count"] for row in stage_rows)
         return jsonify(
             success=True,
             as_of_date=today.isoformat(),
             data={
-                "summary": {
-                    "active_wip": active_wip,
-                    "older_than_30_days": older_than_30,
-                    "stage_age_unavailable": unknown_age,
-                    "sla_not_configured_stages": sum(1 for row in stage_rows if not row["sla_configured"]),
-                    "sla_overdue_records": overdue,
-                    "escalation_records": escalations,
+                "summary": totals,
                     "follow_ups_open": follow_up_summary["total_open"],
                     "follow_ups_due_today": follow_up_summary["due_today"],
                     "follow_ups_overdue": follow_up_summary["overdue"],
@@ -2930,6 +2924,7 @@ def operations_overview():
                 "stages": [_row_dict(row) for row in stage_rows],
                 "follow_ups": follow_up_summary,
                 "aging_bucket_note": "Aging buckets (0-7, 8-14, 15-30, 31+ days) are descriptive, not SLA targets.",
+                "bottleneck_basis": "Occupied stages are ranked by WIP count, then P90 stage age, then oldest stage age. This is an operational triage order, not proof of root cause.",
             },
         ),200
     except Exception:
