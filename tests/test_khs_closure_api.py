@@ -126,7 +126,7 @@ def test_close_khs_sets_not_proceeded_and_writes_audit(make_closure_client):
 
 
 @pytest.mark.parametrize(
-    ("row", "closure_date", "expected_code"),
+    ("row", "closure_date", "expected_code", "expected_status"),
     [
         (base_khs_row(khs_inject_completion_date=date(2026, 2, 1)), "2026-02-02", "KHS_ALREADY_INJECTED", 409),
         (base_khs_row(parent_request_date=date(2026, 2, 1)), "2026-01-31", "CLOSURE_DATE_BEFORE_REQUEST", 422),
@@ -134,7 +134,7 @@ def test_close_khs_sets_not_proceeded_and_writes_audit(make_closure_client):
     ],
 )
 def test_close_khs_rejects_invalid_terminal_transitions(
-    make_closure_client, row, closure_date, expected_code
+    make_closure_client, row, closure_date, expected_code, expected_status
 ):
     client, pool = make_closure_client(row)
     response = client.post(
