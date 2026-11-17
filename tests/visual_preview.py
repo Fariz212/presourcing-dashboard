@@ -425,17 +425,20 @@ def main() -> int:
             # Phase 1 browser validation: WIP age profile and register drill-down.
             page.locator('a.nav-link[data-page="workflow"]').click()
             page.locator("#page-workflow.active").wait_for(state="visible", timeout=10_000)
-            page.locator("#operationsStageBody tr").first.wait_for(state="visible", timeout=15_000)
-            if page.locator("#slaConfigurationStatus").inner_text() != "SLA not configured":
-                raise AssertionError("Unconfigured SLA thresholds were incorrectly presented as approved.")
-            if page.locator("#opsActiveWip").inner_text() in ("—", "", "0"):
-                raise AssertionError("WIP analytics did not return active work-in-progress records.")
-            if page.locator("#operationsStageBody .bottleneck-rank").count() == 0:
-                raise AssertionError("No bottleneck ranks were rendered for occupied workflow stages.")
             age_drilldown = page.locator(
                 '#operationsStageBody [data-operations-stage="MI_GM_APPROVAL"][data-operations-age-band="31_plus"]'
             )
-            age_drilldown.wait_for(state="visible", timeout=10_000)
+            age_drilldown.wait_for(state="visible", timeout=15_000)
+            page.wait_for_function(
+                "() => { const value = document.querySelector('#opsActiveWip')?.textContent.trim(); return value && value !== '—'; }",
+                timeout=10_000,
+            )
+            if page.locator("#slaConfigurationStatus").inner_text() != "SLA not configured":
+                raise AssertionError("Unconfigured SLA thresholds were incorrectly presented as approved.")
+            if page.locator("#opsActiveWip").inner_text() in ("", "0"):
+                raise AssertionError("WIP analytics did not return active work-in-progress records.")
+            if page.locator("#operationsStageBody .bottleneck-rank").count() == 0:
+                raise AssertionError("No bottleneck ranks were rendered for occupied workflow stages.")
             with page.expect_response(
                 lambda response: "/api/dashboard/khs?" in response.url
                 and "age_band=31_plus" in response.url
