@@ -1513,6 +1513,8 @@ function clearOneRegisterFilter(id) {
     state.workflowAgeBandFilter = null;
     state.workflowRoleFilter = null;
     state.attentionOnly = false;
+    state.workView = "active";
+    state.workLpStageFilter = null;
   } else if (id === "workflowStageFilter") {
     state.workflowStageFilter = null;
   } else if (id === "workflowAgeBandFilter") {
@@ -3194,6 +3196,8 @@ function bind() {
   $("operationsStageBody").addEventListener("click", (event) => {
     const filter = event.target.closest("[data-operations-stage]");
     if (!filter) return;
+    state.workView = "active";
+    state.workLpStageFilter = null;
     state.workflowStageFilter = filter.dataset.operationsStage;
     state.workflowAgeBandFilter = filter.dataset.operationsAgeBand || null;
     state.workflowRoleFilter = null;

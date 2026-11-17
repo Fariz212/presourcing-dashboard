@@ -393,6 +393,8 @@ def test_lean_work_queue_uses_saved_views_and_separates_action_roles(monkeypatch
     assert 'r.action_owner || ""' in script
     assert 'r.waiting_for' in script
     assert 'r.guided_progress && r.guided_progress.label' in script
+    assert 'state.workView = "active";' in script
+    assert 'state.workLpStageFilter = null;' in script
 
     stylesheet = client.get("/static/css/dashboard-studio.css")
     assert stylesheet.status_code == 200
