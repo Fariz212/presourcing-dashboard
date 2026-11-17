@@ -25,6 +25,8 @@ class ProgressCursor:
         self.connection.queries.append((query, params))
         if "SELECT process_status FROM khs_items" in query:
             self.row = {"process_status": self.connection.record["process_status"]}
+        elif query.startswith("SELECT * FROM khs_items"):
+            self.row = deepcopy(self.connection.record)
         elif "WHERE k.khs_id=%s" in query:
             self.row = deepcopy(self.connection.record)
         elif query.startswith("INSERT INTO khs_follow_ups"):
@@ -89,6 +91,7 @@ def _progress_record(**overrides):
         "khs_id": "KHS-PROGRESS-001",
         "request_id": "REQ-PROGRESS-001",
         "process_status": "ACTIVE",
+        "milestone_chronology_valid": True,
         "workflow_status": "in_progress",
         "workflow_stage_code": "MI_GM_APPROVAL",
         "current_stage_code": "MI_GM_APPROVAL",
@@ -201,6 +204,59 @@ def test_guided_progress_rejects_globally_inconsistent_history_without_writing(m
     assert response.get_json()["code"] == "HISTORY_INCONSISTENT"
     assert not any(query.startswith("UPDATE khs_items SET") for query, _ in _api_calls(pool))
     assert not any("INSERT INTO khs_activity_logs" in query for query, _ in _api_calls(pool))
+
+
+def test_record_edit_rejects_chronology_regression_without_writing(make_progress_client):
+    client, pool = make_progress_client(_progress_record())
+    response = client.patch(
+        "/api/dashboard/khs/KHS-PROGRESS-001",
+        json={"boq_confirmation_date": "2026-11-02"},
+    )
+
+    assert response.status_code == 422
+    assert response.get_json()["code"] == "MILESTONE_CHRONOLOGY"
+    assert not any(query.startswith("UPDATE khs_items SET") for query, _ in _api_calls(pool))
+    assert not any("INSERT INTO khs_activity_logs" in query for query, _ in _api_calls(pool))
+
+
+def test_record_edit_rejects_future_milestones_without_writing(make_progress_client):
+    client, pool = make_progress_client(_progress_record())
+    response = client.patch(
+        "/api/dashboard/khs/KHS-PROGRESS-001",
+        json={"dispatch_date": "2026-11-18"},
+    )
+
+    assert response.status_code == 422
+    assert response.get_json()["code"] == "FUTURE_MILESTONE_DATE"
+    assert not any(query.startswith("UPDATE khs_items SET") for query, _ in _api_calls(pool))
+    assert not any("INSERT INTO khs_activity_logs" in query for query, _ in _api_calls(pool))
+
+
+def test_record_edit_rejects_clearing_a_predecessor_with_downstream_history(make_progress_client):
+    client, pool = make_progress_client(_progress_record())
+    response = client.patch(
+        "/api/dashboard/khs/KHS-PROGRESS-001",
+        json={"boq_confirmation_date": None},
+    )
+
+    assert response.status_code == 422
+    assert response.get_json()["code"] == "MILESTONE_PREVIOUS_REQUIRED"
+    assert not any(query.startswith("UPDATE khs_items SET") for query, _ in _api_calls(pool))
+
+
+def test_record_edit_allows_an_existing_chronology_error_to_be_corrected(make_progress_client):
+    record = _progress_record(
+        boq_confirmation_date=date(2026, 11, 2),
+        milestone_chronology_valid=False,
+    )
+    client, pool = make_progress_client(record)
+    response = client.patch(
+        "/api/dashboard/khs/KHS-PROGRESS-001",
+        json={"boq_confirmation_date": "2026-11-04"},
+    )
+
+    assert response.status_code == 200
+    assert pool.record["boq_confirmation_date"] == date(2026, 11, 4)
 
 
 def test_guided_progress_rejects_a_closed_khs_before_reading_or_writing_milestones(make_progress_client):

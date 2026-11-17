@@ -1187,6 +1187,73 @@ def _lp_date_order_error(record):
     return None
 
 
+KHS_MILESTONE_DATE_ORDER = (
+    "request_date",
+    "dispatch_date",
+    "boq_confirmation_date",
+    "negotiation_date",
+    "final_negotiation_date",
+    "mi_head_approval_date",
+    "mi_sm_approval_date",
+    "mi_gm_approval_date",
+    "legal_submission_date",
+    "lp_circulation_start_date",
+    "lp_contract_team_completion_date",
+    "lp_junior_manager_approval_date",
+    "lp_senior_manager_approval_date",
+    "lp_gm_scm_approval_date",
+    "lp_completion_date",
+    "khs_inject_start_date",
+    "khs_inject_completion_date",
+)
+
+
+def _milestone_chronology_violations(record):
+    populated = [
+        (field, _date_only(record.get(field)))
+        for field in KHS_MILESTONE_DATE_ORDER
+        if _date_only(record.get(field)) is not None
+    ]
+    return {
+        (earlier_field, later_field)
+        for index, (earlier_field, earlier_date) in enumerate(populated)
+        for later_field, later_date in populated[index + 1:]
+        if earlier_date > later_date
+    }
+
+
+def _milestone_edit_error(before, after, changed_fields):
+    """Protect sequential milestone edits while allowing legacy-history repair."""
+    field_indexes = {field: index for index, field in enumerate(KHS_MILESTONE_DATE_ORDER)}
+    for field in changed_fields:
+        index = field_indexes[field]
+        value = _date_only(after.get(field))
+        previous_field = KHS_MILESTONE_DATE_ORDER[index - 1] if index else None
+        later_fields = KHS_MILESTONE_DATE_ORDER[index + 1:]
+
+        if value is None and any(_date_only(after.get(later)) for later in later_fields):
+            return (
+                "MILESTONE_PREVIOUS_REQUIRED",
+                f"{field} cannot be cleared while a later milestone remains recorded.",
+            )
+        if value is not None and previous_field and not _date_only(after.get(previous_field)):
+            return (
+                "PREVIOUS_MILESTONE_REQUIRED",
+                f"{previous_field} must be recorded before {field}.",
+            )
+
+    before_violations = _milestone_chronology_violations(before)
+    after_violations = _milestone_chronology_violations(after)
+    introduced = sorted(after_violations - before_violations)
+    if introduced:
+        earlier_field, later_field = introduced[0]
+        return (
+            "MILESTONE_CHRONOLOGY",
+            f"{later_field} cannot precede {earlier_field}.",
+        )
+    return None
+
+
 def _lp_milestone_update_error(before, changes):
     """Validate changed LP milestones without locking incomplete legacy records.
 
@@ -2456,10 +2523,43 @@ def update_khs(khs_id):
                 return jsonify(success=False, code="KHS_CLOSED",
                                message="Reopen this KHS before editing its milestones."),409
             merged={**before,**data}
+            parent_request_date = _date_only(before_derived.get("request_date")) if before_derived else None
             if "request_id" in data:
-                parent = conn.execute("SELECT 1 FROM khs_requests WHERE request_id=%s", (data["request_id"],)).fetchone()
+                parent = conn.execute(
+                    "SELECT request_date FROM khs_requests WHERE request_id=%s",
+                    (data["request_id"],),
+                ).fetchone()
                 if not parent:
                     return jsonify(success=False,code="PARENT_REQUEST_NOT_FOUND",message="Parent request does not exist."),422
+                parent_request_date = _date_only(parent[0])
+
+            changed_milestone_fields = {
+                field for field in KHS_MILESTONE_DATE_ORDER[1:]
+                if field in data and data[field] != before.get(field)
+            }
+            today = _jakarta_today()
+            if parent_request_date and parent_request_date > today and "request_id" in data:
+                return jsonify(
+                    success=False, code="FUTURE_MILESTONE_DATE",
+                    message="The parent request date cannot be in the future.",
+                ),422
+            for field in changed_milestone_fields:
+                milestone_value = _date_only(merged.get(field))
+                if milestone_value and milestone_value > today:
+                    return jsonify(
+                        success=False, code="FUTURE_MILESTONE_DATE",
+                        message=f"{field} cannot be in the future.",
+                    ),422
+
+            before_timeline = {**before, "request_date": _date_only(before_derived.get("request_date")) if before_derived else None}
+            after_timeline = {**merged, "request_date": parent_request_date}
+            milestone_error = _milestone_edit_error(
+                before_timeline, after_timeline, changed_milestone_fields
+            )
+            if milestone_error:
+                code, message = milestone_error
+                return jsonify(success=False, code=code, message=message),422
+
             historic_lp_exception = bool(before.get("lp_circulation_start_date") and not before.get("mi_gm_approval_date"))
             lp_start_changed = ("lp_circulation_start_date" in data and data["lp_circulation_start_date"] != before.get("lp_circulation_start_date"))
             gm_approval_cleared = ("mi_gm_approval_date" in data and data["mi_gm_approval_date"] is None)
