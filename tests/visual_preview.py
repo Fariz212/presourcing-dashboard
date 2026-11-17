@@ -534,7 +534,7 @@ def main() -> int:
             if "History needs review" not in invalid_row.locator("xpath=ancestor::tr").inner_text():
                 raise AssertionError("Chronologically inconsistent history was not labelled for review.")
 
-            invalid_row.locator('[data-view-khs="KHS-AGING-INVALID"]').click()
+            invalid_row.click()
             page.locator("#detailDialog[open]").wait_for(state="visible", timeout=10_000)
             if page.locator("#updateProgressButton").is_visible():
                 raise AssertionError("Guided Progress remained available for globally inconsistent history.")
