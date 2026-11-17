@@ -2174,7 +2174,14 @@ def close_khs(khs_id):
         )
         with get_db_pool().connection() as conn, conn.transaction():
             with conn.cursor(row_factory=dict_row) as cur:
-                cur.execute("SELECT * FROM khs_items WHERE khs_id=%s FOR UPDATE", (khs_id,))
+                cur.execute(
+                    """SELECT k.*, r.request_date AS parent_request_date
+                       FROM khs_items k
+                       JOIN khs_requests r ON r.request_id = k.request_id
+                       WHERE k.khs_id=%s
+                       FOR UPDATE OF k""",
+                    (khs_id,),
+                )
                 before = cur.fetchone()
                 if before is None:
                     return jsonify(success=False, message="KHS not found."),404
@@ -2185,6 +2192,10 @@ def close_khs(khs_id):
             if before.get("khs_inject_completion_date"):
                 return jsonify(success=False, code="KHS_ALREADY_INJECTED",
                                message="A fully injected KHS cannot be closed as Not Proceeded."),409
+            parent_request_date = _date_only(before.get("parent_request_date"))
+            if parent_request_date and closure_date < parent_request_date:
+                return jsonify(success=False, code="CLOSURE_DATE_BEFORE_REQUEST",
+                               message="Closure date cannot precede the original request date."),422
             recorded_dates = [_date_only(before.get(field)) for field in milestone_fields]
             recorded_dates = [value for value in recorded_dates if value is not None]
             if recorded_dates and closure_date < max(recorded_dates):
