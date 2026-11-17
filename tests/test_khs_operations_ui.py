@@ -44,6 +44,10 @@ def test_dashboard_exposes_operations_analytics_and_workbench_controls(monkeypat
         b"submitGuidedProgress",
         b"submitWorkbenchFollowUp",
         b"updateFollowUpStatus",
+        b"data-operations-age-band",
+        b"workflowAgeBandFilter",
+        b"age_band",
+        b"bottleneck_rank",
     ):
         assert marker in script.data
 
@@ -55,9 +59,6 @@ def test_dashboard_exposes_operations_analytics_and_workbench_controls(monkeypat
         b".workbench-nav",
         b".follow-up-form",
         b".status-sla-escalation_due",
-        b"data-operations-age-band",
-        b"workflowAgeBandFilter",
-        b"age_band",
-        b"bottleneck-rank",
+        b".bottleneck-rank",
     ):
         assert marker in stylesheet.data
