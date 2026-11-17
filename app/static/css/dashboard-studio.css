@@ -4150,3 +4150,70 @@ button:disabled {
 
 .language-toggle{min-width:42px;height:34px;padding:0 10px;font-size:11px;font-weight:800;letter-spacing:.04em}
 @media(max-width:560px){.topbar-actions{gap:6px}.language-toggle{min-width:38px;padding:0 8px}}
+
+/* Lean operations analytics */
+.operations-analytics{display:grid;gap:16px;margin:18px 0 28px}
+.section-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:16px}
+.section-heading h2{margin:3px 0 5px;font-size:22px;letter-spacing:-.025em}
+.section-heading p{margin:0;color:var(--muted);font-size:12px}
+.as-of-label{font-size:10px;color:var(--muted);white-space:nowrap}
+.operations-kpi-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px}
+.operations-kpi{min-width:0;padding:14px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.operations-kpi span{display:block;color:var(--muted);font-size:10px;font-weight:700}
+.operations-kpi strong{display:block;margin:5px 0 2px;font-size:25px;line-height:1.1;letter-spacing:-.04em}
+.operations-kpi small{display:block;color:var(--muted);font-size:10px}
+.operations-table-panel{min-width:0;overflow:hidden}
+.operations-table-panel .panel-heading{padding:16px 16px 10px}
+.operations-table-panel .panel-heading h3{margin:0;font-size:15px}
+.operations-table-panel .panel-heading p{margin:3px 0 0;color:var(--muted);font-size:11px}
+.operations-table-panel table{min-width:1120px}
+.operations-note{padding:0 16px 14px;font-size:10px}
+.status-sla-not_configured,.status-sla-age_unavailable{background:#f2f4f7;color:#667085}
+.status-sla-on_track{background:#eaf7f1;color:#16845f}
+.status-sla-due_soon{background:#fff6e8;color:#a66a16}
+.status-sla-overdue{background:#fff0e8;color:#b45b32}
+.status-sla-escalation_due{background:#fcebea;color:#a33e38}
+.operations-stage-row-bottleneck{background:#fffaf1}
+.follow-up-item{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid var(--line)}
+.follow-up-item-main{min-width:0}
+.follow-up-item-main strong{font-size:12px}
+.follow-up-item-main p{margin:4px 0;color:var(--ink);font-size:12px}
+.follow-up-item-main small{font-size:10px;color:var(--muted)}
+.follow-up-item-actions{display:flex;gap:6px;flex-shrink:0}
+.follow-up-open{border-left:3px solid var(--amber);padding-left:10px}
+.follow-up-closed{opacity:.72}
+.follow-up-section{margin:18px 0;padding:18px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.follow-up-section .document-section-heading{margin-bottom:12px}
+.follow-up-form{display:grid;grid-template-columns:minmax(140px,.7fr) minmax(160px,1fr) minmax(220px,2fr) auto;gap:10px;align-items:end;padding:12px;background:#f7f8fa;border:1px solid var(--line);border-radius:10px}
+.follow-up-form label,.form-field label{display:grid;gap:6px;color:var(--muted);font-size:10px;font-weight:750}
+.follow-up-form input,.follow-up-form textarea,.form-field input,.form-field textarea{width:100%;min-width:0;padding:9px 10px;border:1px solid #dce3ec;border-radius:8px;background:#fff;color:var(--ink);font:inherit;font-size:12px}
+.follow-up-form textarea{resize:vertical;min-height:38px}
+.follow-up-list{margin-top:12px}
+.workbench-nav{position:sticky;top:0;z-index:5;display:flex;gap:6px;overflow-x:auto;padding:9px 0;background:rgba(255,255,255,.96);border-bottom:1px solid var(--line);backdrop-filter:blur(10px)}
+.workbench-nav button{flex:0 0 auto;border:1px solid var(--line);border-radius:999px;background:#fff;color:var(--ink);padding:7px 11px;font-size:10px;font-weight:750;white-space:nowrap}
+.workbench-nav button:hover{border-color:#a9c0b3;background:#f3f8f5}
+#detailDialog .process-duration-section,#detailDialog .lp-timeline-section,#detailDialog .contract-detail-summary,#detailDialog #detailGrid,#detailDialog .follow-up-section,#detailDialog .document-section{scroll-margin-top:68px}
+#detailDialog .dialog-header{gap:14px}
+#detailDialog .dialog-header>div:first-child{min-width:0}
+#detailDialog .detail-header-actions{flex-wrap:wrap}
+#detailDialog .detail-header-actions button{white-space:nowrap}
+#progressDialog .form-field{display:grid;gap:6px;margin:14px 0}
+#progressDialog input,#progressDialog textarea{width:100%;padding:10px;border:1px solid #dce3ec;border-radius:8px;background:#fff;color:var(--ink)}
+#progressDialog input[readonly]{background:#f2f4f7}
+@media(max-width:1120px){
+  .operations-kpi-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .follow-up-form{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .follow-up-note-field{grid-column:1/-1}
+}
+@media(max-width:760px){
+  .section-heading{align-items:flex-start;flex-direction:column}
+  .operations-kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .operations-kpi{padding:12px}
+  .operations-kpi strong{font-size:22px}
+  .follow-up-form{grid-template-columns:1fr}
+  .follow-up-note-field{grid-column:auto}
+  .follow-up-item{align-items:flex-start;flex-direction:column}
+  .follow-up-item-actions{width:100%}
+  #detailDialog .dialog-header{align-items:flex-start}
+  #detailDialog .detail-header-actions{max-width:58%;justify-content:flex-end}
+}
