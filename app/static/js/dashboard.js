@@ -639,8 +639,12 @@ async function loadLPCirculation() {
     emptyRow("lpBody", 8, "No LP records match the selected stage.");
   } else {
     body.innerHTML = result.data.map((r) => {
-      const age = r.lp_stage_age_days == null ? "—" : r.lp_stage_age_days + " days";
-      const history = r.lp_timeline_has_gaps
+      const stopped = r.process_status === "NOT_PROCEEDED";
+      const ageDays = stopped ? r.current_stage_age_days : r.lp_stage_age_days;
+      const age = ageDays == null ? "—" : (stopped ? "Stopped after " : "") + ageDays + " days";
+      const history = stopped
+        ? '<span class="status-badge status-not_proceeded">Not Proceeded</span>'
+        : r.lp_timeline_has_gaps
         ? '<span class="status-badge status-warning">Partial history</span>'
         : '<span class="status-badge status-completed">Recorded</span>';
       const prerequisiteFlag = r.lp_prerequisite_exception
@@ -648,12 +652,14 @@ async function loadLPCirculation() {
       const legacyFlag = r.lp_legacy_unverified
         ? '<span class="exception-label">Legacy Director sign-off unverified</span>' : "";
       return "<tr><td><span class=\"cell-primary\">" + esc(r.khs_id) + "</span>" +
-        "<span class=\"cell-secondary\">" + esc(r.vendor_name) + "</span></td>" +
+        "<span class=\"cell-secondary\">" + esc(r.vendor_name) + "</span>" +
+        (stopped ? '<span class="exception-label">Closed ' + esc(fmt(r.closure_date)) + '</span>' : "") +
+        "</td>" +
         "<td><span class=\"cell-primary\">" + esc(r.request_subject || "Untitled request") + "</span>" +
         "<span class=\"cell-secondary\">" + esc(r.request_id) + "</span></td>" +
-        "<td><span class=\"cell-primary\">" + esc(r.lp_stage_label || "—") + "</span>" +
-        prerequisiteFlag + legacyFlag +
-        (r.waiting_for ? "<span class=\"cell-secondary\">Waiting for " + esc(r.waiting_for) + "</span>" : "") + "</td>" +
+        "<td><span class=\"cell-primary\">" + esc(stopped ? "Not Proceeded" : (r.lp_stage_label || "—")) + "</span>" +
+        (stopped ? '<span class="cell-secondary">' + esc(String(r.closure_reason_code || "").replace(/_/g, " ")) + '</span>' : prerequisiteFlag + legacyFlag +
+        (r.waiting_for ? "<span class=\"cell-secondary\">Waiting for " + esc(r.waiting_for) + "</span>" : "")) + "</td>" +
         "<td>" + esc(age) + "</td><td>" + esc(fmt(r.lp_circulation_start_date)) + "</td>" +
         "<td>" + esc(r.waiting_reason || "—") + "</td><td>" + history + "</td>" +
         "<td><button type=\"button\" class=\"view-button\" data-view-khs=\"" + esc(r.khs_id) + "\">Details</button></td></tr>";
@@ -779,6 +785,7 @@ function renderLPTimeline(record) {
   const hasGaps = !!record.lp_timeline_has_gaps;
   const completed = record.lp_stage_key === "completed";
   const notStarted = record.lp_stage_key === "not_started";
+  const processStopped = record.process_status === "NOT_PROCEEDED";
   const reviewRequired = prerequisiteException || legacyUnverified || hasGaps;
   const lastRecordedIndex = stages.reduce((last, stage, index) => record[stage[0]] ? index : last, -1);
 
@@ -825,12 +832,23 @@ function renderLPTimeline(record) {
     currentMeta = "Missing historical dates prevent a reliable current-stage assignment.";
   }
 
+  if (processStopped) {
+    currentTitle = "Not Proceeded";
+    currentMeta = "The KHS process was closed on " + fmt(record.closure_date) + ".";
+    upcomingTitle = "No further LP milestone";
+    upcomingMeta = "The approval route stopped when the KHS was closed.";
+    const stoppedAge = record.current_stage_age_days;
+    ageTitle = stoppedAge == null ? "Unavailable" : stoppedAge + (Number(stoppedAge) === 1 ? " day" : " days");
+    ageMeta = "Stopped on " + fmt(record.closure_date);
+  }
+
   const badge = $("lpTimelineStage");
   if (badge) {
-    badge.className = "status-badge " + (completed ? "status-completed" :
+    badge.className = "status-badge " + (processStopped ? "status-not_proceeded" :
+      completed ? "status-completed" :
       currentIndex >= 1 && !reviewRequired ? "status-in_progress" :
       notStarted ? "status-not_started" : "status-missing");
-    badge.textContent = completed ? "LP completed" :
+    badge.textContent = processStopped ? "Not Proceeded" : completed ? "LP completed" :
       currentIndex >= 1 && !reviewRequired ? "In progress" :
       notStarted ? "Not started" : "Review required";
   }
@@ -858,6 +876,14 @@ function renderLPTimeline(record) {
       stateClass = "gap";
       stateLabel = "Date not recorded";
       timeLabel = "No historical date on record";
+    } else if (processStopped && index === currentIndex) {
+      stateClass = "stopped";
+      stateLabel = "Stopped";
+      timeLabel = "Process closed on " + fmt(record.closure_date);
+    } else if (processStopped) {
+      stateClass = "not-reached";
+      stateLabel = "Not reached";
+      timeLabel = "Process stopped before this milestone";
     } else if (isCurrent) {
       stateClass = "current";
       stateLabel = "Current Stage";
