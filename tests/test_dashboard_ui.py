@@ -113,7 +113,16 @@ def test_dashboard_contains_separate_operational_modules(monkeypatch, tmp_path):
         assert module in body
     assert "Contract Monitoring &amp; Tracking" in body
     assert 'id="quickAddKhs"' not in body
-    assert 'id="overviewRefresh"' in body
+    assert 'id="refreshButton"' in body
+    for duplicate_refresh in (
+        'id="overviewRefresh"', 'id="workflowRefresh"',
+        'id="refreshOperationsButton"', 'id="contractRefresh"',
+        'id="activityRefresh"', 'id="refreshHistoryButton"',
+    ):
+        assert duplicate_refresh not in body
+    assert 'id="workflowStageDisclosure"' in body
+    assert "operations-summary-table" in body
+    assert 'id="workbench-nav"' in body
     assert "Priority action queue" in body
     assert "REQUEST / KHS" in body
     attention_js = client.get("/static/js/dashboard.js")
@@ -427,3 +436,39 @@ def test_overview_prioritizes_actions_without_duplicate_graph_panels(monkeypatch
     assert 'id="qualityAlert"' not in body
     assert body.index('class="panel attention-panel"') < body.index('class="approval-command"')
     assert body.index('class="approval-command"') < body.index('class="contract-watch"')
+
+
+def test_khs_workbench_uses_progressive_single_panel_navigation(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        "app.init_db_pool",
+        lambda _app: DummyPool(),
+    )
+    flask_app = create_app({
+        "TESTING": True,
+        "SECRET_KEY": "workbench-progressive-test-secret",
+        "DATABASE_URL": "postgresql://test:test@localhost/test",
+        "UPLOAD_DIR": tmp_path / "uploads",
+    })
+    response = flask_app.test_client().get("/dashboard")
+    assert response.status_code == 200
+    body = response.data.decode("utf-8")
+
+    assert 'id="workbench-nav"' in body
+    assert 'data-workbench-panel aria-labelledby="workSummaryTitle"' in body
+    for panel_id in (
+        "processDurationSection", "lpTimelineSection", "contractDetailSection",
+        "detailGrid", "followUpSection", "documentSection",
+    ):
+        assert f'id="{panel_id}"' in body
+        panel_tag = next(
+            line for line in body.splitlines() if f'id="{panel_id}"' in line
+        )
+        assert "data-workbench-panel" in panel_tag
+        assert "hidden" in panel_tag
+    assert 'id="closureSummary" class="closure-summary" hidden' in body
+
+    script = flask_app.test_client().get("/static/js/dashboard.js").data.decode("utf-8")
+    assert "function setWorkbenchPanel(panelId)" in script
+    assert 'setWorkbenchPanel("workSummarySection")' in script
+    assert 'setWorkbenchPanel("followUpSection")' in script
+    assert "target.scrollIntoView" not in script

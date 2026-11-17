@@ -4379,3 +4379,131 @@ button:disabled {
     padding: 0 11px;
   }
 }
+
+
+/* Lean P1: reduce repeated stage summaries and make operational detail progressive. */
+.workflow-stage-disclosure {
+  margin: 4px 0 18px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+}
+.workflow-stage-disclosure > summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  padding: 12px 15px;
+  color: #40516c;
+  cursor: pointer;
+  list-style-position: inside;
+}
+.workflow-stage-disclosure > summary strong { font-size: 11px; }
+.workflow-stage-disclosure > summary span { color: var(--muted); font-size: 10px; }
+.workflow-stage-disclosure[open] > summary {
+  border-bottom: 1px solid var(--line);
+  background: #fafbfd;
+}
+.workflow-stage-disclosure .workflow-workbench-toolbar { padding: 10px 14px 0; }
+.workflow-stage-disclosure .workflow-cards { padding: 0 14px 14px; }
+.operations-summary-table { min-width: 680px !important; }
+.operations-summary-table th:first-child,
+.operations-summary-table td:first-child { min-width: 230px; }
+.operations-summary-table td:nth-child(2) { width: 70px; }
+.operations-summary-table td:nth-child(3),
+.operations-summary-table td:nth-child(4),
+.operations-summary-table td:nth-child(5) {
+  min-width: 75px;
+  white-space: nowrap;
+}
+.stage-detail-disclosure {
+  margin-top: 7px;
+  color: var(--muted);
+  font-size: 10px;
+  white-space: normal;
+}
+.stage-detail-disclosure > summary {
+  width: fit-content;
+  padding: 3px 0;
+  color: #58708d;
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 700;
+}
+.stage-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2,minmax(0,1fr));
+  gap: 6px;
+  min-width: 260px;
+  max-width: 440px;
+  padding: 9px 0;
+}
+.stage-detail-grid .analytics-filter {
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 30px;
+  padding: 5px 8px;
+  text-align: left;
+  white-space: normal;
+}
+.stage-sla-detail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px 14px;
+  padding: 7px 9px;
+  border-radius: 7px;
+  background: #f7f9fc;
+  color: #68778c;
+  font-size: 9px;
+}
+.stage-sla-detail strong { color: #344a68; }
+#operationsStageBody td:first-child { white-space: normal; }
+#operationsStageBody .analytics-stage-filter { max-width: 100%; white-space: normal; }
+#detailDialog [data-workbench-panel][hidden] { display: none !important; }
+#detailDialog [data-workbench-panel]:not([hidden]) { display: block; }
+.workbench-nav button.active,
+.workbench-nav button[aria-current="location"] {
+  border-color: #b7cdbf;
+  background: #edf6f0;
+  color: #266447;
+}
+#detailDialog .work-summary-section { margin-top: 14px; }
+@media (max-width: 760px) {
+  .workflow-stage-disclosure > summary { align-items: flex-start; flex-direction: column; gap: 4px; }
+  .stage-detail-grid { grid-template-columns: 1fr; min-width: 0; }
+  .operations-summary-table {
+    width: 100%;
+    min-width: 0 !important;
+    table-layout: fixed;
+  }
+  .operations-summary-table th,
+  .operations-summary-table td {
+    padding: 7px 4px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    font-size: 9px;
+  }
+  .operations-summary-table th:nth-child(1) { width: 34%; }
+  .operations-summary-table th:nth-child(2) { width: 10%; }
+  .operations-summary-table th:nth-child(3),
+  .operations-summary-table th:nth-child(4),
+  .operations-summary-table th:nth-child(5) { width: 11%; }
+  .operations-summary-table th:nth-child(6) { width: 23%; }
+  #operationsStageBody .analytics-stage-filter {
+    padding: 3px 4px;
+    font-size: 9px;
+    overflow-wrap: anywhere;
+  }
+  #operationsStageBody .stage-detail-disclosure > summary {
+    max-width: 100%;
+    white-space: normal;
+  }
+  #operationsStageBody .stage-detail-grid {
+    min-width: 0;
+    grid-template-columns: 1fr;
+  }
+  #operationsStageBody .stage-sla-detail {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+}

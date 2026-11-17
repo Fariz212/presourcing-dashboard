@@ -4,6 +4,14 @@
 const $ = (id) => document.getElementById(id);
 
 const I18N_ID = Object.freeze({
+  "Stage distribution & quick navigation":"Distribusi tahap & navigasi cepat",
+  "Optional stage shortcuts; use the aging profile below as the primary WIP view":"Pintasan tahap opsional; gunakan profil aging di bawah sebagai tampilan utama WIP",
+  "Age bands & SLA details":"Rentang aging & detail SLA",
+  "Age unavailable":"Usia tidak tersedia",
+  "Overdue:":"Terlambat:",
+  "Escalation:":"Eskalasi:",
+  "No target configured":"Target belum dikonfigurasi",
+  "SLA policy data unavailable":"Data kebijakan SLA tidak tersedia",
   "CONTRACT OPERATIONS":"OPERASIONAL KONTRAK",
   "WORKSPACE":"RUANG KERJA",
   "DATA MANAGEMENT":"MANAJEMEN DATA",
@@ -1176,17 +1184,9 @@ function showSystem(online, message) {
   set("systemStatusText", message || (online ? "Connected" : "Unavailable"));
 }
 
-function syncRefreshVisibility(page) {
+function syncRefreshVisibility() {
   const refresh = $("refreshButton");
-  if (!refresh) return;
-  const pageSpecific = {
-    overview: "overviewRefresh",
-    lp: "lpRefresh",
-    contracts: "contractRefresh",
-    workflow: "workflowRefresh",
-    activity: "activityRefresh"
-  };
-  refresh.hidden = !!pageSpecific[page];
+  if (refresh) refresh.hidden = false;
 }
 
 function closeMobileNavigation() {
@@ -1708,15 +1708,17 @@ function renderOperationsAnalytics(operations, followUps, sla) {
   const slaSummary = slaData ? (slaData.summary || {}) : {};
   const slaByStage = new Map((slaData && Array.isArray(slaData.stages) ? slaData.stages : [])
     .map((row) => [row.stage_code, row]));
+
   if (!operations || !operations.data) {
     ["opsActiveWip","opsOver30","opsAgeUnavailable"].forEach((id) => set(id, "—"));
     set("opsSlaOverdue", slaData ? (slaSummary.sla_overdue_records || 0) : "—");
     set("opsEscalations", slaData ? (slaSummary.escalation_records || 0) : "—");
     set("opsFollowUpsOverdue", followUpsOverdue);
-    emptyRow("operationsStageBody", 13, "WIP analytics are temporarily unavailable.");
+    emptyRow("operationsStageBody", 6, "WIP analytics are temporarily unavailable.");
     renderOperationsFollowUps(followUpRows);
     return;
   }
+
   const summary = operations.data.summary || {};
   set("operationsAsOf", "As of " + fmt(operations.as_of_date));
   set("opsActiveWip", summary.active_wip || 0);
@@ -1725,9 +1727,11 @@ function renderOperationsAnalytics(operations, followUps, sla) {
   set("opsSlaOverdue", slaData ? (slaSummary.sla_overdue_records || 0) : "—");
   set("opsEscalations", slaData ? (slaSummary.escalation_records || 0) : "—");
   set("opsFollowUpsOverdue", followUpsOverdue);
+
   const configured = slaData ? (slaData.stages || []).filter((row) => row.sla_configured).length : 0;
   set("slaConfigurationStatus", !slaData ? "SLA data unavailable"
     : configured ? configured + " stages configured" : "SLA not configured");
+
   const target = $("operationsStageBody");
   const rows = operations.data.stages || [];
   if (target) target.innerHTML = rows.length ? rows.map((row) => {
@@ -1738,29 +1742,43 @@ function renderOperationsAnalytics(operations, followUps, sla) {
       : "Target " + slaRow.target_days + "d" +
         (slaRow.warning_after_days == null ? "" : " · warn " + slaRow.warning_after_days + "d") +
         (slaRow.escalation_after_days == null ? "" : " · escalate " + slaRow.escalation_after_days + "d");
+
     const stageButton = '<button type="button" class="analytics-filter analytics-stage-filter" data-operations-stage="' +
       esc(row.stage_code) + '" aria-label="Filter KHS by ' + esc(row.stage_name) + '">' +
       (row.bottleneck_rank ? '<span class="bottleneck-rank">#' + esc(row.bottleneck_rank) + '</span> ' : '') +
       esc(row.stage_name) + '</button>';
+    const wipButton = '<button type="button" class="analytics-filter analytics-total-filter" data-operations-stage="' +
+      esc(row.stage_code) + '" aria-label="Open ' + esc(row.wip_count) + ' WIP records in ' +
+      esc(row.stage_name) + '">' + esc(row.wip_count) + '</button>';
     const ageButton = (band, count, label) =>
       '<button type="button" class="analytics-filter" data-operations-stage="' + esc(row.stage_code) +
       '" data-operations-age-band="' + esc(band) + '" aria-label="Filter ' + esc(row.stage_name) +
-      ', ' + esc(label) + ', ' + esc(count) + ' records">' + esc(count) + '</button>';
-    return '<tr><td>' + stageButton + '<span class="cell-secondary">' +
-      esc(policy) + '</span></td><td><button type="button" class="analytics-filter analytics-total-filter" data-operations-stage="' +
-      esc(row.stage_code) + '">' + esc(row.wip_count) + '</button></td>' +
+      ', ' + esc(label) + ', ' + esc(count) + ' records">' + esc(label) + ': <strong>' +
+      esc(count) + '</strong></button>';
+
+    const ageDetails =
+      '<details class="stage-detail-disclosure"><summary>Age bands &amp; SLA details</summary>' +
+      '<div class="stage-detail-grid">' +
+      ageButton("0_7", row.age_0_7, "0–7 days") +
+      ageButton("8_14", row.age_8_14, "8–14 days") +
+      ageButton("15_30", row.age_15_30, "15–30 days") +
+      ageButton("31_plus", row.age_over_30, "31+ days") +
+      ageButton("unavailable", row.age_unavailable, "Age unavailable") +
+      '</div><div class="stage-sla-detail"><span>' + esc(policy) +
+      '</span><span>Overdue: <strong>' + esc(slaRow ? (slaRow.overdue_count || 0) : "—") +
+      '</strong></span><span>Escalation: <strong>' +
+      esc(slaRow ? (slaRow.escalation_count || 0) : "—") +
+      '</strong></span></div></details>';
+
+    return '<tr><td>' + stageButton + ageDetails + '</td>' +
+      '<td>' + wipButton + '</td>' +
       '<td>' + esc(row.median_age_days == null ? "—" : row.median_age_days + "d") + '</td>' +
       '<td>' + esc(row.p90_age_days == null ? "—" : row.p90_age_days + "d") + '</td>' +
-      '<td>' + ageButton("0_7", row.age_0_7, "0–7 days") + '</td>' +
-      '<td>' + ageButton("8_14", row.age_8_14, "8–14 days") + '</td>' +
-      '<td>' + ageButton("15_30", row.age_15_30, "15–30 days") + '</td>' +
-      '<td>' + ageButton("31_plus", row.age_over_30, "31+ days") + '</td>' +
-      '<td>' + ageButton("unavailable", row.age_unavailable, "age unavailable") + '</td>' +
       '<td>' + esc(row.oldest_age_days == null ? "—" : row.oldest_age_days + "d") + '</td>' +
-      '<td><span class="status-badge status-sla-' + esc(status) + '">' + esc(slaStatusLabel(status)) + '</span></td>' +
-      '<td>' + esc(slaRow ? (slaRow.overdue_count || 0) : "—") + '</td><td>' +
-      esc(slaRow ? (slaRow.escalation_count || 0) : "—") + '</td></tr>';
-  }).join("") : '<tr><td colspan="12" class="table-message">No active WIP records.</td></tr>';
+      '<td><span class="status-badge status-sla-' + esc(status) + '">' +
+      esc(slaStatusLabel(status)) + '</span></td></tr>';
+  }).join("") : '<tr><td colspan="6" class="table-message">No active WIP records.</td></tr>';
+
   renderOperationsFollowUps(followUpRows);
 }
 
@@ -2216,6 +2234,20 @@ function renderWorkSummary(record) {
 function durationDaysLabel(value) {
   const days = Number(value);
   return days + (days === 1 ? " day" : " days");
+}
+
+function setWorkbenchPanel(panelId) {
+  const panels = Array.from(document.querySelectorAll("#detailDialog [data-workbench-panel]"));
+  if (!panels.some((panel) => panel.id === panelId)) return false;
+  panels.forEach((panel) => { panel.hidden = panel.id !== panelId; });
+  document.querySelectorAll("#workbench-nav [data-workbench-target]").forEach((button) => {
+    const selected = button.dataset.workbenchTarget === panelId;
+    button.classList.toggle("active", selected);
+    if (selected) button.setAttribute("aria-current", "location");
+    else button.removeAttribute("aria-current");
+    button.setAttribute("aria-expanded", String(selected));
+  });
+  return true;
 }
 
 function renderWorkbenchFollowUps(rows) {
@@ -2806,6 +2838,7 @@ async function openDetails(id) {
         '</small></div><a class="view-button" href="' + esc(doc.download_url) + '">Download</a></div>'
       ).join("") : '<p class="muted">No evidence documents uploaded yet.</p>';
     }
+    setWorkbenchPanel("workSummarySection");
     if (!$("detailDialog").open) $("detailDialog").showModal();
   } catch (err) {
     toast(err.message);
@@ -3090,8 +3123,20 @@ function bind() {
       go("lp");
     })
   );
-  $("refreshButton").addEventListener("click", () => loadPage(state.page).catch((e) => toast(e.message)));
-  $("overviewRefresh").addEventListener("click", () => loadOverview().catch((e) => toast(e.message)));
+  $("refreshButton").addEventListener("click", async () => {
+    try {
+      if ($("detailDialog").open && state.detail) {
+        const activePanel = document.querySelector("#detailDialog [data-workbench-panel]:not([hidden])");
+        const panelId = activePanel ? activePanel.id : "workSummarySection";
+        await openDetails(state.detail.khs_id);
+        setWorkbenchPanel(panelId);
+        return;
+      }
+      await loadPage(state.page);
+    } catch (error) {
+      toast(error.message);
+    }
+  });
   const workflowCards = $("workflowCards");
   workflowCards.addEventListener("click", (event) => {
     const card = event.target.closest("[data-workflow-stage]");
@@ -3109,10 +3154,6 @@ function bind() {
     state.showEmptyWorkflowStages = !state.showEmptyWorkflowStages;
     renderWorkflowCards();
   });
-  $("workflowRefresh").addEventListener("click", () => loadWorkflow().catch((e) => toast(e.message)));
-  $("lpRefresh").addEventListener("click", () => { state.lpPage = 1; loadLPCirculation().catch((e) => toast(e.message)); });
-  $("contractRefresh").addEventListener("click", () => { state.contractPage = 1; loadContractLifecycle().catch((e) => toast(e.message)); });
-  $("activityRefresh").addEventListener("click", () => { state.activityPage = 1; loadActivity().catch((e) => toast(e.message)); });
   $("activitySearch").addEventListener("input", () => {
     state.activityQuery = $("activitySearch").value.trim();
     window.clearTimeout(state.searchTimer);
@@ -3167,7 +3208,6 @@ function bind() {
   $("contractNext").addEventListener("click", () => { state.contractPage++; loadContractLifecycle().catch((e) => toast(e.message)); });
 
 
-  $("refreshHistoryButton").addEventListener("click", () => { state.historyPage = 1; loadImportHistory().catch((e) => toast(e.message)); });
   ["newRequestButton", "createRequestButton"].forEach((id) => $(id).addEventListener("click", () => openForm("request").catch((e) => toast(e.message))));
   $("createKhsButton").addEventListener("click", () => openForm("khs").catch((e) => toast(e.message)));
   $("recordForm").addEventListener("submit", saveRecord);
@@ -3178,21 +3218,13 @@ function bind() {
   $("followUpForm").addEventListener("submit", submitWorkbenchFollowUp);
   $("updateProgressButton").addEventListener("click", openGuidedProgressDialog);
   $("scheduleFollowUpButton").addEventListener("click", () => {
-    $("followUpSection").scrollIntoView({behavior:"smooth",block:"start"});
+    setWorkbenchPanel("followUpSection");
     $("followUpDueDate").focus();
   });
   $("closeProgressDialog").addEventListener("click", () => $("progressDialog").close());
   $("cancelProgress").addEventListener("click", () => $("progressDialog").close());
-  $("refreshOperationsButton").addEventListener("click", () => loadWorkflow().catch((err) => toast(err.message)));
   document.querySelectorAll("[data-workbench-target]").forEach((button) => button.addEventListener("click", () => {
-    const target = $(button.dataset.workbenchTarget);
-    if (!target) return;
-    target.scrollIntoView({behavior:"smooth",block:"start"});
-    document.querySelectorAll("[data-workbench-target]").forEach((item) => {
-      item.classList.toggle("active", item === button);
-      if (item === button) item.setAttribute("aria-current", "location");
-      else item.removeAttribute("aria-current");
-    });
+    setWorkbenchPanel(button.dataset.workbenchTarget);
   }));
   $("operationsStageBody").addEventListener("click", (event) => {
     const filter = event.target.closest("[data-operations-stage]");
