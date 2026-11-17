@@ -396,11 +396,31 @@ def main() -> int:
             page.wait_for_function("document.documentElement.lang === 'id'", timeout=10_000)
             if page.locator("#languageToggle").inner_text() != "EN":
                 raise AssertionError("Language preference did not persist after reload.")
+            page.locator('a.nav-link[data-page="register"]').click()
+            page.locator("#page-register.active h1").wait_for(state="visible", timeout=10_000)
+            if page.locator("#page-register h1").inner_text() != "Daftar KHS":
+                raise AssertionError("Bahasa Indonesia did not translate the KHS Register.")
+            detail_row = page.locator("#registerBody tr").filter(has_text="KHS-VIS-002").first
+            detail_row.wait_for(state="visible", timeout=15_000)
+            detail_row.locator('[data-view-khs="KHS-VIS-002"]').click()
+            page.locator("#detailDialog[open]").wait_for(state="visible", timeout=10_000)
+            if page.locator("#processDurationTitle").inner_text() != "Riwayat Durasi Proses":
+                raise AssertionError("Bahasa Indonesia did not translate process-duration detail content.")
+            if page.locator("#closeKhsButton").inner_text() != "Tutup KHS":
+                raise AssertionError("Bahasa Indonesia did not translate the KHS closure action.")
+            page.locator("#closeKhsButton").click()
+            page.locator("#closureDialog[open]").wait_for(state="visible", timeout=10_000)
+            if page.locator("#closureDialog h2").inner_text() != "Tutup KHS sebagai Tidak Dilanjutkan":
+                raise AssertionError("Bahasa Indonesia did not translate the closure dialog.")
+            if page.locator('#closureReason option[value="NO_MUTUAL_AGREEMENT"]').inner_text() != "Tidak tercapai kesepakatan":
+                raise AssertionError("Bahasa Indonesia did not translate closure-reason options.")
+            page.locator("#cancelClosure").click()
+            page.locator("#closeDialog").click()
             page.locator("#languageToggle").click()
             page.wait_for_function("document.documentElement.lang === 'en'", timeout=10_000)
-            if page.locator("#page-requests h1").inner_text() != "Request Management":
+            if page.locator("#page-register h1").inner_text() != "KHS Register":
                 raise AssertionError("Switching back to English did not restore the original text.")
-            print("Bilingual browser check passed: ID/EN toggle, page content, placeholder, and persistence.")
+            print("Bilingual browser check passed: navigation, API-backed detail, closure dialog, placeholder, and preference persistence.")
         except Exception as error:
             capture_errors.append(f"Bilingual language switch interaction: {error}")
             print(f"FAILED bilingual language switch interaction: {error}")
