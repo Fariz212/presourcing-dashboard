@@ -373,6 +373,35 @@ def main() -> int:
             capture_errors.append(f"KHS detail/form interaction captures: {error}")
             print(f"FAILED KHS detail/form interaction captures: {error}")
 
+        try:
+            # Verify both languages on real, API-backed pages and persist the choice.
+            page.goto(f"{BASE_URL}/dashboard", wait_until="networkidle", timeout=45_000)
+            language_button = page.locator("#languageToggle")
+            language_button.wait_for(state="visible", timeout=10_000)
+            language_button.click()
+            page.wait_for_function("document.documentElement.lang === 'id'", timeout=10_000)
+            overview_nav = page.locator('a.nav-link[data-page="overview"]')
+            if "Pemantauan Kontrak" not in overview_nav.inner_text():
+                raise AssertionError("Bahasa Indonesia did not translate the overview navigation.")
+            page.locator('a.nav-link[data-page="requests"]').click()
+            page.locator("#page-requests.active h1").wait_for(state="visible", timeout=10_000)
+            if page.locator("#page-requests h1").inner_text() != "Manajemen Permintaan":
+                raise AssertionError("Bahasa Indonesia did not translate the Request Management page.")
+            if page.locator("#requestSearch").get_attribute("placeholder") != "Cari subjek, vendor, atau PIC…":
+                raise AssertionError("Bahasa Indonesia did not translate the request search placeholder.")
+            page.reload(wait_until="networkidle", timeout=45_000)
+            page.wait_for_function("document.documentElement.lang === 'id'", timeout=10_000)
+            if page.locator("#languageToggle").inner_text() != "EN":
+                raise AssertionError("Language preference did not persist after reload.")
+            page.locator("#languageToggle").click()
+            page.wait_for_function("document.documentElement.lang === 'en'", timeout=10_000)
+            if page.locator("#page-requests h1").inner_text() != "Request Management":
+                raise AssertionError("Switching back to English did not restore the original text.")
+            print("Bilingual browser check passed: ID/EN toggle, page content, placeholder, and persistence.")
+        except Exception as error:
+            capture_errors.append(f"Bilingual language switch interaction: {error}")
+            print(f"FAILED bilingual language switch interaction: {error}")
+
         browser.close()
 
     report = {
