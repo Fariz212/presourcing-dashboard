@@ -115,6 +115,15 @@ def main() -> int:
                         status = response.status if response is not None else "no response"
                         raise RuntimeError(f"Dashboard returned {status}")
                     current_page = "overview"
+                    page.wait_for_function("document.documentElement.lang === 'id'")
+                    if page.locator("#page-overview h1").inner_text() != "Pemantauan & Pelacakan Kontrak":
+                        raise AssertionError("Indonesian default locale was not applied to the overview heading")
+                    page.locator('[data-khs-language="en"]').click(timeout=10_000)
+                    page.wait_for_function("document.documentElement.lang === 'en'")
+                    if page.locator("#page-overview h1").inner_text() != "Contract Monitoring & Tracking":
+                        raise AssertionError("English locale did not restore the overview heading")
+                    page.locator('[data-khs-language="id"]').click(timeout=10_000)
+                    page.wait_for_function("document.documentElement.lang === 'id'")
                 elif page_name != current_page:
                     if width <= 760:
                         page.locator("#mobileNavToggle").click(timeout=10_000)
@@ -192,6 +201,16 @@ def main() -> int:
             except Exception as error:
                 capture_errors.append(f"{file_name}: {error}")
                 print(f"FAILED {file_name}: {error}")
+
+        # Use English for the remaining workflow assertions; captures above retain
+        # the Indonesian first-visit experience.
+        try:
+            page.locator('[data-khs-language="en"]').click(timeout=10_000)
+            page.wait_for_function("document.documentElement.lang === 'en'")
+            page.wait_for_load_state("networkidle", timeout=20_000)
+        except Exception as error:
+            capture_errors.append(f"Language switch to English: {error}")
+            print(f"FAILED language switch to English: {error}")
 
         # Verify the mobile navigation exposes every page without horizontal menu hunting.
         try:
