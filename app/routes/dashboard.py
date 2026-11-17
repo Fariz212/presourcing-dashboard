@@ -532,6 +532,8 @@ def _waiting_role_case_sql(column):
     """
 
 
+ALLOWED_AGE_BANDS = {"0_7", "8_14", "15_30", "31_plus", "unavailable"}
+
 ALLOWED_STAGES = {
     "REQUEST_RECEIVED",
     "DISPATCH",
@@ -1253,7 +1255,16 @@ def khs_register():
             "message": "Waiting-for filter is too long.",
         }), 400
 
-    # Construct parameterized filters.
+    age_band = request.args.get("age_band", "").strip().lower()
+    if age_band and age_band not in ALLOWED_AGE_BANDS:
+        return jsonify({
+            "success": False,
+            "code": "INVALID_AGE_BAND",
+            "message": "Unsupported WIP age band filter.",
+        }), 400
+
+    # Construct parameterized filters. Age filters are based on the current
+    # stage's recorded opening milestone and Jakarta-local calendar date.
     filters = []
     params = []
 
@@ -1304,6 +1315,36 @@ def khs_register():
     if process_status:
         filters.append("register.process_status = %s")
         params.append(process_status)
+
+    if age_band:
+        wip_only = (
+            "register.process_status = 'ACTIVE' "
+            "AND register.workflow_status <> 'completed' "
+            "AND register.current_stage_code NOT IN ('COMPLETED', 'NOT_PROCEEDED')"
+        )
+        if age_band == "unavailable":
+            filters.append(
+                "(" + wip_only +
+                " AND (register.current_stage_started_on IS NULL "
+                "OR register.current_stage_started_on > %s))"
+            )
+            params.append(_jakarta_today())
+        else:
+            ranges = {
+                "0_7": "BETWEEN 0 AND 7",
+                "8_14": "BETWEEN 8 AND 14",
+                "15_30": "BETWEEN 15 AND 30",
+                "31_plus": ">= 31",
+            }
+            filters.append(
+                "(" + wip_only +
+                " AND register.current_stage_started_on IS NOT NULL "
+                "AND register.current_stage_started_on <= %s "
+                "AND (%s::date - register.current_stage_started_on) " +
+                ranges[age_band] + ")"
+            )
+            today = _jakarta_today()
+            params.extend([today, today])
 
     attention = request.args.get("attention", "").strip().lower() in {"1", "true", "yes"}
     if attention:
@@ -1400,6 +1441,7 @@ def khs_register():
             "waiting_for": waiting_for or None,
             "waiting_role": waiting_role or None,
             "process_status": process_status or None,
+            "age_band": age_band or None,
         },
     }), 200
 
@@ -2801,7 +2843,19 @@ def operations_overview():
                 )
                 unknown_age = cur.fetchone()["total"]
 
+        ranked_stages = sorted(
+            (row for row in stage_rows if row["wip_count"] > 0),
+            key=lambda row: (
+                -row["wip_count"],
+                -(row["p90_age_days"] if row["p90_age_days"] is not None else -1),
+                -(row["oldest_age_days"] if row["oldest_age_days"] is not None else -1),
+                row["sequence_number"],
+            ),
+        )
+        for rank, row in enumerate(ranked_stages, start=1):
+            row["bottleneck_rank"] = rank
         for row in stage_rows:
+            row.setdefault("bottleneck_rank", None)
             age = row["oldest_age_days"]
             row["sla_status"] = _sla_status_for_age(
                 age,
