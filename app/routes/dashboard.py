@@ -2537,6 +2537,9 @@ def update_khs(khs_id):
                 field for field in KHS_MILESTONE_DATE_ORDER[1:]
                 if field in data and data[field] != before.get(field)
             }
+            previous_request_date = _date_only(before_derived.get("request_date")) if before_derived else None
+            if parent_request_date != previous_request_date:
+                changed_milestone_fields.add("request_date")
             today = _jakarta_today()
             if parent_request_date and parent_request_date > today and "request_id" in data:
                 return jsonify(

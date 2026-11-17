@@ -65,7 +65,9 @@ class ProgressConnection:
     def execute(self, query, params=None):
         self.queries.append((query, params))
         self.last_result = None
-        if query.startswith("UPDATE khs_items SET"):
+        if query.startswith("SELECT request_date FROM khs_requests"):
+            self.last_result = (self.record.get("replacement_request_date"),)
+        elif query.startswith("UPDATE khs_items SET"):
             field = re.search(r"SET\s+([a-z_]+)=", query).group(1)
             self.record[field] = params[0]
         return self
@@ -257,6 +259,20 @@ def test_record_edit_allows_an_existing_chronology_error_to_be_corrected(make_pr
 
     assert response.status_code == 200
     assert pool.record["boq_confirmation_date"] == date(2026, 11, 4)
+
+
+def test_record_edit_rejects_parent_request_change_that_removes_request_date(make_progress_client):
+    record = _progress_record(replacement_request_date=None)
+    client, pool = make_progress_client(record)
+    response = client.patch(
+        "/api/dashboard/khs/KHS-PROGRESS-001",
+        json={"request_id": "REQ-PROGRESS-002"},
+    )
+
+    assert response.status_code == 422
+    assert response.get_json()["code"] == "MILESTONE_PREVIOUS_REQUIRED"
+    assert not any(query.startswith("UPDATE khs_items SET") for query, _ in _api_calls(pool))
+    assert not any("INSERT INTO khs_activity_logs" in query for query, _ in _api_calls(pool))
 
 
 def test_guided_progress_rejects_a_closed_khs_before_reading_or_writing_milestones(make_progress_client):
