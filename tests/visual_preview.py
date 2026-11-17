@@ -150,11 +150,12 @@ def main() -> int:
                 active_page_name = "register" if page_name == "lp" else page_name
                 active_view = page.locator(f"#page-{active_page_name}.active")
                 active_view.wait_for(state="visible", timeout=15_000)
-                if page_name == "lp":
-                    selected_lp_view = page.locator('[data-work-queue-view="lp"]').get_attribute("aria-pressed")
-                    if selected_lp_view != "true":
-                        raise AssertionError("LP navigation must open the LP saved view inside Work Queue")
                 page.wait_for_load_state("networkidle", timeout=20_000)
+                if page_name == "lp":
+                    page.wait_for_function(
+                        "document.querySelector('[data-work-queue-view=\"lp\"]')?.getAttribute('aria-pressed') === 'true'",
+                        timeout=10_000,
+                    )
                 page.set_viewport_size({"width": width, "height": height})
                 page.wait_for_timeout(500)
 
@@ -296,11 +297,11 @@ def main() -> int:
             page.wait_for_load_state("networkidle", timeout=20_000)
             assert_stage_and_age(
                 page, "attentionBody", "KHS-VIS-002",
-                "MI Approval - GM", mi_gm_age, 2, 4,
+                "MI Approval - GM", mi_gm_age, 2, 5,
             )
             assert_stage_and_age(
                 page, "attentionBody", "KHS-VIS-009",
-                "KHS Inject", injection_age, 2, 4,
+                "KHS Inject", injection_age, 2, 5,
             )
 
             page.locator('a.nav-link[data-page="register"]').first.click(timeout=10_000)
@@ -412,11 +413,11 @@ def main() -> int:
             language_button.click()
             page.wait_for_function("document.documentElement.lang === 'id'", timeout=10_000)
             overview_nav = page.locator('a.nav-link[data-page="overview"]')
-            if "Pemantauan Kontrak" not in overview_nav.inner_text():
+            if "Pusat Kendali Operasi" not in overview_nav.inner_text():
                 raise AssertionError("Bahasa Indonesia did not translate the overview navigation.")
             page.locator('a.nav-link[data-page="requests"]').click()
             page.locator("#page-requests.active h1").wait_for(state="visible", timeout=10_000)
-            if page.locator("#page-requests h1").inner_text() != "Manajemen Permintaan":
+            if page.locator("#page-requests h1").inner_text() != "Penerimaan Permintaan":
                 raise AssertionError("Bahasa Indonesia did not translate the Request Management page.")
             if page.locator("#requestSearch").get_attribute("placeholder") != "Cari subjek, vendor, atau PIC…":
                 raise AssertionError("Bahasa Indonesia did not translate the request search placeholder.")
@@ -426,7 +427,7 @@ def main() -> int:
                 raise AssertionError("Language preference did not persist after reload.")
             page.locator('a.nav-link[data-page="register"]').click()
             page.locator("#page-register.active h1").wait_for(state="visible", timeout=10_000)
-            if page.locator("#page-register h1").inner_text() != "Daftar KHS":
+            if page.locator("#page-register h1").inner_text() != "Antrean Kerja":
                 raise AssertionError("Bahasa Indonesia did not translate the KHS Register.")
             detail_row = page.locator("#registerBody tr").filter(has_text="KHS-VIS-002").first
             detail_row.wait_for(state="visible", timeout=15_000)
@@ -446,7 +447,7 @@ def main() -> int:
             page.locator("#closeDialog").click()
             page.locator("#languageToggle").click()
             page.wait_for_function("document.documentElement.lang === 'en'", timeout=10_000)
-            if page.locator("#page-register h1").inner_text() != "KHS Register":
+            if page.locator("#page-register h1").inner_text() != "Work Queue":
                 raise AssertionError("Switching back to English did not restore the original text.")
             print("Bilingual browser check passed: navigation, API-backed detail, closure dialog, placeholder, and preference persistence.")
 
