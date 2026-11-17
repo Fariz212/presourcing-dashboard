@@ -431,8 +431,8 @@ def main() -> int:
             progress_button.wait_for(state="visible", timeout=10_000)
             progress_button.click()
             page.locator("#progressDialog[open]").wait_for(state="visible", timeout=10_000)
-            if page.locator("#progressMilestoneLabel").input_value() != "MI Senior Manager approval recorded":
-                raise AssertionError("Guided progress did not select the next MI Senior Manager milestone.")
+            if page.locator("#progressMilestoneLabel").input_value() != "MI GM approval recorded":
+                raise AssertionError("Guided progress did not select the next MI GM milestone.")
             jakarta_today = page.evaluate(
                 "() => new Intl.DateTimeFormat('en-CA', {timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())"
             )
@@ -444,8 +444,8 @@ def main() -> int:
                 raise AssertionError(f"Guided progress returned {progress_response.value.status}.")
             page.locator("#progressDialog").wait_for(state="hidden", timeout=10_000)
             page.locator("#detailDialog[open]").wait_for(state="visible", timeout=10_000)
-            if not page.locator("#updateProgressButton").inner_text().startswith("Update: MI GM approval recorded"):
-                raise AssertionError("Guided progress did not advance to the next MI GM milestone.")
+            if not page.locator("#updateProgressButton").inner_text().startswith("Update: Legal submission recorded"):
+                raise AssertionError("Guided progress did not advance to the Legal submission milestone.")
 
             page.locator("#followUpDueDate").fill(jakarta_today)
             page.locator("#followUpTo").fill("CI Operations Owner")
