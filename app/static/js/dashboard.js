@@ -968,7 +968,7 @@ function fillDialogField(def, record, mode) {
   const value = record && record[name] != null ? String(record[name]).slice(0, 10) : "";
   let control = "";
   if (type === "date") {
-    control = '<input id="' + id + '" type="date" name="' + name + '" value="' + esc(value) + '" aria-label="' + esc(label) + '">';
+    control = '<div class="date-input-wrap"><input id="' + id + '" type="date" name="' + name + '" value="' + esc(value) + '" aria-label="' + esc(label) + '"><span class="date-format-hint" data-date-empty-hint aria-hidden="true"></span></div>';
   } else if (type === "textarea") {
     control = '<textarea id="' + id + '" name="' + name + '" rows="3" aria-label="' + esc(label) + '">' + esc(record && record[name] || "") + "</textarea>";
   } else if (type === "request") {
@@ -991,6 +991,23 @@ function fillDialogField(def, record, mode) {
   }
   const full = type === "textarea";
   return '<div class="form-field' + (full ? " full" : "") + '"><label for="' + id + '">' + esc(label) + '</label>' + control + "</div>";
+}
+
+function initializeDateInputHints(root) {
+  if (!root) return;
+  root.querySelectorAll(".date-input-wrap").forEach((wrap) => {
+    const input = wrap.querySelector('input[type="date"]');
+    const hint = wrap.querySelector("[data-date-empty-hint]");
+    if (!input || !hint) return;
+    const update = () => {
+      wrap.classList.toggle("is-empty", !input.value);
+      const language = window.KHS_I18N ? window.KHS_I18N.language() : "id";
+      hint.textContent = language === "id" ? "Pilih tanggal" : "Choose date";
+    };
+    input.addEventListener("input", update);
+    input.addEventListener("change", update);
+    update();
+  });
 }
 
 function renderGroupedKhsFields(record, editing) {
@@ -1041,6 +1058,7 @@ async function openForm(kind, record, parentRequestId) {
   fieldsContainer.innerHTML = kind === "request"
     ? defs.map((def) => fillDialogField(def, record, kind)).join("")
     : renderGroupedKhsFields(record, editing);
+  initializeDateInputHints(fieldsContainer);
   if (kind === "khs" && !editing && parentRequestId) {
     const select = $("dialogFields").querySelector('[name="request_id"]');
     if (select) select.value = parentRequestId;
