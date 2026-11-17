@@ -2915,12 +2915,12 @@ def _operations_stage_query(as_of):
                 FILTER (WHERE wip.stage_age_days IS NOT NULL))::int AS median_age_days,
             (percentile_disc(0.9) WITHIN GROUP (ORDER BY wip.stage_age_days)
                 FILTER (WHERE wip.stage_age_days IS NOT NULL))::int AS p90_age_days,
-            MAX(wip.stage_age_days)::int AS oldest_age_days,
+            MAX(wip.stage_age_days)::int AS oldest_age_days
         FROM khs_stage_config AS stage
         LEFT JOIN active_wip AS wip ON wip.current_stage_code = stage.stage_code
         WHERE stage.is_active = TRUE
           AND stage.stage_code NOT IN ('COMPLETED', 'NOT_PROCEEDED')
-        GROUP BY stage.stage_code, stage.stage_name, stage.sequence_number, stage.default_sla_days
+        GROUP BY stage.stage_code, stage.stage_name, stage.sequence_number
         ORDER BY stage.sequence_number
     """
 
@@ -2936,7 +2936,6 @@ def operations_overview():
                 stage_rows = [dict(row) for row in cur.fetchall()]
         stage_rows = _rank_operations_stages(stage_rows)
         totals = _operations_stage_totals(stage_rows)
-        for row in stage_rows:
         return jsonify(
             success=True,
             as_of_date=today.isoformat(),
