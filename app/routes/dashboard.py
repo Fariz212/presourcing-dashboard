@@ -2915,7 +2915,8 @@ def operations_overview():
             success=True,
             as_of_date=today.isoformat(),
             data={
-                "summary": totals,
+                "summary": {
+                    **totals,
                     "follow_ups_open": follow_up_summary["total_open"],
                     "follow_ups_due_today": follow_up_summary["due_today"],
                     "follow_ups_overdue": follow_up_summary["overdue"],
