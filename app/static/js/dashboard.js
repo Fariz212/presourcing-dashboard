@@ -773,6 +773,7 @@ const I18N_ID = Object.freeze({
   "Director sign-off recorded":"Tanda tangan Direktur tercatat",
   "KHS injection started":"Injeksi KHS dimulai",
   "KHS fully injected":"KHS selesai diinjeksi penuh",
+  "Action owner / PIC":"PIC tindakan",
   "Saving…":"Menyimpan…",
   "Scheduling…":"Menjadwalkan…",
   "Progress updated.":"Progres berhasil diperbarui.",
@@ -2014,7 +2015,13 @@ function refreshGuidedProgressControl(record) {
   if (schedule) schedule.hidden = record.process_status !== "ACTIVE" ||
     record.workflow_status === "completed";
   set("progressKhsLabel", record.khs_id);
-  set("progressMilestoneLabel", definition ? definition.label : "No guided milestone available");
+  const milestoneInput = $("progressMilestoneLabel");
+  if (milestoneInput) {
+    milestoneInput.value = translateText(
+      definition ? definition.label : "No guided milestone available",
+      currentLanguage
+    );
+  }
   if ($("followUpTo")) $("followUpTo").value = record.action_owner || "";
 }
 
@@ -2022,7 +2029,7 @@ function openGuidedProgressDialog() {
   const record = state.detail;
   if (!record || !record.guided_progress) return;
   $("progressKhsLabel").textContent = record.khs_id;
-  $("progressMilestoneLabel").value = record.guided_progress.label;
+  $("progressMilestoneLabel").value = translateText(record.guided_progress.label, currentLanguage);
   $("progressMilestoneDate").value = localDateInputValue();
   $("progressNote").value = "";
   $("progressError").hidden = true;
