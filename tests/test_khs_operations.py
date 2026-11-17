@@ -143,10 +143,7 @@ def test_operations_totals_reconcile_with_stage_age_buckets_including_future_dat
     totals = _operations_stage_totals([
         {
             "wip_count": 3,
-            "age_0_7": 1,
-            "age_8_14": 0,
-            "age_15_30": 0,
-            "age_over_30": 1,
+            "age_over_30": 2,
             "age_unavailable": 1,
             "overdue_count": 0,
             "escalation_count": 0,
@@ -154,11 +151,8 @@ def test_operations_totals_reconcile_with_stage_age_buckets_including_future_dat
         },
         {
             "wip_count": 4,
-            "age_0_7": 0,
-            "age_8_14": 1,
-            "age_15_30": 2,
-            "age_over_30": 0,
-            "age_unavailable": 1,
+            "age_over_30": 1,
+            "age_unavailable": 2,
             "overdue_count": 3,
             "escalation_count": 1,
             "target_days": 10,
