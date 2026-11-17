@@ -282,7 +282,32 @@ def test_guided_lp_start_requires_both_gm_approval_and_legal_submission():
 def test_guided_progress_rejects_injection_start_without_lp_completion_or_injection_completion_without_start():
     assert _guided_progress_date_error(
         {"lp_completion_date": None}, "khs_inject_start_date", date(2026, 11, 11)
-    ) is None  # Stage derivation cannot enter KHS_INJECTION without LP completion.
+    )[0] == "PREVIOUS_MILESTONE_REQUIRED"
     assert _guided_progress_date_error(
         {"khs_inject_start_date": None}, "khs_inject_completion_date", date(2026, 11, 11)
-    )[0] == "MILESTONE_BEFORE_PREVIOUS"
+    )[0] == "PREVIOUS_MILESTONE_REQUIRED"
+
+
+
+def test_guided_progress_requires_the_previous_milestone_for_each_workflow_transition():
+    previous_fields = {
+        "boq_confirmation_date": "dispatch_date",
+        "negotiation_date": "boq_confirmation_date",
+        "final_negotiation_date": "negotiation_date",
+        "mi_head_approval_date": "final_negotiation_date",
+        "mi_sm_approval_date": "mi_head_approval_date",
+        "mi_gm_approval_date": "mi_sm_approval_date",
+        "legal_submission_date": "mi_gm_approval_date",
+        "lp_circulation_start_date": "legal_submission_date",
+        "lp_contract_team_completion_date": "lp_circulation_start_date",
+        "lp_junior_manager_approval_date": "lp_contract_team_completion_date",
+        "lp_senior_manager_approval_date": "lp_junior_manager_approval_date",
+        "lp_gm_scm_approval_date": "lp_senior_manager_approval_date",
+        "lp_completion_date": "lp_gm_scm_approval_date",
+        "khs_inject_start_date": "lp_completion_date",
+        "khs_inject_completion_date": "khs_inject_start_date",
+    }
+    for field, previous in previous_fields.items():
+        error = _guided_progress_date_error({}, field, date(2026, 11, 17))
+        assert error[0] == "PREVIOUS_MILESTONE_REQUIRED", (field, error)
+        assert previous in error[1]
