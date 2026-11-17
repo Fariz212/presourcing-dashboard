@@ -650,7 +650,7 @@ async function loadLPCirculation() {
         "<span class=\"cell-secondary\" data-no-translate>" + esc(r.request_id) + "</span></td>" +
         "<td><span class=\"cell-primary\">" + esc(r.lp_stage_label || "—") + "</span>" +
         prerequisiteFlag + legacyFlag +
-        (r.waiting_for ? "<span class=\"cell-secondary\">Waiting for " + esc(r.waiting_for) + "</span>" : "") + "</td>" +
+        (r.waiting_for ? "<span class=\"cell-secondary\">Waiting for <span data-no-translate>" + esc(r.waiting_for) + "</span></span>" : "") + "</td>" +
         "<td>" + esc(age) + "</td><td>" + esc(fmt(r.lp_circulation_start_date)) + "</td>" +
         "<td><span data-no-translate>" + esc(r.waiting_reason || "—") + "</span></td><td>" + history + "</td>" +
         "<td><button type=\"button\" class=\"view-button\" data-view-khs=\"" + esc(r.khs_id) + "\">Details</button></td></tr>";
@@ -1609,7 +1609,10 @@ function bind() {
 document.addEventListener("DOMContentLoaded", () => {
   observeResponsiveTables();
   bind();
-  window.addEventListener("khs:localechange", () => loadPage(state.page).catch((err) => toast(err.message)));
+  window.addEventListener("khs:localechange", () => {
+    loadPage(state.page).catch((err) => toast(err.message));
+    if (state.detail && $("detailDialog").open) openDetails(state.detail.khs_id);
+  });
   const initial = window.location.hash.replace("#", "");
   go(["overview", "requests", "register", "lp", "contracts", "workflow", "imports", "activity"].indexOf(initial) >= 0 ? initial : "overview");
 });
