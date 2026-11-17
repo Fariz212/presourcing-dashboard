@@ -454,9 +454,10 @@ function tr(value,lang){
   return (original.match(/^\s*/)||[""])[0]+result+(original.match(/\s*$/)||[""])[0];
 }
 function skip(el){return !el||!!el.closest("script,style,textarea,input,[contenteditable='true'],[data-no-translate],.user-content,.raw-data");}
+function skipAttribute(el){return !el||!!el.closest("script,style,[contenteditable='true'],[data-no-translate],.user-content,.raw-data");}
 function walk(root,lang){
   const element=root.nodeType===1?root:root.parentElement;
-  if(element&&skip(element))return;
+  if(element&&skip(element)&&!(root.nodeType===1&&(root.tagName==="INPUT"||root.tagName==="TEXTAREA")))return;
   if(root.nodeType===3){if(root.parentElement&&!skip(root.parentElement))root.nodeValue=tr(root.nodeValue,lang);return;}
   if(root.nodeType!==1&&root!==document)return;
   const target=root===document?document.body:root;
@@ -465,11 +466,11 @@ function walk(root,lang){
     const dateInputs=target.matches&&target.matches('input[type="date"]')?[target]:[];
     dateInputs.concat(Array.from(target.querySelectorAll('input[type="date"]'))).forEach(input=>input.setAttribute("lang",lang==="id"?"id-ID":"en-GB"));
   }
-  if(target.nodeType===1&&!skip(target))ATTRS.forEach(a=>{if(target.hasAttribute(a)){const before=target.getAttribute(a),after=tr(before,lang);if(after!==before)target.setAttribute(a,after);}});
+  if(target.nodeType===1&&!skipAttribute(target))ATTRS.forEach(a=>{if(target.hasAttribute(a)){const before=target.getAttribute(a),after=tr(before,lang);if(after!==before)target.setAttribute(a,after);}});
   const tree=document.createTreeWalker(target,NodeFilter.SHOW_TEXT),nodes=[];
   while(tree.nextNode())nodes.push(tree.currentNode);
   nodes.forEach(n=>{if(!skip(n.parentElement))n.nodeValue=tr(n.nodeValue,lang);});
-  target.querySelectorAll(ATTRS.map(a=>"["+a+"]").join(",")).forEach(n=>{if(!skip(n))ATTRS.forEach(a=>{if(n.hasAttribute(a)){const before=n.getAttribute(a),after=tr(before,lang);if(after!==before)n.setAttribute(a,after);}});});
+  target.querySelectorAll(ATTRS.map(a=>"["+a+"]").join(",")).forEach(n=>{if(!skipAttribute(n))ATTRS.forEach(a=>{if(n.hasAttribute(a)){const before=n.getAttribute(a),after=tr(before,lang);if(after!==before)n.setAttribute(a,after);}});});
 }
 function getLanguage(){try{return localStorage.getItem("khs-language")==="en"?"en":"id";}catch(_){return "id";}}
 function setLanguage(language){
