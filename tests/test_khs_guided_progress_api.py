@@ -39,6 +39,7 @@ class ProgressConnection:
         self.record = record
         self.queries = []
         self.cursor_object = ProgressCursor(self)
+        self.last_result = None
 
     @contextmanager
     def transaction(self):
@@ -49,10 +50,26 @@ class ProgressConnection:
 
     def execute(self, query, params=None):
         self.queries.append((query, params))
+        self.last_result = None
         if query.startswith("UPDATE khs_items SET"):
             field = re.search(r"SET\s+([a-z_]+)=", query).group(1)
             self.record[field] = params[0]
+        elif query.startswith("INSERT INTO khs_follow_ups"):
+            self.last_result = {
+                "id": 71,
+                "khs_id": params[0],
+                "stage_code": params[1],
+                "stage_key": params[2],
+                "due_date": params[3],
+                "follow_up_to": params[4],
+                "note": params[5],
+                "status": "OPEN",
+                "created_at": "2026-11-17T05:00:00+07:00",
+            }
         return self
+
+    def fetchone(self):
+        return deepcopy(self.last_result)
 
 
 class ProgressPool:
@@ -192,3 +209,38 @@ def test_guided_progress_requires_a_predecessor_milestone_even_if_current_stage_
     assert response.status_code == 422
     assert response.get_json()["code"] == "PREVIOUS_MILESTONE_REQUIRED"
     assert not any(query.startswith("UPDATE khs_items SET") for query, _ in _api_calls(pool))
+
+
+
+def test_create_follow_up_keeps_insert_returning_cursor_open_and_binds_lp_substage(make_progress_client):
+    record = _progress_record(
+        workflow_stage_code="LP_CIRCULATION",
+        current_stage_code="LP_CIRCULATION",
+        lp_stage_key="contract_team",
+        lp_circulation_start_date=date(2026, 10, 25),
+        current_stage_started_on=date(2026, 10, 25),
+    )
+    client, pool = make_progress_client(record)
+    response = client.post(
+        "/api/dashboard/khs/KHS-PROGRESS-001/follow-ups",
+        json={
+            "due_date": "2026-11-20",
+            "follow_up_to": "LP Contract Owner",
+            "note": "Confirm LP package completion.",
+        },
+    )
+
+    assert response.status_code == 201
+    payload = response.get_json()
+    assert payload["data"]["stage_code"] == "LP_CIRCULATION"
+    assert payload["data"]["stage_key"] == "contract_team"
+    assert payload["data"]["follow_up_to"] == "LP Contract Owner"
+    assert pool.record["action_owner"] == "LP Contract Owner"
+    calls = _api_calls(pool)
+    insert_calls = [
+        (query, params) for query, params in calls
+        if query.startswith("INSERT INTO khs_follow_ups")
+    ]
+    assert len(insert_calls) == 1
+    assert insert_calls[0][1][1:3] == ("LP_CIRCULATION", "contract_team")
+    assert len([1 for query, _ in calls if "INSERT INTO khs_activity_logs" in query]) == 2
