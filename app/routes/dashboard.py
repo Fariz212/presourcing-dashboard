@@ -2,7 +2,8 @@ import calendar
 import csv
 from datetime import date, datetime, timedelta
 import hashlib
-from io import StringIO
+import hmac
+from io import BytesIO, StringIO
 import mimetypes
 from pathlib import Path
 import re
@@ -2291,12 +2292,8 @@ def upload_khs_document(khs_id):
     if not target.is_relative_to(upload_root):
         return jsonify(success=False, message="Invalid storage location."), 400
 
-    target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    target.parent.chmod(0o700)
     digest = hashlib.sha256(payload).hexdigest()
     mime_type = mimetypes.guess_type(original_name)[0] or "application/octet-stream"
-    target.write_bytes(payload)
-    target.chmod(0o600)
 
     try:
         with get_db_pool().connection() as conn, conn.transaction():
@@ -2305,8 +2302,13 @@ def upload_khs_document(khs_id):
                 (khs_id,),
             ).fetchone()
             if not exists:
-                target.unlink(missing_ok=True)
                 return jsonify(success=False, message="KHS not found."), 404
+
+            target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            target.parent.chmod(0o700)
+            with target.open("xb") as stored_file:
+                stored_file.write(payload)
+            target.chmod(0o600)
 
             document = conn.execute(
                 """INSERT INTO khs_documents (
@@ -2325,7 +2327,14 @@ def upload_khs_document(khs_id):
                 khs_id,
                 "DOCUMENT_UPLOADED",
                 {},
-                {"document_id": document_id, "document_type": saved_type, "file_name": saved_name},
+                {
+                    "document_id": document_id,
+                    "document_type": saved_type,
+                    "file_name": saved_name,
+                    "file_sha256": digest,
+                    "file_size_bytes": len(payload),
+                    "mime_type": mime_type,
+                },
             )
         return jsonify(
             success=True,
@@ -2350,7 +2359,7 @@ def download_khs_document(document_id):
         with get_db_pool().connection() as conn:
             with conn.cursor(row_factory=dict_row) as cursor:
                 cursor.execute(
-                    """SELECT original_file_name, storage_key, mime_type
+                    """SELECT original_file_name, storage_key, mime_type, file_sha256
                        FROM khs_documents WHERE id=%s""",
                     (document_id,),
                 )
@@ -2359,19 +2368,61 @@ def download_khs_document(document_id):
             return jsonify(success=False, message="Document not found."), 404
 
         upload_root = Path(current_app.config["UPLOAD_DIR"]).resolve()
-        file_path = (upload_root / document["storage_key"]).resolve()
-        if not file_path.is_relative_to(upload_root) or not file_path.is_file():
-            return jsonify(success=False, message="Stored document is unavailable."), 404
+        storage_key = document.get("storage_key")
+        if not isinstance(storage_key, str) or not storage_key.strip():
+            return jsonify(success=False, code="DOCUMENT_UNAVAILABLE",
+                           message="Stored document is unavailable."), 404
 
+        file_path = (upload_root / storage_key).resolve()
+        if not file_path.is_relative_to(upload_root) or not file_path.is_file():
+            return jsonify(success=False, code="DOCUMENT_UNAVAILABLE",
+                           message="Stored document is unavailable."), 404
+
+        max_bytes = int(current_app.config.get("MAX_CONTENT_LENGTH", 16 * 1024 * 1024))
+        if file_path.stat().st_size > max_bytes:
+            return jsonify(success=False, code="DOCUMENT_SIZE_INVALID",
+                           message="Stored document exceeds the permitted download size."), 409
+
+        payload = file_path.read_bytes()
+        expected_digest = document.get("file_sha256")
+        if (
+            not isinstance(expected_digest, str)
+            or not re.fullmatch(r"[0-9a-fA-F]{64}", expected_digest.strip())
+        ):
+            current_app.logger.warning(
+                "KHS document %s has no valid SHA-256 integrity metadata.",
+                document_id,
+            )
+            return jsonify(
+                success=False,
+                code="DOCUMENT_INTEGRITY_UNAVAILABLE",
+                message="This stored document has no valid integrity checksum. Re-upload the original document to enable verified downloads.",
+            ), 409
+
+        actual_digest = hashlib.sha256(payload).hexdigest()
+        if not hmac.compare_digest(actual_digest, expected_digest.strip().lower()):
+            current_app.logger.warning(
+                "KHS document %s failed SHA-256 integrity verification.",
+                document_id,
+            )
+            return jsonify(
+                success=False,
+                code="DOCUMENT_INTEGRITY_MISMATCH",
+                message="The stored document failed integrity verification and was not downloaded.",
+            ), 409
+
+        safe_download_name = secure_filename(document.get("original_file_name") or "") or "evidence-document"
+        mime_type = mimetypes.guess_type(safe_download_name)[0] or "application/octet-stream"
         response = send_file(
-            file_path,
-            mimetype=document["mime_type"] or "application/octet-stream",
+            BytesIO(payload),
+            mimetype=mime_type,
             as_attachment=True,
-            download_name=document["original_file_name"],
-            conditional=True,
+            download_name=safe_download_name,
+            conditional=False,
         )
         response.headers["Cache-Control"] = "private, no-store"
         response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Document-Integrity"] = "verified"
         return response
     except Exception:
         current_app.logger.exception("KHS document download failed.")
