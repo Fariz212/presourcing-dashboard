@@ -1,5 +1,7 @@
 from datetime import date
 
+import pytest
+
 from app.routes.dashboard import (
     _guided_progress_date_error,
     _guided_progress_definition,
