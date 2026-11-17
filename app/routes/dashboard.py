@@ -1738,8 +1738,12 @@ def request_register():
                             WHERE k.khs_inject_completion_date IS NOT NULL
                         )::int AS completed_khs,
                         COUNT(k.khs_id) FILTER (
-                            WHERE k.khs_inject_completion_date IS NULL
+                            WHERE k.process_status = 'ACTIVE'
+                              AND k.khs_inject_completion_date IS NULL
                         )::int AS open_khs,
+                        COUNT(k.khs_id) FILTER (
+                            WHERE k.process_status = 'NOT_PROCEEDED'
+                        )::int AS not_proceeded_khs,
                         COALESCE(
                             string_agg(DISTINCT k.vendor_name, ' · ' ORDER BY k.vendor_name)
                                 FILTER (WHERE k.vendor_name IS NOT NULL),
@@ -2265,13 +2269,15 @@ def workflow_monitoring():
             )::int AS completed,
             MAX(
                 CASE
-                    WHEN register.stage_started_on <= """ + as_of_sql + """
+                    WHEN register.process_status = 'ACTIVE'
+                     AND register.stage_started_on <= """ + as_of_sql + """
                     THEN """ + as_of_sql + """ - register.stage_started_on
                     ELSE NULL
                 END
             )::int AS oldest_stage_age_days,
             COUNT(register.khs_id) FILTER (
-                WHERE stage.stage_code <> 'COMPLETED'
+                WHERE stage.stage_code NOT IN ('COMPLETED', 'NOT_PROCEEDED')
+                  AND register.process_status = 'ACTIVE'
                   AND (
                       register.stage_started_on IS NULL
                       OR register.stage_started_on > """ + as_of_sql + """
