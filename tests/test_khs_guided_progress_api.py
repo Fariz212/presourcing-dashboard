@@ -50,7 +50,7 @@ class ProgressConnection:
     def execute(self, query, params=None):
         self.queries.append((query, params))
         if query.startswith("UPDATE khs_items SET"):
-            field = re.search(r"SET\\s+([a-z_]+)=", query).group(1)
+            field = re.search(r"SET\s+([a-z_]+)=", query).group(1)
             self.record[field] = params[0]
         return self
 
