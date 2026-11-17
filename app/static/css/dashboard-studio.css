@@ -4104,3 +4104,41 @@ button:disabled {
   #workflowCards .workflow-stage-bottom { align-items: flex-start; }
   #workflowCards .workflow-stage-action { margin-left: auto; }
 }
+
+/* KHS closure and historical process-duration controls */
+.detail-header-actions{display:flex;align-items:center;gap:8px}
+.danger-button{border:1px solid #e4b8b4;background:#fff5f4;color:#9c3d37;border-radius:8px;padding:9px 13px;font-weight:750;font-size:12px}
+.danger-button:hover{background:#ffebe9}
+.danger-button:disabled{opacity:.5;cursor:not-allowed}
+.process-duration-section{margin:16px 0;padding:18px;border:1px solid var(--line);border-radius:12px;background:#fff}
+.process-duration-summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:14px 0}
+.process-duration-summary>div{display:grid;gap:3px;padding:12px;border-radius:9px;background:#f5f7fa}
+.process-duration-summary span{font-size:10px;color:var(--muted)}
+.process-duration-summary strong{font-size:19px;color:var(--ink)}
+.process-duration-list{display:grid;gap:0}
+.process-duration-row{display:grid;grid-template-columns:minmax(180px,1.2fr) minmax(170px,1fr) minmax(75px,.45fr);gap:12px;align-items:center;padding:11px 0;border-bottom:1px solid #edf0f4}
+.process-duration-main{display:grid;gap:5px;min-width:0}
+.process-duration-main strong{font-size:12px}
+.process-duration-status{font-size:9px;color:#667085}
+.process-duration-status.status-completed{color:#16845f}
+.process-duration-status.status-stopped{color:#a34a44}
+.process-duration-status.status-in_progress{color:#3568c8}
+.process-duration-dates{display:flex;align-items:center;gap:7px;color:#748094;font-size:10px;white-space:nowrap}
+.process-duration-days{text-align:right;font-size:12px;white-space:nowrap}
+.closure-summary{margin:14px 0;padding:14px 16px;border:1px solid #edcfbf;border-radius:10px;background:#fff8f3;color:#71432f}
+.closure-summary-heading{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:8px}
+.closure-summary-heading strong{font-size:13px;color:#963f37}
+.closure-summary p{margin:6px 0;font-size:12px}
+.closure-summary small{color:#8b7064}
+#closureDialog .form-field,#reopenDialog .form-field{display:grid;gap:6px;margin:14px 0}
+#closureDialog .form-field label,#reopenDialog .form-field label{font-size:11px;font-weight:700;color:#526179}
+#closureDialog input,#closureDialog select,#closureDialog textarea,#reopenDialog textarea{width:100%;padding:10px 11px;border:1px solid #dce3ec;border-radius:8px;background:#fff;color:var(--ink)}
+#closureDialog textarea,#reopenDialog textarea{resize:vertical}
+@media(max-width:760px){
+  .detail-header-actions{gap:5px;flex-wrap:wrap;justify-content:flex-end}
+  .detail-header-actions .danger-button,.detail-header-actions .primary-button{padding:7px 9px;font-size:10px}
+  .process-duration-row{grid-template-columns:minmax(0,1fr) auto;gap:6px}
+  .process-duration-dates{grid-column:1 / -1;grid-row:2}
+  .process-duration-days{grid-column:2;grid-row:1}
+  .process-duration-summary strong{font-size:16px}
+}
