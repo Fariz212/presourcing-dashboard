@@ -53,7 +53,8 @@
 <article class="kpi-card"><span class="kpi-label">Total Requests</span><strong class="kpi-value" id="totalRequests">—</strong><small>Parent requests</small></article>
 <article class="kpi-card"><span class="kpi-label">Total KHS</span><strong class="kpi-value" id="totalKhs">—</strong><small>Contract records</small></article>
 <article class="kpi-card"><span class="kpi-label">Needs Attention</span><strong class="kpi-value" id="attentionCount">—</strong><small>Waiting / exception records</small></article>
-<article class="kpi-card"><span class="kpi-label">Fully Injected</span><strong class="kpi-value" id="injectCompleted">—</strong><small><span id="completionRate">0%</span> of all KHS records</small></article>
+<article class="kpi-card"><span class="kpi-label">Fully Injected</span><strong class="kpi-value" id="injectCompleted">—</strong><small><span id="completionRate">0%</span> of active KHS records</small></article>
+<article class="kpi-card"><span class="kpi-label">Not Proceeded</span><strong class="kpi-value" id="notProceededKhs">—</strong><small>Closed without full injection</small></article>
 </div>
 
 <article class="panel attention-panel"><div class="panel-heading"><div><div class="eyebrow">ACTION REQUIRED</div><h2>Priority action queue</h2><p>Records awaiting approval, owner follow-up, or prerequisite review.</p></div><button class="text-button" data-go="register" data-attention-only="true">View attention queue →</button></div>
@@ -135,6 +136,7 @@
 <label for="subtypeFilter">Contract type<select id="subtypeFilter"><option value="">All subtypes</option></select></label>
 <label for="waitingFilter">Waiting for<select id="waitingFilter"><option value="">All waiting parties</option></select></label>
 <label for="stageFilter">Workflow stage<select id="stageFilter"><option value="">All workflow stages</option></select></label>
+<label for="processStatusFilter">Process status<select id="processStatusFilter"><option value="">All process statuses</option><option value="ACTIVE">Active</option><option value="NOT_PROCEEDED">Not Proceeded</option></select></label>
 </div></details>
 <button class="reset-button" id="resetFilters" type="button">Reset filters</button>
 </div>
@@ -253,7 +255,34 @@
 <footer class="main-footer"><span>KHS Contract Operations</span><span>Contract Monitoring &amp; Tracking · Internal workspace</span></footer>
 </main></div>
 <dialog id="recordDialog" class="record-dialog"><form id="recordForm" method="dialog"><div class="dialog-header"><div><div class="eyebrow" id="dialogEyebrow">NEW RECORD</div><h2 id="dialogTitle">Create record</h2></div><button type="button" class="dialog-close" id="closeRecordDialog">×</button></div><div id="recordError" class="form-error" role="alert" hidden></div><div id="dialogFields" class="form-grid"></div><div id="dialogHint" class="form-hint"></div><div class="dialog-footer"><button type="button" class="secondary-button" id="cancelRecord">Cancel</button><button type="submit" class="primary-button" id="saveRecord">Save record</button></div></form></dialog>
-<dialog id="detailDialog" class="detail-dialog"><div class="dialog-header"><div><div class="eyebrow">KHS RECORD</div><h2 id="detailTitle">KHS Details</h2><p class="detail-subtitle" id="detailSubtitle"></p></div><button class="dialog-close" id="closeDialog">×</button></div><div id="detailStatus" class="dialog-status-row"></div>
+<dialog id="closureDialog" class="record-dialog">
+  <form id="closureForm">
+    <div class="dialog-header"><div><div class="eyebrow">PROCESS CLOSURE</div><h2>Close KHS as Not Proceeded</h2><p class="detail-subtitle" id="closureKhsLabel"></p></div><button type="button" class="dialog-close" id="closeClosureDialog">×</button></div>
+    <div class="form-hint">Use this only when the process will not continue. Existing milestones and evidence will be preserved.</div>
+    <div class="form-field"><label for="closureDate">Closure date</label><input id="closureDate" name="closure_date" type="date" required></div>
+    <div class="form-field"><label for="closureReason">Closure reason</label><select id="closureReason" name="closure_reason_code" required><option value="">Select a reason</option><option value="NO_MUTUAL_AGREEMENT">No mutual agreement</option><option value="REQUESTER_WITHDRAWAL">Withdrawn by requester</option><option value="VENDOR_DECLINED">Vendor declined</option><option value="INTERNAL_REJECTION">Internally rejected</option><option value="DUPLICATE">Duplicate / created in error</option><option value="OTHER">Other</option></select></div>
+    <div class="form-field"><label for="closureNotes">Closure notes</label><textarea id="closureNotes" name="closure_notes" rows="3" placeholder="Add context or decision reference"></textarea></div>
+    <div id="closureError" class="form-error" role="alert" hidden></div>
+    <div class="dialog-footer"><button type="button" class="secondary-button" id="cancelClosure">Cancel</button><button type="submit" class="danger-button" id="confirmClosure">Confirm closure</button></div>
+  </form>
+</dialog>
+<dialog id="reopenDialog" class="record-dialog">
+  <form id="reopenForm">
+    <div class="dialog-header"><div><div class="eyebrow">REOPEN PROCESS</div><h2>Reopen KHS</h2><p class="detail-subtitle" id="reopenKhsLabel"></p></div><button type="button" class="dialog-close" id="closeReopenDialog">×</button></div>
+    <div class="form-hint">Reopening restores this KHS to the active work queue. The previous closure remains in the audit history.</div>
+    <div class="form-field"><label for="reopenReason">Reason for reopening</label><textarea id="reopenReason" name="reopen_reason" rows="3" required></textarea></div>
+    <div id="reopenError" class="form-error" role="alert" hidden></div>
+    <div class="dialog-footer"><button type="button" class="secondary-button" id="cancelReopen">Cancel</button><button type="submit" class="primary-button" id="confirmReopen">Reopen KHS</button></div>
+  </form>
+</dialog>
+<dialog id="detailDialog" class="detail-dialog"><div class="dialog-header"><div><div class="eyebrow">KHS RECORD</div><h2 id="detailTitle">KHS Details</h2><p class="detail-subtitle" id="detailSubtitle"></p></div><div class="detail-header-actions"><button type="button" class="danger-button" id="closeKhsButton">Close KHS</button><button type="button" class="primary-button" id="reopenKhsButton" hidden>Reopen KHS</button><button class="dialog-close" id="closeDialog">×</button></div></div><div id="detailStatus" class="dialog-status-row"></div>
+<section class="process-duration-section" aria-labelledby="processDurationTitle">
+  <div class="lp-timeline-heading"><div><div class="eyebrow">END-TO-END PROCESS</div><h3 id="processDurationTitle">Process Duration History</h3><p>Elapsed time is calculated from recorded milestone dates.</p></div><span id="totalProcessDuration" class="status-badge">—</span></div>
+  <div class="process-duration-summary"><div><span>Total processing time</span><strong id="totalProcessingDays">—</strong></div><div><span>LP circulation time</span><strong id="lpProcessingDays">—</strong></div></div>
+  <div id="processDurationHistory" class="process-duration-list"></div>
+  <p class="form-hint">Missing or inconsistent milestone dates are shown as incomplete history; the system does not estimate missing dates.</p>
+</section>
+<div id="closureSummary" class="closure-summary" hidden></div>
 <section class="lp-timeline-section" aria-labelledby="lpTimelineTitle">
   <div class="lp-timeline-heading">
     <div><div class="eyebrow">LP CIRCULATION</div><h3 id="lpTimelineTitle">Approval journey</h3><p>Evidence-led view of the six LP milestones</p></div>
