@@ -147,9 +147,15 @@ def main() -> int:
                     navigation_link.click(timeout=10_000)
                     current_page = page_name
 
-                active_view = page.locator(f"#page-{page_name}.active")
+                active_page_name = "register" if page_name == "lp" else page_name
+                active_view = page.locator(f"#page-{active_page_name}.active")
                 active_view.wait_for(state="visible", timeout=15_000)
                 page.wait_for_load_state("networkidle", timeout=20_000)
+                if page_name == "lp":
+                    page.wait_for_function(
+                        "document.querySelector('[data-work-queue-view=\"lp\"]')?.getAttribute('aria-pressed') === 'true'",
+                        timeout=10_000,
+                    )
                 page.set_viewport_size({"width": width, "height": height})
                 page.wait_for_timeout(500)
 
@@ -291,11 +297,11 @@ def main() -> int:
             page.wait_for_load_state("networkidle", timeout=20_000)
             assert_stage_and_age(
                 page, "attentionBody", "KHS-VIS-002",
-                "MI Approval - GM", mi_gm_age, 2, 4,
+                "MI Approval - GM", mi_gm_age, 2, 5,
             )
             assert_stage_and_age(
                 page, "attentionBody", "KHS-VIS-009",
-                "KHS Inject", injection_age, 2, 4,
+                "KHS Inject", injection_age, 2, 5,
             )
 
             page.locator('a.nav-link[data-page="register"]').first.click(timeout=10_000)
@@ -407,11 +413,11 @@ def main() -> int:
             language_button.click()
             page.wait_for_function("document.documentElement.lang === 'id'", timeout=10_000)
             overview_nav = page.locator('a.nav-link[data-page="overview"]')
-            if "Pemantauan Kontrak" not in overview_nav.inner_text():
+            if "Pusat Kendali Operasi" not in overview_nav.inner_text():
                 raise AssertionError("Bahasa Indonesia did not translate the overview navigation.")
             page.locator('a.nav-link[data-page="requests"]').click()
             page.locator("#page-requests.active h1").wait_for(state="visible", timeout=10_000)
-            if page.locator("#page-requests h1").inner_text() != "Manajemen Permintaan":
+            if page.locator("#page-requests h1").inner_text() != "Penerimaan Permintaan":
                 raise AssertionError("Bahasa Indonesia did not translate the Request Management page.")
             if page.locator("#requestSearch").get_attribute("placeholder") != "Cari subjek, vendor, atau PIC…":
                 raise AssertionError("Bahasa Indonesia did not translate the request search placeholder.")
@@ -421,7 +427,7 @@ def main() -> int:
                 raise AssertionError("Language preference did not persist after reload.")
             page.locator('a.nav-link[data-page="register"]').click()
             page.locator("#page-register.active h1").wait_for(state="visible", timeout=10_000)
-            if page.locator("#page-register h1").inner_text() != "Daftar KHS":
+            if page.locator("#page-register h1").inner_text() != "Antrean Kerja":
                 raise AssertionError("Bahasa Indonesia did not translate the KHS Register.")
             detail_row = page.locator("#registerBody tr").filter(has_text="KHS-VIS-002").first
             detail_row.wait_for(state="visible", timeout=15_000)
@@ -441,7 +447,7 @@ def main() -> int:
             page.locator("#closeDialog").click()
             page.locator("#languageToggle").click()
             page.wait_for_function("document.documentElement.lang === 'en'", timeout=10_000)
-            if page.locator("#page-register h1").inner_text() != "KHS Register":
+            if page.locator("#page-register h1").inner_text() != "Work Queue":
                 raise AssertionError("Switching back to English did not restore the original text.")
             print("Bilingual browser check passed: navigation, API-backed detail, closure dialog, placeholder, and preference persistence.")
 
@@ -724,6 +730,81 @@ def main() -> int:
         except Exception as error:
             capture_errors.append(f"Workflow analytics and WIP drill-down interaction: {error}")
             print(f"FAILED workflow analytics and WIP drill-down interaction: {error}")
+
+        # P0 Work Queue saved-view and ownership-separation checks.
+        try:
+            page.set_viewport_size({"width": 1440, "height": 1000})
+            page.locator('a.nav-link[data-page="register"]').click(timeout=10_000)
+            page.locator("#page-register.active").wait_for(timeout=15_000)
+            page.wait_for_load_state("networkidle", timeout=20_000)
+
+            def choose_work_view(view_name: str) -> None:
+                with page.expect_response(
+                    lambda response: "/api/dashboard/khs?" in response.url
+                    and f"work_view={view_name}" in response.url
+                ) as saved_view_response:
+                    page.locator(f'[data-work-queue-view="{view_name}"]').click(timeout=10_000)
+                if saved_view_response.value.status != 200:
+                    raise AssertionError(
+                        f"Work Queue view {view_name} returned {saved_view_response.value.status}"
+                    )
+                page.wait_for_function(
+                    "(name) => Array.from(document.querySelectorAll('[data-work-queue-view]')).some((el) => el.dataset.workQueueView === name && el.getAttribute('aria-pressed') === 'true')",
+                    arg=view_name,
+                    timeout=10_000,
+                )
+
+            choose_work_view("all")
+            page.locator("#registerBody tr").filter(has_text="KHS-VIS-007").first.wait_for(
+                state="visible", timeout=10_000
+            )
+
+            # LP view must include LP-completed records as well as active LP work.
+            choose_work_view("lp")
+            page.locator("#registerBody tr").filter(has_text="KHS-VIS-006").first.wait_for(
+                state="visible", timeout=10_000
+            )
+
+            # PIC is not substituted with the waiting party or next-action text.
+            choose_work_view("all")
+            ownership_row = page.locator("#registerBody tr").filter(has_text="KHS-VIS-001").first
+            ownership_row.wait_for(state="visible", timeout=10_000)
+            ownership_cells = ownership_row.locator("td")
+            if "Unassigned" not in ownership_cells.nth(2).inner_text():
+                raise AssertionError("Missing Action Owner must be shown as Unassigned.")
+            if "Business Unit" not in ownership_cells.nth(3).inner_text():
+                raise AssertionError("Waiting On must display the recorded waiting party.")
+            if "Final scope confirmation" not in ownership_cells.nth(4).inner_text():
+                raise AssertionError("Next Action must display the recorded next-action context.")
+
+            # Unassigned WIP is explicitly discoverable.
+            choose_work_view("unassigned")
+            page.locator("#registerBody tr").filter(has_text="KHS-VIS-001").first.wait_for(
+                state="visible", timeout=10_000
+            )
+
+            # Clear all returns to the Active WIP default, including from LP saved view.
+            choose_work_view("lp")
+            page.locator("#activeRegisterFilters .clear-all-filters").click(timeout=10_000)
+            page.wait_for_function(
+                "Array.from(document.querySelectorAll('[data-work-queue-view]')).some((el) => el.dataset.workQueueView === 'active' && el.getAttribute('aria-pressed') === 'true')",
+                timeout=10_000,
+            )
+
+            # Analytics drill-down must not inherit the prior LP saved view.
+            page.locator('a.nav-link[data-page="workflow"]').click(timeout=10_000)
+            page.locator("#page-workflow.active").wait_for(timeout=15_000)
+            page.wait_for_load_state("networkidle", timeout=20_000)
+            page.locator("#operationsStageBody [data-operations-stage]").first.click(timeout=10_000)
+            page.locator("#page-register.active").wait_for(timeout=15_000)
+            page.wait_for_function(
+                "Array.from(document.querySelectorAll('[data-work-queue-view]')).some((el) => el.dataset.workQueueView === 'active' && el.getAttribute('aria-pressed') === 'true')",
+                timeout=10_000,
+            )
+            print("Lean P0 Work Queue browser checks passed: saved views, completed LP inclusion, explicit unassigned PIC, separate waiting party/next action, clear-all reset, and analytics drill-down.")
+        except Exception as error:
+            capture_errors.append(f"Lean P0 Work Queue interactions: {error}")
+            print(f"FAILED Lean P0 Work Queue interactions: {error}")
 
         browser.close()
 

@@ -4302,3 +4302,80 @@ button:disabled {
     grid-column: 1 / -1;
   }
 }
+
+
+/* Lean P0: keep LP as a saved-view shortcut inside the single Work Queue. */
+.nav-link-sub {
+  min-height: 35px;
+  margin-left: 17px;
+  padding-left: 11px;
+  border-left: 1px solid rgba(174,187,208,.28);
+  border-radius: 0 7px 7px 0;
+  font-size: 11px;
+}
+.nav-link-sub .nav-icon {
+  width: 17px;
+  flex-basis: 17px;
+}
+.work-queue-views {
+  display: flex;
+  gap: 7px;
+  max-width: 100%;
+  margin: 1px 0 12px;
+  padding: 4px 0 9px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+}
+.work-queue-view {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+  color: #64738a;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.work-queue-view:hover {
+  border-color: #bdcce0;
+  background: #f8faff;
+}
+.work-queue-view.is-active,
+.work-queue-view[aria-pressed="true"] {
+  border-color: #315fae;
+  background: #edf3ff;
+  color: #315fae;
+}
+#registerBody td:nth-child(3) .status-warning {
+  display: inline-flex;
+  margin: 0;
+}
+#registerBody td:nth-child(4),
+#registerBody td:nth-child(5) {
+  min-width: 145px;
+  max-width: 260px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+#registerBody td:nth-child(5) .cell-primary {
+  line-height: 1.45;
+}
+#registerBody td:nth-child(6) .cell-secondary {
+  white-space: normal;
+}
+@media (max-width: 760px) {
+  .work-queue-views {
+    margin-right: -4px;
+    padding-bottom: 8px;
+  }
+  .work-queue-view {
+    min-height: 36px;
+    padding: 0 11px;
+  }
+}
