@@ -538,6 +538,17 @@ def main() -> int:
                 "WIP analytics browser check passed: bucket reconciliation, median/P90/oldest ordering, "
                 "all five aging bands, normal 31+ drill-down, and inconsistent-history drill-down."
             )
+
+            # Phase 1 drill-down leaves an active Register filter. Reset it
+            # before the independent Phase 2/3 browser scenarios.
+            phase1_clear_filters = page.locator('#activeRegisterFilters [data-clear-filter="all"]')
+            if phase1_clear_filters.count():
+                phase1_clear_filters.click(timeout=10_000)
+                page.wait_for_load_state("networkidle", timeout=20_000)
+            page.locator('#registerBody [data-view-khs="KHS-VIS-002"]').wait_for(
+                state="visible", timeout=15_000
+            )
+
             try:
                 # Phase 2 browser validation: reject an out-of-order date, then
                 # record the next allowed MI milestone and verify the derived next step.
