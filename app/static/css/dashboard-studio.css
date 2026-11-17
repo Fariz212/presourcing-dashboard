@@ -4142,3 +4142,8 @@ button:disabled {
   .process-duration-days{grid-column:2;grid-row:1}
   .process-duration-summary strong{font-size:16px}
 }
+
+.status-not_proceeded{background:#fff0ec;color:#a54c40}
+.lp-timeline-item.stopped .lp-timeline-marker{border-color:#d48d83;background:#fff0ec;color:#a54c40}
+.lp-timeline-item.not-reached{opacity:.62}
+.lp-timeline-item.not-reached .lp-timeline-marker{border-style:dashed}
