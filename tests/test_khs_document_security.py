@@ -113,7 +113,8 @@ def test_document_upload_and_download_round_trip_verifies_checksum(monkeypatch, 
     assert stored_path.read_bytes() == original
     assert stored["file_sha256"] == sha256(original).hexdigest()
     assert len(pool.connection_object.audit_entries) == 1
-    audit_changes = pool.connection_object.audit_entries[0][4]
+    audit_payload = pool.connection_object.audit_entries[0][4]
+    audit_changes = getattr(audit_payload, "obj", audit_payload)
     assert audit_changes["after"]["file_sha256"] == sha256(original).hexdigest()
     assert audit_changes["after"]["file_size_bytes"] == len(original)
 

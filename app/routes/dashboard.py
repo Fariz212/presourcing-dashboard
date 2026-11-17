@@ -2295,6 +2295,7 @@ def upload_khs_document(khs_id):
     digest = hashlib.sha256(payload).hexdigest()
     mime_type = mimetypes.guess_type(original_name)[0] or "application/octet-stream"
 
+    target_created = False
     try:
         with get_db_pool().connection() as conn, conn.transaction():
             exists = conn.execute(
@@ -2307,6 +2308,7 @@ def upload_khs_document(khs_id):
             target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
             target.parent.chmod(0o700)
             with target.open("xb") as stored_file:
+                target_created = True
                 stored_file.write(payload)
             target.chmod(0o600)
 
@@ -2348,7 +2350,8 @@ def upload_khs_document(khs_id):
             },
         ), 201
     except Exception:
-        target.unlink(missing_ok=True)
+        if target_created:
+            target.unlink(missing_ok=True)
         current_app.logger.exception("KHS document upload failed.")
         return jsonify(success=False, message="Unable to save KHS evidence document."), 500
 
@@ -2379,11 +2382,11 @@ def download_khs_document(document_id):
                            message="Stored document is unavailable."), 404
 
         max_bytes = int(current_app.config.get("MAX_CONTENT_LENGTH", 16 * 1024 * 1024))
-        if file_path.stat().st_size > max_bytes:
+        with file_path.open("rb") as stored_file:
+            payload = stored_file.read(max_bytes + 1)
+        if len(payload) > max_bytes:
             return jsonify(success=False, code="DOCUMENT_SIZE_INVALID",
                            message="Stored document exceeds the permitted download size."), 409
-
-        payload = file_path.read_bytes()
         expected_digest = document.get("file_sha256")
         if (
             not isinstance(expected_digest, str)
