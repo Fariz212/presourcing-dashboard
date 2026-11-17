@@ -194,9 +194,10 @@ const EN_ID = {
 "Dispatch":"Penerusan","BOQ confirmation":"Konfirmasi BOQ","Negotiation":"Negosiasi","Final negotiation":"Negosiasi final",
 "Last updated":"Terakhir diperbarui","Unassigned":"Belum ditetapkan",
 "days overdue":"hari terlambat","days remaining":"hari tersisa",
-"Request failed":"Permintaan gagal","Please try again.":"Silakan coba lagi."
-
+"Request failed":"Permintaan gagal","Please try again.":"Silakan coba lagi.",
 "Contract Monitoring & Tracking":"Pemantauan & Pelacakan Kontrak",
+"KHS Contract Creation Management":"Pengelolaan Pembuatan Kontrak KHS",
+"Director":"Direktur",
 "CONTRACT OPERATIONS":"OPERASIONAL KONTRAK",
 "DATA MANAGEMENT":"PENGELOLAAN DATA",
 "Operations":"Operasional",
@@ -461,6 +462,9 @@ function getLanguage(){try{return localStorage.getItem("khs-language")==="en"?"e
 function setLanguage(language){
   const lang=language==="en"?"en":"id";
   document.documentElement.lang=lang;
+  document.title=tr("Contract Monitoring & Tracking",lang);
+  const description=document.querySelector('meta[name="description"]');
+  if(description) description.setAttribute("content",tr("KHS Contract Creation Management",lang));
   walk(document,lang);
   document.querySelectorAll("[data-khs-language]").forEach(b=>{const active=b.dataset.khsLanguage===lang;b.classList.toggle("is-active",active);b.setAttribute("aria-pressed",String(active));});
   try{localStorage.setItem("khs-language",lang);}catch(_){}
