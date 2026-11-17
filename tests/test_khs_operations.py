@@ -3,6 +3,7 @@ from datetime import date
 from app.routes.dashboard import (
     _guided_progress_date_error,
     _guided_progress_definition,
+    _workflow_stage_identity,
     _operations_stage_query,
     _operations_stage_totals,
     _rank_operations_stages,
@@ -178,3 +179,110 @@ def test_bottleneck_ranking_uses_wip_then_p90_then_oldest_and_leaves_empty_stage
         "OLDEST": 2,
         "EMPTY": None,
     }
+
+
+
+@pytest.mark.parametrize(
+    ("lp_stage_key", "field", "label"),
+    [
+        ("contract_team", "lp_contract_team_completion_date", "Contract Team completed"),
+        ("junior_manager", "lp_junior_manager_approval_date", "Junior Manager approval recorded"),
+        ("senior_manager", "lp_senior_manager_approval_date", "Senior Manager approval recorded"),
+        ("general_manager", "lp_gm_scm_approval_date", "GM SCM approval recorded"),
+        ("director", "lp_completion_date", "Director sign-off recorded"),
+    ],
+)
+def test_guided_progress_maps_every_lp_approval_stage(lp_stage_key, field, label):
+    record = {
+        "workflow_stage_code": "LP_CIRCULATION",
+        "current_stage_code": "LP_CIRCULATION",
+        "lp_stage_key": lp_stage_key,
+        "lp_circulation_start_date": date(2026, 10, 1),
+        "lp_contract_team_completion_date": None,
+        "lp_junior_manager_approval_date": None,
+        "lp_senior_manager_approval_date": None,
+        "lp_gm_scm_approval_date": None,
+        "lp_completion_date": None,
+    }
+    definition = _guided_progress_definition(record)
+    assert definition["field"] == field
+    assert definition["label"] == label
+    assert definition["stage_code"] == "LP_CIRCULATION"
+    assert definition["stage_key"] == lp_stage_key
+
+
+def test_guided_progress_does_not_offer_a_milestone_for_ambiguous_legacy_lp_history():
+    for stage_key in ("prerequisite_exception", "legacy_incomplete", "legacy_unverified", "completed", "not_started"):
+        record = {
+            "workflow_stage_code": "LP_CIRCULATION",
+            "current_stage_code": "LP_CIRCULATION",
+            "lp_stage_key": stage_key,
+        }
+        assert _guided_progress_definition(record) is None
+
+
+def test_khs_injection_preparation_and_injection_have_distinct_stage_identity():
+    preparation = {
+        "workflow_stage_code": "KHS_INJECTION",
+        "current_stage_code": "KHS_INJECTION",
+        "lp_completion_date": date(2026, 11, 10),
+        "khs_inject_start_date": None,
+        "khs_inject_completion_date": None,
+    }
+    execution = {
+        **preparation,
+        "khs_inject_start_date": date(2026, 11, 12),
+    }
+    assert _workflow_stage_identity(preparation) == ("KHS_INJECTION", "injection_preparation")
+    assert _workflow_stage_identity(execution) == ("KHS_INJECTION", "khs_injection")
+    assert _guided_progress_definition(preparation)["field"] == "khs_inject_start_date"
+    assert _guided_progress_definition(preparation)["stage_key"] == "injection_preparation"
+    assert _guided_progress_definition(execution)["field"] == "khs_inject_completion_date"
+    assert _guided_progress_definition(execution)["stage_key"] == "khs_injection"
+
+
+@pytest.mark.parametrize(
+    ("field", "previous", "next_field"),
+    [
+        ("lp_contract_team_completion_date", "lp_circulation_start_date", "lp_junior_manager_approval_date"),
+        ("lp_junior_manager_approval_date", "lp_contract_team_completion_date", "lp_senior_manager_approval_date"),
+        ("lp_senior_manager_approval_date", "lp_junior_manager_approval_date", "lp_gm_scm_approval_date"),
+        ("lp_gm_scm_approval_date", "lp_senior_manager_approval_date", "lp_completion_date"),
+        ("lp_completion_date", "lp_gm_scm_approval_date", "khs_inject_start_date"),
+        ("khs_inject_start_date", "lp_completion_date", "khs_inject_completion_date"),
+        ("khs_inject_completion_date", "khs_inject_start_date", None),
+    ],
+)
+def test_guided_progress_rejects_dates_before_or_after_neighboring_milestones(field, previous, next_field):
+    record = {previous: date(2026, 11, 10)}
+    if next_field:
+        record[next_field] = date(2026, 11, 12)
+    assert _guided_progress_date_error(record, field, date(2026, 11, 9))[0] == "MILESTONE_BEFORE_PREVIOUS"
+    if next_field:
+        assert _guided_progress_date_error(record, field, date(2026, 11, 13))[0] == "MILESTONE_AFTER_NEXT"
+
+
+def test_guided_lp_start_requires_both_gm_approval_and_legal_submission():
+    record = {
+        "mi_gm_approval_date": None,
+        "legal_submission_date": date(2026, 11, 10),
+        "lp_circulation_start_date": None,
+        "lp_contract_team_completion_date": None,
+        "lp_junior_manager_approval_date": None,
+        "lp_senior_manager_approval_date": None,
+        "lp_gm_scm_approval_date": None,
+        "lp_completion_date": None,
+    }
+    assert _guided_progress_date_error(record, "lp_circulation_start_date", date(2026, 11, 11))[0] == "MI_GM_REQUIRED"
+    record["mi_gm_approval_date"] = date(2026, 11, 9)
+    assert _guided_progress_date_error(record, "lp_circulation_start_date", date(2026, 11, 8))[0] == "MILESTONE_BEFORE_PREVIOUS"
+    assert _guided_progress_date_error(record, "lp_circulation_start_date", date(2026, 11, 11)) is None
+
+
+def test_guided_progress_rejects_injection_start_without_lp_completion_or_injection_completion_without_start():
+    assert _guided_progress_date_error(
+        {"lp_completion_date": None}, "khs_inject_start_date", date(2026, 11, 11)
+    ) is None  # Stage derivation cannot enter KHS_INJECTION without LP completion.
+    assert _guided_progress_date_error(
+        {"khs_inject_start_date": None}, "khs_inject_completion_date", date(2026, 11, 11)
+    )[0] == "MILESTONE_BEFORE_PREVIOUS"
