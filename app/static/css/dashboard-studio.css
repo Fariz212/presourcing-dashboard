@@ -4217,3 +4217,22 @@ button:disabled {
   #detailDialog .dialog-header{align-items:flex-start}
   #detailDialog .detail-header-actions{max-width:58%;justify-content:flex-end}
 }
+
+/* On compact screens, the operations matrices become labelled record cards. */
+@media (max-width: 920px) {
+  .operations-table-panel .table-wrap {
+    overflow: visible;
+  }
+  .operations-table-panel .table-wrap table,
+  .operations-table-panel .table-wrap tbody {
+    width: 100%;
+    min-width: 0;
+  }
+  .operations-table-panel .table-wrap tbody tr {
+    min-width: 0;
+  }
+  .operations-table-panel .table-wrap tbody td {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+}
