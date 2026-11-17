@@ -118,10 +118,18 @@ def main() -> int:
                     page.wait_for_function("document.documentElement.lang === 'id'")
                     if page.locator("#page-overview h1").inner_text() != "Pemantauan & Pelacakan Kontrak":
                         raise AssertionError("Indonesian default locale was not applied to the overview heading")
+                    if page.title() != "Pemantauan & Pelacakan Kontrak":
+                        raise AssertionError(f"Indonesian document title was not applied: {page.title()!r}")
                     page.locator('[data-khs-language="en"]').click(timeout=10_000)
                     page.wait_for_function("document.documentElement.lang === 'en'")
                     if page.locator("#page-overview h1").inner_text() != "Contract Monitoring & Tracking":
                         raise AssertionError("English locale did not restore the overview heading")
+                    if page.title() != "Contract Monitoring & Tracking":
+                        raise AssertionError(f"English document title was not applied: {page.title()!r}")
+                    page.reload(wait_until="networkidle")
+                    page.wait_for_function("document.documentElement.lang === 'en'")
+                    if page.locator("#page-overview h1").inner_text() != "Contract Monitoring & Tracking":
+                        raise AssertionError("English preference was not restored after reload")
                     page.locator('[data-khs-language="id"]').click(timeout=10_000)
                     page.wait_for_function("document.documentElement.lang === 'id'")
                 elif page_name != current_page:
@@ -136,6 +144,22 @@ def main() -> int:
                 active_view = page.locator(f"#page-{page_name}.active")
                 active_view.wait_for(state="visible", timeout=15_000)
                 page.wait_for_load_state("networkidle", timeout=20_000)
+                expected_indonesian_headings = {
+                    "overview": "Pemantauan & Pelacakan Kontrak",
+                    "requests": "Pengelolaan Permintaan",
+                    "register": "Daftar KHS",
+                    "lp": "Sirkulasi LP",
+                    "contracts": "Siklus Kontrak",
+                    "workflow": "Pemantauan Alur Kerja",
+                    "imports": "Impor / Ekspor Excel",
+                    "activity": "Aktivitas & Log Audit",
+                }
+                actual_heading = page.locator(f"#page-{page_name} h1").inner_text()
+                expected_heading = expected_indonesian_headings[page_name]
+                if actual_heading != expected_heading:
+                    raise AssertionError(
+                        f"{page_name} Indonesian heading: expected {expected_heading!r}, got {actual_heading!r}"
+                    )
                 page.set_viewport_size({"width": width, "height": height})
                 page.wait_for_timeout(500)
 
