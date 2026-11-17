@@ -306,8 +306,22 @@
     <div class="dialog-footer"><button type="button" class="secondary-button" id="cancelReopen">Cancel</button><button type="submit" class="primary-button" id="confirmReopen">Reopen KHS</button></div>
   </form>
 </dialog>
-<dialog id="detailDialog" class="detail-dialog"><div class="dialog-header"><div><div class="eyebrow">KHS WORKBENCH</div><h2 id="detailTitle">KHS Details</h2><p class="detail-subtitle" id="detailSubtitle"></p></div><div class="detail-header-actions"><button type="button" class="secondary-button" id="updateProgressButton" hidden>Update Progress</button><button type="button" class="secondary-button" id="scheduleFollowUpButton" hidden>Schedule Follow-up</button><button type="button" class="danger-button" id="closeKhsButton">Close KHS</button><button type="button" class="primary-button" id="reopenKhsButton" hidden>Reopen KHS</button><button class="dialog-close" id="closeDialog">×</button></div></div><div id="detailStatus" class="dialog-status-row"></div>
+<dialog id="detailDialog" class="detail-dialog">
+<div class="dialog-header">
+  <div class="workbench-header-title">
+    <div><div class="eyebrow">KHS WORKBENCH</div><h2 id="detailTitle">KHS Details</h2><p class="detail-subtitle" id="detailSubtitle"></p></div>
+    <button type="button" class="dialog-close" id="closeDialog" aria-label="Close KHS workbench">×</button>
+  </div>
+  <div class="detail-header-actions">
+    <button type="button" class="secondary-button" id="updateProgressButton" hidden>Update Progress</button>
+    <button type="button" class="secondary-button" id="scheduleFollowUpButton" hidden>Schedule Follow-up</button>
+    <button type="button" class="danger-button" id="closeKhsButton">Close KHS</button>
+    <button type="button" class="primary-button" id="reopenKhsButton" hidden>Reopen KHS</button>
+  </div>
+</div>
+<div id="detailStatus" class="dialog-status-row"></div>
 <nav class="workbench-nav" aria-label="KHS workbench sections">
+  <button type="button" data-workbench-target="workSummarySection" aria-current="location">Overview</button>
   <button type="button" data-workbench-target="processDurationSection">Process history</button>
   <button type="button" data-workbench-target="lpTimelineSection">LP milestones</button>
   <button type="button" data-workbench-target="contractDetailSection">Contract</button>
@@ -315,9 +329,31 @@
   <button type="button" data-workbench-target="followUpSection">Follow-ups</button>
   <button type="button" data-workbench-target="documentSection">Evidence</button>
 </nav>
+<section id="workSummarySection" class="work-summary-section" aria-labelledby="workSummaryTitle">
+  <div class="work-summary-heading">
+    <div><div class="eyebrow">CURRENT WORK STATE</div><h3 id="workSummaryTitle">Work Summary</h3><p>Current stage, ownership, and the next evidence-backed action for this KHS.</p></div>
+    <span id="workSummaryState" class="status-badge">—</span>
+  </div>
+  <div class="work-summary-grid">
+    <article class="work-summary-card work-summary-stage">
+      <span>Current Stage</span><strong id="workSummaryStage">—</strong><small id="workSummaryStageAge">—</small>
+    </article>
+    <article class="work-summary-card">
+      <span>Action Owner / PIC</span><strong id="workSummaryOwner">—</strong><small id="workSummaryOwnerMeta">Accountability for the next action</small>
+    </article>
+    <article class="work-summary-card">
+      <span>Waiting For</span><strong id="workSummaryWaitingFor">—</strong><small id="workSummaryWaitingReason">No waiting reason recorded</small>
+    </article>
+    <article class="work-summary-card work-summary-next">
+      <span>Next Milestone</span><strong id="workSummaryNextMilestone">—</strong><small id="workSummaryNextMeta">—</small>
+    </article>
+  </div>
+  <div id="workSummaryNotice" class="work-summary-notice" role="note" hidden></div>
+</section>
 <section id="processDurationSection" class="process-duration-section" aria-labelledby="processDurationTitle">
   <div class="lp-timeline-heading"><div><div class="eyebrow">END-TO-END PROCESS</div><h3 id="processDurationTitle">Process Duration History</h3><p>Elapsed time is calculated from recorded milestone dates.</p></div><span id="totalProcessDuration" class="status-badge">—</span></div>
   <div class="process-duration-summary"><div><span>Total processing time</span><strong id="totalProcessingDays">—</strong></div><div><span>LP circulation time</span><strong id="lpProcessingDays">—</strong></div></div>
+  <div id="processDurationNotice" class="process-duration-notice" role="note" hidden></div>
   <div id="processDurationHistory" class="process-duration-list"></div>
   <p class="form-hint">Missing or inconsistent milestone dates are shown as incomplete history; the system does not estimate missing dates.</p>
 </section>
@@ -350,13 +386,16 @@
 <section id="contractDetailSection" class="contract-detail-summary"><div class="contract-detail-heading"><div><div class="eyebrow">POST-INJECTION</div><h3>Contract Lifecycle</h3></div><span id="contractDetailStatus" class="status-badge">—</span></div><div id="contractDetailGrid" class="contract-detail-grid"></div></section>
 <div id="detailGrid" class="detail-groups"></div>
 <section id="followUpSection" class="follow-up-section">
-  <div class="document-section-heading"><div><div class="eyebrow">NEXT ACTION CONTROL</div><h3>Follow-up reminders</h3><p>Schedule an in-app reminder for the current KHS stage and assign the person to follow up.</p></div></div>
+  <div class="document-section-heading"><div><div class="eyebrow">NEXT ACTION CONTROL</div><h3>Follow-up reminders</h3><p>Schedule an in-app reminder for the current KHS stage and assign the person to follow up.</p><small id="followUpCurrentStage" class="follow-up-current-stage">—</small></div></div>
+  <div id="followUpComposer">
   <form id="followUpForm" class="follow-up-form">
     <label>Due date<input type="date" id="followUpDueDate" name="due_date" required></label>
     <label>Follow up to / PIC<input type="text" id="followUpTo" name="follow_up_to" maxlength="160" placeholder="Person responsible for follow-up"></label>
     <label class="follow-up-note-field">Follow-up note<textarea id="followUpNote" name="note" rows="2" maxlength="1000" required placeholder="What needs to be followed up?"></textarea></label>
     <button class="primary-button" id="saveFollowUpButton" type="submit">Schedule follow-up</button>
   </form>
+  </div>
+  <p id="followUpReadOnlyNotice" class="follow-up-readonly" hidden>This KHS has no active stage for new follow-ups. Existing reminders remain visible below.</p>
   <div id="followUpList" class="follow-up-list"><p class="muted">No follow-ups loaded.</p></div>
 </section>
 <section id="documentSection" class="document-section">
