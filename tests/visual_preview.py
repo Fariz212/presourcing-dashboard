@@ -160,6 +160,17 @@ def main() -> int:
                     raise AssertionError(
                         f"{page_name} Indonesian heading: expected {expected_heading!r}, got {actual_heading!r}"
                     )
+                expected_placeholders = {
+                    "lp": ("#lpSearch", "Cari KHS, permintaan, vendor…"),
+                    "contracts": ("#contractSearch", "Cari KHS, permintaan, vendor…"),
+                }
+                if page_name in expected_placeholders:
+                    selector, expected_placeholder = expected_placeholders[page_name]
+                    actual_placeholder = page.locator(selector).get_attribute("placeholder")
+                    if actual_placeholder != expected_placeholder:
+                        raise AssertionError(
+                            f"{page_name} Indonesian placeholder: expected {expected_placeholder!r}, got {actual_placeholder!r}"
+                        )
                 page.set_viewport_size({"width": width, "height": height})
                 page.wait_for_timeout(500)
 
