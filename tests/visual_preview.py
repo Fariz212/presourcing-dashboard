@@ -457,7 +457,7 @@ def main() -> int:
             if "MI GM APPROVAL" not in active_filters:
                 raise AssertionError("The active register stage filter was not displayed.")
             print("WIP analytics browser check passed: active WIP, bottleneck rank, unconfigured SLA state, and stage + 31+ day register drill-down.")
-        try:
+            try:
                 # Phase 2 browser validation: reject an out-of-order date, then
                 # record the next allowed MI milestone and verify the derived next step.
                 detail_row = page.locator("#registerBody tr").filter(has_text="KHS-VIS-002").first
@@ -515,9 +515,9 @@ def main() -> int:
                 if "PROGRESS_UPDATED" not in page.locator("#detailGrid").inner_text():
                     raise AssertionError("Guided progress update was not written to the KHS activity history.")
                 print("Guided progress browser check passed: chronology guard, MI GM update, next-stage derivation, and audit entry.")
-        except Exception as error:
-            capture_errors.append(f"Guided progress browser interaction: {error}")
-            print(f"FAILED guided progress browser interaction: {error}")
+            except Exception as error:
+                capture_errors.append(f"Guided progress browser interaction: {error}")
+                print(f"FAILED guided progress browser interaction: {error}")
             page.locator("#closeDialog").click()
 
         except Exception as error:
