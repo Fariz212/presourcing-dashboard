@@ -3069,14 +3069,14 @@ def create_khs_follow_up(khs_id):
             if stage_code in (None, "COMPLETED", "NOT_PROCEEDED"):
                 return jsonify(success=False, code="NO_ACTIVE_STAGE",
                                message="This KHS has no active workflow stage."),409
-            cur.execute(
+            follow_up_row = conn.execute(
                 """INSERT INTO khs_follow_ups
                    (khs_id, stage_code, stage_key, due_date, follow_up_to, note)
                    VALUES (%s,%s,%s,%s,%s,%s)
                    RETURNING id, khs_id, stage_code, stage_key, due_date, follow_up_to, note, status, created_at""",
                 (khs_id, stage_code, stage_key, data["due_date"], data.get("follow_up_to"), data["note"]),
-            )
-            follow_up = _row_dict(dict(cur.fetchone()))
+            ).fetchone()
+            follow_up = _row_dict(dict(follow_up_row))
             if data.get("follow_up_to"):
                 conn.execute(
                     "UPDATE khs_items SET action_owner=%s, updated_at=NOW(), last_updated_date=CURRENT_DATE WHERE khs_id=%s",
