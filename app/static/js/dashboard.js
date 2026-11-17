@@ -706,12 +706,12 @@ function translateText(value, language = currentLanguage) {
   if (match) return leading + "tersisa " + match[1] + " hari" + trailing;
   match = core.match(/^(\d+) days? overdue$/i);
   if (match) return leading + "terlambat " + match[1] + " hari" + trailing;
-  match = core.match(/^([+↻↓]\\s*)(.+)$/);
+  match = core.match(/^([+↻↓]\s*)(.+)$/);
   if (match) {
     const translatedSuffix = translateText(match[2], language);
     if (translatedSuffix !== match[2]) return leading + match[1] + translatedSuffix + trailing;
   }
-  match = core.match(/^More filters · (\\d+) active$/);
+  match = core.match(/^More filters · (\d+) active$/);
   if (match) return leading + "Filter lainnya · " + match[1] + " aktif" + trailing;
   match = core.match(/^Open KHS (.+)$/);
   if (match) return leading + "Buka KHS " + match[1] + trailing;
