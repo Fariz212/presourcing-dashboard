@@ -55,7 +55,9 @@ jobs:
       - name: Compile application and tests
         run: python -m compileall -q app tests
       - name: Check dashboard JavaScript syntax
-        run: node --check app/static/js/dashboard.js
+        run: |
+          node --check app/static/js/dashboard.js
+          node --check app/static/js/i18n.js
       - name: Run test suite
         run: python -m pytest -q
 
