@@ -199,6 +199,13 @@ const EN_ID = {
 "KHS Contract Creation Management":"Pengelolaan Pembuatan Kontrak KHS",
 "Director":"Direktur",
 "Search LP circulation records":"Cari data sirkulasi LP",
+"Search KHS, request, vendor…":"Cari KHS, permintaan, vendor…",
+"Action required · 1 month":"Perlu tindakan · 1 bulan",
+"Renewal watch · 3 months":"Pantauan perpanjangan · 3 bulan",
+"Renewal preparation · 6 months":"Persiapan perpanjangan · 6 bulan",
+"Active":"Aktif",
+"Not fully injected":"Belum diinjeksi penuh",
+"Renewal action due":"Tindakan perpanjangan perlu dilakukan",
 "Choose language":"Pilih bahasa",
 "CONTRACT OPERATIONS":"OPERASIONAL KONTRAK",
 "DATA MANAGEMENT":"PENGELOLAAN DATA",
@@ -454,6 +461,10 @@ function walk(root,lang){
   if(root.nodeType!==1&&root!==document)return;
   const target=root===document?document.body:root;
   if(!target)return;
+  if(target.nodeType===1){
+    const dateInputs=target.matches&&target.matches('input[type="date"]')?[target]:[];
+    dateInputs.concat(Array.from(target.querySelectorAll('input[type="date"]'))).forEach(input=>input.setAttribute("lang",lang==="id"?"id-ID":"en-GB"));
+  }
   if(target.nodeType===1&&!skip(target))ATTRS.forEach(a=>{if(target.hasAttribute(a)){const before=target.getAttribute(a),after=tr(before,lang);if(after!==before)target.setAttribute(a,after);}});
   const tree=document.createTreeWalker(target,NodeFilter.SHOW_TEXT),nodes=[];
   while(tree.nextNode())nodes.push(tree.currentNode);
@@ -464,6 +475,7 @@ function getLanguage(){try{return localStorage.getItem("khs-language")==="en"?"e
 function setLanguage(language){
   const lang=language==="en"?"en":"id";
   document.documentElement.lang=lang;
+  document.querySelectorAll('input[type="date"]').forEach(input=>{input.setAttribute("lang",lang==="id"?"id-ID":"en-GB");});
   const languageSwitch=document.querySelector(".language-switch");
   if(languageSwitch) languageSwitch.setAttribute("aria-label",lang==="id"?"Pilih bahasa":"Choose language");
   document.title=tr("Contract Monitoring & Tracking",lang);
