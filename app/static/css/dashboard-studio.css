@@ -4104,3 +4104,18 @@ button:disabled {
   #workflowCards .workflow-stage-bottom { align-items: flex-start; }
   #workflowCards .workflow-stage-action { margin-left: auto; }
 }
+
+/* Bilingual language control */
+.language-switch{display:inline-flex;align-items:center;gap:2px;padding:3px;border:1px solid #dfe5ee;border-radius:8px;background:#fff}
+.language-switch button{min-width:34px;min-height:27px;padding:0 8px;border:0;border-radius:5px;background:transparent;color:#718096;font-size:10px;font-weight:800;letter-spacing:.04em}
+.language-switch button:hover{background:#f4f6fa;color:#31435f}
+.language-switch button.is-active{background:#eaf1ff;color:#315fae}
+@media(max-width:760px){.topbar{gap:8px;align-items:center}.topbar-actions{gap:7px}.language-switch{flex-shrink:0}.language-switch button{min-width:31px}}
+@media(max-width:420px){.topbar-actions .system-status{display:none}.topbar-actions{gap:6px}.language-switch button{min-width:29px;padding:0 6px}}
+
+/* Locale-aware helper for native date fields */
+.date-input-wrap{position:relative;width:100%;min-width:0}
+.date-input-wrap input[type="date"]{width:100%}
+.date-format-hint{position:absolute;left:12px;top:50%;transform:translateY(-50%);z-index:1;pointer-events:none;color:#98a4b4;font-size:12px;line-height:1.2}
+.date-input-wrap.is-empty input[type="date"]::-webkit-datetime-edit{color:transparent}
+.date-input-wrap:not(.is-empty) .date-format-hint{display:none}

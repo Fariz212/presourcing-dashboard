@@ -31,6 +31,10 @@ def test_root_serves_dashboard_and_static_assets(monkeypatch, tmp_path):
     assert b"dashboard-premium.css" not in response.data
     assert b"dashboard-refresh.css" not in response.data
     assert b"dashboard.js" in response.data
+    assert b"js/i18n.js" in response.data
+    assert b'data-khs-language="id"' in response.data
+    assert b'data-khs-language="en"' in response.data
+    assert b'<html lang="id">' in response.data
 
     # API clients must retain the legacy JSON root response.
     json_response = client.get(
@@ -63,6 +67,12 @@ def test_root_serves_dashboard_and_static_assets(monkeypatch, tmp_path):
     assert b".filter-more-fields" in studio_css.data
     assert b"@media (max-width: 920px)" in studio_css.data
 
+
+    i18n = client.get("/static/js/i18n.js")
+    assert i18n.status_code == 200
+    assert b"khs-language" in i18n.data
+    assert b"EN_ID" in i18n.data
+    assert b"localStorage" in i18n.data
 
     javascript = client.get("/static/js/dashboard.js")
     assert javascript.status_code == 200

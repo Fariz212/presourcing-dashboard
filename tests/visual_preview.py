@@ -115,6 +115,23 @@ def main() -> int:
                         status = response.status if response is not None else "no response"
                         raise RuntimeError(f"Dashboard returned {status}")
                     current_page = "overview"
+                    page.wait_for_function("document.documentElement.lang === 'id'")
+                    if page.locator("#page-overview h1").inner_text() != "Pemantauan & Pelacakan Kontrak":
+                        raise AssertionError("Indonesian default locale was not applied to the overview heading")
+                    if page.title() != "Pemantauan & Pelacakan Kontrak":
+                        raise AssertionError(f"Indonesian document title was not applied: {page.title()!r}")
+                    page.locator('[data-khs-language="en"]').click(timeout=10_000)
+                    page.wait_for_function("document.documentElement.lang === 'en'")
+                    if page.locator("#page-overview h1").inner_text() != "Contract Monitoring & Tracking":
+                        raise AssertionError("English locale did not restore the overview heading")
+                    if page.title() != "Contract Monitoring & Tracking":
+                        raise AssertionError(f"English document title was not applied: {page.title()!r}")
+                    page.reload(wait_until="networkidle")
+                    page.wait_for_function("document.documentElement.lang === 'en'")
+                    if page.locator("#page-overview h1").inner_text() != "Contract Monitoring & Tracking":
+                        raise AssertionError("English preference was not restored after reload")
+                    page.locator('[data-khs-language="id"]').click(timeout=10_000)
+                    page.wait_for_function("document.documentElement.lang === 'id'")
                 elif page_name != current_page:
                     if width <= 760:
                         page.locator("#mobileNavToggle").click(timeout=10_000)
@@ -127,6 +144,33 @@ def main() -> int:
                 active_view = page.locator(f"#page-{page_name}.active")
                 active_view.wait_for(state="visible", timeout=15_000)
                 page.wait_for_load_state("networkidle", timeout=20_000)
+                expected_indonesian_headings = {
+                    "overview": "Pemantauan & Pelacakan Kontrak",
+                    "requests": "Pengelolaan Permintaan",
+                    "register": "Daftar KHS",
+                    "lp": "Sirkulasi LP",
+                    "contracts": "Siklus Kontrak",
+                    "workflow": "Pemantauan Alur Kerja",
+                    "imports": "Impor / Ekspor Excel",
+                    "activity": "Aktivitas & Log Audit",
+                }
+                actual_heading = page.locator(f"#page-{page_name} h1").inner_text()
+                expected_heading = expected_indonesian_headings[page_name]
+                if actual_heading != expected_heading:
+                    raise AssertionError(
+                        f"{page_name} Indonesian heading: expected {expected_heading!r}, got {actual_heading!r}"
+                    )
+                expected_placeholders = {
+                    "lp": ("#lpSearch", "Cari KHS, permintaan, vendor…"),
+                    "contracts": ("#contractSearch", "Cari KHS, permintaan, vendor…"),
+                }
+                if page_name in expected_placeholders:
+                    selector, expected_placeholder = expected_placeholders[page_name]
+                    actual_placeholder = page.locator(selector).get_attribute("placeholder")
+                    if actual_placeholder != expected_placeholder:
+                        raise AssertionError(
+                            f"{page_name} Indonesian placeholder: expected {expected_placeholder!r}, got {actual_placeholder!r}"
+                        )
                 page.set_viewport_size({"width": width, "height": height})
                 page.wait_for_timeout(500)
 
@@ -192,6 +236,16 @@ def main() -> int:
             except Exception as error:
                 capture_errors.append(f"{file_name}: {error}")
                 print(f"FAILED {file_name}: {error}")
+
+        # Use English for the remaining workflow assertions; captures above retain
+        # the Indonesian first-visit experience.
+        try:
+            page.locator('[data-khs-language="en"]').click(timeout=10_000)
+            page.wait_for_function("document.documentElement.lang === 'en'")
+            page.wait_for_load_state("networkidle", timeout=20_000)
+        except Exception as error:
+            capture_errors.append(f"Language switch to English: {error}")
+            print(f"FAILED language switch to English: {error}")
 
         # Verify the mobile navigation exposes every page without horizontal menu hunting.
         try:
@@ -366,8 +420,23 @@ def main() -> int:
             lp_form_section = page.locator("#dialogFields .form-section-lp-circulation")
             lp_form_section.wait_for(state="visible", timeout=10_000)
             lp_form_section.scroll_into_view_if_needed()
+            if page.locator(".date-format-hint").first.inner_text() != "Choose date":
+                raise AssertionError("English date-picker hint was not applied")
+            if page.locator('#dialogFields input[type="date"]').first.get_attribute("lang") != "en-GB":
+                raise AssertionError("English date input locale was not applied")
             capture_dialog("khs-form", "desktop", 1440, 1000)
             capture_dialog("khs-form", "mobile", 390, 844)
+            page.locator("#cancelRecord").click()
+            page.locator("#recordDialog").wait_for(state="hidden", timeout=10_000)
+
+            page.locator('[data-khs-language="id"]').click(timeout=10_000)
+            page.wait_for_function("document.documentElement.lang === 'id'")
+            page.locator("#createKhsButton").click(timeout=10_000)
+            page.locator("#recordDialog[open]").wait_for(state="visible", timeout=10_000)
+            if page.locator(".date-format-hint").first.inner_text() != "Pilih tanggal":
+                raise AssertionError("Indonesian date-picker hint was not applied")
+            if page.locator('#dialogFields input[type="date"]').first.get_attribute("lang") != "id-ID":
+                raise AssertionError("Indonesian date input locale was not applied")
             page.locator("#cancelRecord").click()
         except Exception as error:
             capture_errors.append(f"KHS detail/form interaction captures: {error}")

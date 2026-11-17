@@ -95,8 +95,12 @@ function fmt(value) {
   if (!value) return "—";
   const s = String(value);
   if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
-    const p = s.slice(0, 10).split("-");
-    return p[2] + "/" + p[1] + "/" + p[0];
+    const p = s.slice(0, 10).split("-").map(Number);
+    const date = new Date(Date.UTC(p[0], p[1] - 1, p[2]));
+    const language = window.KHS_I18N ? window.KHS_I18N.language() : "id";
+    return language === "id"
+      ? String(p[2]).padStart(2, "0") + "/" + String(p[1]).padStart(2, "0") + "/" + p[0]
+      : new Intl.DateTimeFormat("en-GB", {day:"2-digit", month:"short", year:"numeric", timeZone:"UTC"}).format(date);
   }
   return s;
 }
@@ -281,7 +285,7 @@ async function loadOverview() {
     set("overviewExpiring1m", contractSummary ? contractSummary.expiring_within_1_month : "—");
     set("overviewExpiredContracts", contractSummary ? contractSummary.expired : "—");
     set("overviewMissingContractDates", contractSummary ? contractSummary.missing_contract_dates : "—");
-    set("lastUpdated", new Date().toLocaleString());
+    set("lastUpdated", new Date().toLocaleString(window.KHS_I18N && window.KHS_I18N.language() === "id" ? "id-ID" : "en-GB"));
     const exceptions = d.data_quality.lp_started_without_mi_gm_approval;
     const alert = $("qualityAlert");
     if (alert) alert.hidden = !exceptions;
@@ -352,12 +356,12 @@ function renderAttention(rows) {
     const waitingFor = r.waiting_for ||
       (r.lp_started_without_mi_gm_approval ? "Review prerequisite" : "Review next action");
     return `<tr>
-      <td data-label="REQUEST / KHS"><span class="cell-primary">${esc(r.request_subject || "Untitled request")}</span>
-      <span class="cell-secondary">${esc(r.khs_id)} · ${esc(r.request_id)}</span></td>
-      <td data-label="VENDOR">${esc(r.vendor_name)}</td>
+      <td data-label="REQUEST / KHS"><span class="cell-primary" data-no-translate>${esc(r.request_subject || "Untitled request")}</span>
+      <span class="cell-secondary" data-no-translate>${esc(r.khs_id)} · ${esc(r.request_id)}</span></td>
+      <td data-label="VENDOR"><span data-no-translate>${esc(r.vendor_name)}</span></td>
       <td data-label="CURRENT STAGE">${esc(stage)}${exception}</td>
-      <td data-label="WAITING FOR / NEXT ACTION"><span class="cell-primary">${esc(waitingFor)}</span>
-      ${r.waiting_reason ? '<span class="cell-secondary">' + esc(r.waiting_reason) + "</span>" : ""}</td>
+      <td data-label="WAITING FOR / NEXT ACTION"><span class="cell-primary" data-no-translate>${esc(waitingFor)}</span>
+      ${r.waiting_reason ? '<span class="cell-secondary" data-no-translate>' + esc(r.waiting_reason) + "</span>" : ""}</td>
       <td data-label="STAGE AGE / UPDATED"><span class="cell-primary">${esc(age)}</span>
       <span class="cell-secondary">${esc(ageMeta)}</span></td>
       <td data-label="ACTION"><button class="view-button" data-view-khs="${esc(r.khs_id)}"
@@ -401,7 +405,7 @@ function renderVendorPortfolio(record) {
   const count = vendors.length;
   const label = count + (count === 1 ? " vendor" : " vendors");
   const names = vendors.map((name) =>
-    '<span class="vendor-name-chip">' + esc(name) + '</span>'
+    '<span class="vendor-name-chip" data-no-translate>' + esc(name) + '</span>'
   ).join("");
 
   return '<div class="vendor-summary">' +
@@ -421,10 +425,10 @@ async function loadRequests() {
   if (!body) return;
   if (!state.requests.length) emptyRow("requestBody", 7, "No request records found.");
   else body.innerHTML = state.requests.map((r) =>
-    "<tr><td><span class=\"cell-primary\">" + esc(r.request_subject) + "</span>" +
-    "<span class=\"cell-secondary\">" + esc(r.request_id) + "</span></td>" +
+    "<tr><td><span class=\"cell-primary\" data-no-translate>" + esc(r.request_subject) + "</span>" +
+    "<span class=\"cell-secondary\" data-no-translate>" + esc(r.request_id) + "</span></td>" +
     "<td>" + renderVendorPortfolio(r) + "</td>" +
-    "<td>" + esc(fmt(r.request_date)) + "</td><td>" + esc(r.requester_owner || "—") +
+    "<td>" + esc(fmt(r.request_date)) + "</td><td><span data-no-translate>" + esc(r.requester_owner || "—") + "</span>" +
     "</td><td>" + esc(r.total_khs) + "</td><td>" + esc(r.completed_khs) +
     "</td><td><button class=\"view-button\" data-edit-request=\"" + esc(r.request_id) + "\">Edit</button> " +
     "<button class=\"view-button\" data-add-child=\"" + esc(r.request_id) + "\">+ KHS</button></td></tr>"
@@ -531,15 +535,15 @@ async function loadRegister() {
         : r.lp_timeline_has_gaps
           ? '<span class="exception-label">Historical timeline gaps</span>' : "";
     return "<tr>" +
-      '<td><span class="cell-primary">' + esc(r.request_subject || "Untitled request") + '</span>' +
-      '<span class="cell-secondary">' + esc(r.vendor_name) + " · " + esc(r.khs_id) + '</span>' +
-      '<span class="cell-tertiary">' + esc(r.executor_name || r.executor_code || "Unassigned") + "</span></td>" +
+      '<td><span class="cell-primary" data-no-translate>' + esc(r.request_subject || "Untitled request") + '</span>' +
+      '<span class="cell-secondary" data-no-translate>' + esc(r.vendor_name) + " · " + esc(r.khs_id) + '</span>' +
+      '<span class="cell-tertiary" data-no-translate>' + esc(r.executor_name || r.executor_code || "Unassigned") + "</span></td>" +
       '<td><span class="cell-primary">' + esc(stage) + '</span>' +
       '<span class="cell-secondary">' + esc(stageAge) + "</span>" + exception + "</td>" +
       '<td><span class="status-badge status-' + esc(r.lp_status || "not_started") + '">' + esc(lpStatus) + "</span></td>" +
       "<td>" + injection + "</td>" +
-      '<td><span class="cell-primary">' + esc(r.waiting_for || (exception ? "Review data / prerequisite" : "No waiting owner recorded")) + '</span>' +
-      (r.waiting_reason ? '<span class="cell-secondary">' + esc(r.waiting_reason) + "</span>" : "") + "</td>" +
+      '<td><span class="cell-primary" data-no-translate>' + esc(r.waiting_for || (exception ? "Review data / prerequisite" : "No waiting owner recorded")) + '</span>' +
+      (r.waiting_reason ? '<span class="cell-secondary" data-no-translate>' + esc(r.waiting_reason) + "</span>" : "") + "</td>" +
       '<td><button type="button" class="view-button" data-view-khs="' + esc(r.khs_id) + '">Details</button></td>' +
       "</tr>";
   }).join("");
@@ -640,15 +644,15 @@ async function loadLPCirculation() {
         ? '<span class="exception-label">MI GM prerequisite exception</span>' : "";
       const legacyFlag = r.lp_legacy_unverified
         ? '<span class="exception-label">Legacy Director sign-off unverified</span>' : "";
-      return "<tr><td><span class=\"cell-primary\">" + esc(r.khs_id) + "</span>" +
-        "<span class=\"cell-secondary\">" + esc(r.vendor_name) + "</span></td>" +
-        "<td><span class=\"cell-primary\">" + esc(r.request_subject || "Untitled request") + "</span>" +
-        "<span class=\"cell-secondary\">" + esc(r.request_id) + "</span></td>" +
+      return "<tr><td><span class=\"cell-primary\" data-no-translate>" + esc(r.khs_id) + "</span>" +
+        "<span class=\"cell-secondary\" data-no-translate>" + esc(r.vendor_name) + "</span></td>" +
+        "<td><span class=\"cell-primary\" data-no-translate>" + esc(r.request_subject || "Untitled request") + "</span>" +
+        "<span class=\"cell-secondary\" data-no-translate>" + esc(r.request_id) + "</span></td>" +
         "<td><span class=\"cell-primary\">" + esc(r.lp_stage_label || "—") + "</span>" +
         prerequisiteFlag + legacyFlag +
-        (r.waiting_for ? "<span class=\"cell-secondary\">Waiting for " + esc(r.waiting_for) + "</span>" : "") + "</td>" +
+        (r.waiting_for ? "<span class=\"cell-secondary\">Waiting for <span data-no-translate>" + esc(r.waiting_for) + "</span></span>" : "") + "</td>" +
         "<td>" + esc(age) + "</td><td>" + esc(fmt(r.lp_circulation_start_date)) + "</td>" +
-        "<td>" + esc(r.waiting_reason || "—") + "</td><td>" + history + "</td>" +
+        "<td><span data-no-translate>" + esc(r.waiting_reason || "—") + "</span></td><td>" + history + "</td>" +
         "<td><button type=\"button\" class=\"view-button\" data-view-khs=\"" + esc(r.khs_id) + "\">Details</button></td></tr>";
     }).join("");
   }
@@ -733,10 +737,10 @@ async function loadContractLifecycle() {
       const badge = lifecycleBadgeClass(statusValue);
       const operationalStatus = r.contract_operational_status;
       const operationalBadge = contractOperationalBadgeClass(operationalStatus);
-      return "<tr><td><span class=\"cell-primary\">" + esc(r.khs_id) + "</span>" +
-        "<span class=\"cell-secondary\">" + esc(r.vendor_name) + "</span></td>" +
-        "<td><span class=\"cell-primary\">" + esc(r.request_subject || "Untitled request") + "</span>" +
-        "<span class=\"cell-secondary\">" + esc(r.request_id) + "</span></td>" +
+      return "<tr><td><span class=\"cell-primary\" data-no-translate>" + esc(r.khs_id) + "</span>" +
+        "<span class=\"cell-secondary\" data-no-translate>" + esc(r.vendor_name) + "</span></td>" +
+        "<td><span class=\"cell-primary\" data-no-translate>" + esc(r.request_subject || "Untitled request") + "</span>" +
+        "<span class=\"cell-secondary\" data-no-translate>" + esc(r.request_id) + "</span></td>" +
         "<td>" + esc(fmt(r.khs_inject_completion_date)) + "</td>" +
         "<td>" + esc(fmt(r.contract_start_date)) + " – " + esc(fmt(r.contract_end_date)) + "</td>" +
         "<td>" + esc(r.contract_duration_label || "—") + "</td>" +
@@ -929,9 +933,9 @@ async function loadActivity() {
   if (!result.data.length) emptyRow("activityBody", 6, "No activity matches the current filters.");
   else body.innerHTML = result.data.map((r) => {
     const changes = typeof r.changes === "string" ? r.changes : JSON.stringify(r.changes || {});
-    return "<tr><td>" + esc(fmt(r.occurred_at)) + "</td><td>" + esc(r.entity_type) + "</td><td>" +
-      esc(r.entity_id) + "</td><td>" + esc(r.action) + "</td><td>" + esc(r.actor) +
-      '<td title="' + esc(changes) + '">' + esc(changes.length > 90 ? changes.slice(0, 90) + "…" : changes) + "</td></tr>";
+    return "<tr><td>" + esc(fmt(r.occurred_at)) + "</td><td><span data-no-translate>" + esc(r.entity_type) + "</span></td><td><span data-no-translate>" +
+      esc(r.entity_id) + "</span></td><td><span data-no-translate>" + esc(r.action) + "</span></td><td><span data-no-translate>" + esc(r.actor) +
+      "</span></td><td><span data-no-translate title=\"" + esc(changes) + "\">" + esc(changes.length > 90 ? changes.slice(0, 90) + "…" : changes) + "</span></td></tr>";
   }).join("");
   const p = result.pagination || {};
   set("activityPagination", "Page " + p.page + " of " + p.total_pages + " · " + p.total_records + " activities");
@@ -948,7 +952,7 @@ async function loadImportHistory() {
     const inserted = Number(r.inserted_requests || 0) + Number(r.inserted_items || 0);
     const updated = Number(r.updated_requests || 0) + Number(r.updated_items || 0);
     const unchanged = Number(r.unchanged_requests || 0) + Number(r.unchanged_items || 0);
-    return "<tr><td>" + esc(r.id) + "</td><td>" + esc(r.original_file_name) + "</td><td>" +
+    return "<tr><td><span data-no-translate>" + esc(r.id) + "</span></td><td><span data-no-translate>" + esc(r.original_file_name) + "</span></td><td>" +
       esc(r.status) + "</td><td>" + esc(r.total_rows) + "</td><td>" + inserted +
       "</td><td>" + updated + "</td><td>" + unchanged + "</td><td>" + esc(fmt(r.uploaded_at)) + "</td></tr>";
   }).join("");
@@ -964,7 +968,7 @@ function fillDialogField(def, record, mode) {
   const value = record && record[name] != null ? String(record[name]).slice(0, 10) : "";
   let control = "";
   if (type === "date") {
-    control = '<input id="' + id + '" type="date" name="' + name + '" value="' + esc(value) + '" aria-label="' + esc(label) + '">';
+    control = '<div class="date-input-wrap"><input id="' + id + '" type="date" name="' + name + '" value="' + esc(value) + '" aria-label="' + esc(label) + '"><span class="date-format-hint" data-date-empty-hint aria-hidden="true"></span></div>';
   } else if (type === "textarea") {
     control = '<textarea id="' + id + '" name="' + name + '" rows="3" aria-label="' + esc(label) + '">' + esc(record && record[name] || "") + "</textarea>";
   } else if (type === "request") {
@@ -987,6 +991,23 @@ function fillDialogField(def, record, mode) {
   }
   const full = type === "textarea";
   return '<div class="form-field' + (full ? " full" : "") + '"><label for="' + id + '">' + esc(label) + '</label>' + control + "</div>";
+}
+
+function initializeDateInputHints(root) {
+  if (!root) return;
+  root.querySelectorAll(".date-input-wrap").forEach((wrap) => {
+    const input = wrap.querySelector('input[type="date"]');
+    const hint = wrap.querySelector("[data-date-empty-hint]");
+    if (!input || !hint) return;
+    const update = () => {
+      wrap.classList.toggle("is-empty", !input.value);
+      const language = window.KHS_I18N ? window.KHS_I18N.language() : "id";
+      hint.textContent = language === "id" ? "Pilih tanggal" : "Choose date";
+    };
+    input.addEventListener("input", update);
+    input.addEventListener("change", update);
+    update();
+  });
 }
 
 function renderGroupedKhsFields(record, editing) {
@@ -1037,6 +1058,7 @@ async function openForm(kind, record, parentRequestId) {
   fieldsContainer.innerHTML = kind === "request"
     ? defs.map((def) => fillDialogField(def, record, kind)).join("")
     : renderGroupedKhsFields(record, editing);
+  initializeDateInputHints(fieldsContainer);
   if (kind === "khs" && !editing && parentRequestId) {
     const select = $("dialogFields").querySelector('[name="request_id"]');
     if (select) select.value = parentRequestId;
@@ -1120,6 +1142,10 @@ async function openDetails(id) {
     const result = await api("/api/dashboard/khs/" + encodeURIComponent(id));
     state.detail = result.data;
     const r = result.data;
+    const detailTitle = $("detailTitle");
+    if (detailTitle) detailTitle.setAttribute("data-no-translate", "");
+    const detailSubtitle = $("detailSubtitle");
+    if (detailSubtitle) detailSubtitle.setAttribute("data-no-translate", "");
     set("detailTitle", r.vendor_name || r.khs_id);
     set("detailSubtitle", (r.request_subject || "No request subject") + " · " + r.khs_id);
     $("detailStatus").innerHTML =
@@ -1152,7 +1178,7 @@ async function openDetails(id) {
       '</h4><div class="detail-group-fields">' +
       group.items.map((item) =>
         '<div class="detail-item"><span class="detail-label">' + esc(item[0]) +
-        '</span><span class="detail-value">' + esc(fmt(item[1])) + "</span></div>"
+        '</span><span class="detail-value" data-no-translate>' + esc(fmt(item[1])) + "</span></div>"
       ).join("") + "</div></section>"
     ).join("");
 
@@ -1162,8 +1188,8 @@ async function openDetails(id) {
         '<section class="detail-group detail-group-wide"><h4>Recent activity</h4>' +
         '<ol class="detail-history-list">' +
         history.slice(0, 5).map((entry) =>
-          "<li><time>" + esc(fmt(entry.occurred_at)) + "</time><strong>" +
-          esc(entry.action) + "</strong><span>" + esc(entry.actor) + "</span></li>"
+          "<li><time>" + esc(fmt(entry.occurred_at)) + "</time><strong data-no-translate>" +
+          esc(entry.action) + "</strong><span data-no-translate>" + esc(entry.actor) + "</span></li>"
         ).join("") + "</ol></section>"
       );
     }
@@ -1172,8 +1198,8 @@ async function openDetails(id) {
     const documentList = $("documentList");
     if (documentList) {
       documentList.innerHTML = documents.length ? documents.map((doc) =>
-        '<div class="document-row"><div class="document-meta"><strong>' + esc(doc.original_file_name) +
-        '</strong><small>' + esc(doc.document_type) + " · " + esc(fmt(doc.uploaded_at)) +
+        '<div class="document-row"><div class="document-meta"><strong data-no-translate>' + esc(doc.original_file_name) +
+        '</strong><small data-no-translate>' + esc(doc.document_type) + " · " + esc(fmt(doc.uploaded_at)) +
         '</small></div><a class="view-button" href="' + esc(doc.download_url) + '">Download</a></div>'
       ).join("") : '<p class="muted">No evidence documents uploaded yet.</p>';
     }
@@ -1601,6 +1627,10 @@ function bind() {
 document.addEventListener("DOMContentLoaded", () => {
   observeResponsiveTables();
   bind();
+  window.addEventListener("khs:localechange", () => {
+    loadPage(state.page).catch((err) => toast(err.message));
+    if (state.detail && $("detailDialog").open) openDetails(state.detail.khs_id);
+  });
   const initial = window.location.hash.replace("#", "");
   go(["overview", "requests", "register", "lp", "contracts", "workflow", "imports", "activity"].indexOf(initial) >= 0 ? initial : "overview");
 });
