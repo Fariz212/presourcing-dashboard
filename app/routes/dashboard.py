@@ -2685,11 +2685,11 @@ def workflow_overview():
 def _sla_status_for_age(age_days, warning_after_days=None, target_days=None, escalation_after_days=None):
     if age_days is None or target_days is None:
         return "not_configured" if target_days is None else "age_unavailable"
-    if escalation_after_days is not None and age_days > escalation_after_days:
+    if escalation_after_days is not None and age_days >= escalation_after_days:
         return "escalation_due"
-    if age_days > target_days:
+    if age_days >= target_days:
         return "overdue"
-    if warning_after_days is not None and age_days > warning_after_days:
+    if warning_after_days is not None and age_days >= warning_after_days:
         return "due_soon"
     return "on_track"
 
@@ -2731,21 +2731,22 @@ def _operations_stage_query(as_of):
                 FILTER (WHERE wip.stage_age_days IS NOT NULL))::int AS p90_age_days,
             MAX(wip.stage_age_days)::int AS oldest_age_days,
             policy.warning_after_days,
-            policy.target_days,
+            COALESCE(policy.target_days, stage.default_sla_days) AS target_days,
             policy.escalation_after_days,
             COUNT(wip.khs_id) FILTER (
-                WHERE policy.target_days IS NOT NULL AND wip.stage_age_days > policy.target_days
+                WHERE COALESCE(policy.target_days, stage.default_sla_days) IS NOT NULL
+                  AND wip.stage_age_days >= COALESCE(policy.target_days, stage.default_sla_days)
             )::int AS overdue_count,
             COUNT(wip.khs_id) FILTER (
                 WHERE policy.escalation_after_days IS NOT NULL
-                  AND wip.stage_age_days > policy.escalation_after_days
+                  AND wip.stage_age_days >= policy.escalation_after_days
             )::int AS escalation_count
         FROM khs_stage_config AS stage
         LEFT JOIN active_wip AS wip ON wip.current_stage_code = stage.stage_code
         LEFT JOIN khs_stage_sla_policies AS policy ON policy.stage_code = stage.stage_code
         WHERE stage.is_active = TRUE
           AND stage.stage_code NOT IN ('COMPLETED', 'NOT_PROCEEDED')
-        GROUP BY stage.stage_code, stage.stage_name, stage.sequence_number,
+        GROUP BY stage.stage_code, stage.stage_name, stage.sequence_number, stage.default_sla_days,
                  policy.warning_after_days, policy.target_days, policy.escalation_after_days
         ORDER BY stage.sequence_number
     """
