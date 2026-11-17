@@ -95,8 +95,12 @@ function fmt(value) {
   if (!value) return "—";
   const s = String(value);
   if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
-    const p = s.slice(0, 10).split("-");
-    return p[2] + "/" + p[1] + "/" + p[0];
+    const p = s.slice(0, 10).split("-").map(Number);
+    const date = new Date(Date.UTC(p[0], p[1] - 1, p[2]));
+    const language = window.KHS_I18N ? window.KHS_I18N.language() : "id";
+    return language === "id"
+      ? String(p[2]).padStart(2, "0") + "/" + String(p[1]).padStart(2, "0") + "/" + p[0]
+      : new Intl.DateTimeFormat("en-GB", {day:"2-digit", month:"short", year:"numeric", timeZone:"UTC"}).format(date);
   }
   return s;
 }
@@ -281,7 +285,7 @@ async function loadOverview() {
     set("overviewExpiring1m", contractSummary ? contractSummary.expiring_within_1_month : "—");
     set("overviewExpiredContracts", contractSummary ? contractSummary.expired : "—");
     set("overviewMissingContractDates", contractSummary ? contractSummary.missing_contract_dates : "—");
-    set("lastUpdated", new Date().toLocaleString());
+    set("lastUpdated", new Date().toLocaleString(window.KHS_I18N && window.KHS_I18N.language() === "id" ? "id-ID" : "en-GB"));
     const exceptions = d.data_quality.lp_started_without_mi_gm_approval;
     const alert = $("qualityAlert");
     if (alert) alert.hidden = !exceptions;
@@ -1601,6 +1605,7 @@ function bind() {
 document.addEventListener("DOMContentLoaded", () => {
   observeResponsiveTables();
   bind();
+  window.addEventListener("khs:localechange", () => loadPage(state.page).catch((err) => toast(err.message)));
   const initial = window.location.hash.replace("#", "");
   go(["overview", "requests", "register", "lp", "contracts", "workflow", "imports", "activity"].indexOf(initial) >= 0 ? initial : "overview");
 });
