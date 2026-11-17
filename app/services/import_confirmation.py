@@ -155,6 +155,181 @@ def _log_activity(
     )
 
 
+
+WORKFLOW_MILESTONE_FIELDS = {
+    "dispatch_date",
+    "boq_confirmation_date",
+    "negotiation_date",
+    "final_negotiation_date",
+    "mi_head_approval_date",
+    "mi_sm_approval_date",
+    "mi_gm_approval_date",
+    "legal_submission_date",
+    "lp_circulation_start_date",
+    "lp_contract_team_completion_date",
+    "lp_junior_manager_approval_date",
+    "lp_senior_manager_approval_date",
+    "lp_gm_scm_approval_date",
+    "lp_completion_date",
+    "khs_inject_start_date",
+    "khs_inject_completion_date",
+}
+
+
+def _current_workflow_stage_identity(conn, khs_id):
+    """Read the same milestone-derived stage identity used by the KHS register."""
+    row = conn.execute(
+        """
+        SELECT
+            k.process_status,
+            derived.current_stage_code,
+            CASE
+                WHEN derived.current_stage_code = 'LP_CIRCULATION'
+                    THEN derived.lp_stage_key
+                WHEN derived.current_stage_code = 'KHS_INJECTION'
+                    THEN CASE
+                        WHEN k.khs_inject_start_date IS NULL
+                            THEN 'injection_preparation'
+                        ELSE 'khs_injection'
+                    END
+                ELSE COALESCE(derived.current_stage_code, '')
+            END AS current_stage_key
+        FROM khs_items AS k
+        JOIN khs_requests AS r ON r.request_id = k.request_id
+        CROSS JOIN LATERAL (
+            SELECT
+                CASE
+                    WHEN k.khs_inject_completion_date IS NOT NULL
+                        THEN 'COMPLETED'
+                    WHEN k.lp_completion_date IS NOT NULL
+                        THEN 'KHS_INJECTION'
+                    WHEN k.lp_circulation_start_date IS NOT NULL
+                      OR k.lp_contract_team_completion_date IS NOT NULL
+                      OR k.lp_junior_manager_approval_date IS NOT NULL
+                      OR k.lp_senior_manager_approval_date IS NOT NULL
+                      OR k.lp_gm_scm_approval_date IS NOT NULL
+                        THEN 'LP_CIRCULATION'
+                    WHEN k.legal_submission_date IS NOT NULL
+                        THEN 'LEGAL_PROCESSING'
+                    WHEN k.mi_gm_approval_date IS NOT NULL
+                        THEN 'LEGAL_SUBMISSION'
+                    WHEN k.mi_sm_approval_date IS NOT NULL
+                        THEN 'MI_GM_APPROVAL'
+                    WHEN k.mi_head_approval_date IS NOT NULL
+                        THEN 'MI_SM_APPROVAL'
+                    WHEN k.final_negotiation_date IS NOT NULL
+                        THEN 'MI_HEAD_APPROVAL'
+                    WHEN k.negotiation_date IS NOT NULL
+                        THEN 'FINAL_NEGOTIATION'
+                    WHEN k.boq_confirmation_date IS NOT NULL
+                        THEN 'NEGOTIATION'
+                    WHEN k.dispatch_date IS NOT NULL
+                        THEN 'BOQ_CONFIRMATION'
+                    WHEN r.request_date IS NOT NULL
+                        THEN 'DISPATCH'
+                    ELSE 'REQUEST_RECEIVED'
+                END AS current_stage_code,
+                CASE
+                    WHEN k.lp_completion_date IS NOT NULL
+                        THEN 'completed'
+                    WHEN k.lp_circulation_start_date IS NOT NULL
+                      AND (
+                            k.mi_gm_approval_date IS NULL
+                         OR k.lp_circulation_start_date < k.mi_gm_approval_date
+                      )
+                        THEN 'prerequisite_exception'
+                    WHEN (
+                        (k.lp_circulation_start_date IS NULL AND (
+                            k.lp_contract_team_completion_date IS NOT NULL
+                            OR k.lp_junior_manager_approval_date IS NOT NULL
+                            OR k.lp_senior_manager_approval_date IS NOT NULL
+                            OR k.lp_gm_scm_approval_date IS NOT NULL
+                        ))
+                        OR (k.lp_contract_team_completion_date IS NULL AND (
+                            k.lp_junior_manager_approval_date IS NOT NULL
+                            OR k.lp_senior_manager_approval_date IS NOT NULL
+                            OR k.lp_gm_scm_approval_date IS NOT NULL
+                        ))
+                        OR (k.lp_junior_manager_approval_date IS NULL AND (
+                            k.lp_senior_manager_approval_date IS NOT NULL
+                            OR k.lp_gm_scm_approval_date IS NOT NULL
+                        ))
+                        OR (k.lp_senior_manager_approval_date IS NULL
+                            AND k.lp_gm_scm_approval_date IS NOT NULL)
+                    )
+                        THEN 'legacy_incomplete'
+                    WHEN k.lp_circulation_start_date IS NOT NULL
+                      AND k.lp_contract_team_completion_date IS NULL
+                      AND k.lp_junior_manager_approval_date IS NULL
+                      AND k.lp_senior_manager_approval_date IS NULL
+                      AND k.lp_gm_scm_approval_date IS NULL
+                      AND LOWER(BTRIM(COALESCE(k.legacy_overall_status, '')))
+                            IN ('done', 'completed')
+                        THEN 'legacy_unverified'
+                    WHEN k.lp_circulation_start_date IS NULL
+                        THEN 'not_started'
+                    WHEN k.lp_contract_team_completion_date IS NULL
+                        THEN 'contract_team'
+                    WHEN k.lp_junior_manager_approval_date IS NULL
+                        THEN 'junior_manager'
+                    WHEN k.lp_senior_manager_approval_date IS NULL
+                        THEN 'senior_manager'
+                    WHEN k.lp_gm_scm_approval_date IS NULL
+                        THEN 'general_manager'
+                    ELSE 'director'
+                END AS lp_stage_key
+        ) AS derived
+        WHERE k.khs_id = %s
+        """,
+        (khs_id,),
+    ).fetchone()
+    if row is None:
+        raise ImportConfirmationError(
+            f"KHS {khs_id} was not found while reconciling workflow reminders.",
+            404,
+            "KHS_NOT_FOUND",
+        )
+    return row
+
+
+def _reconcile_imported_workflow_follow_ups(conn, khs_id, batch_id):
+    """Supersede reminders whose stage identity no longer matches imported history."""
+    process_status, stage_code, stage_key = _current_workflow_stage_identity(conn, khs_id)
+    result = conn.execute(
+        """
+        UPDATE khs_follow_ups
+        SET status = 'SUPERSEDED',
+            cancelled_at = NOW(),
+            cancelled_by = 'system'
+        WHERE khs_id = %s
+          AND status = 'OPEN'
+          AND (
+                %s <> 'ACTIVE'
+             OR %s IN ('COMPLETED', 'NOT_PROCEEDED')
+             OR stage_code IS DISTINCT FROM %s
+             OR stage_key IS DISTINCT FROM %s
+          )
+        """,
+        (khs_id, process_status, stage_code, stage_code, stage_key),
+    )
+    superseded_count = result.rowcount
+    if superseded_count:
+        _log_activity(
+            conn,
+            "KHS_ITEM",
+            khs_id,
+            "FOLLOW_UPS_SUPERSEDED",
+            {
+                "superseded_count": superseded_count,
+                "current_stage_code": stage_code,
+                "current_stage_key": stage_key,
+                "reason": "IMPORTED_WORKFLOW_STAGE_CHANGED",
+            },
+            batch_id,
+        )
+    return superseded_count
+
+
 def _upsert_entity(conn, entity_type, record, batch_id):
     config = TABLE_CONFIG[entity_type]
 
@@ -310,6 +485,24 @@ def _upsert_entity(conn, entity_type, record, batch_id):
         changes,
         batch_id,
     )
+
+    if entity_type == "KHS_ITEM" and WORKFLOW_MILESTONE_FIELDS.intersection(changes):
+        _reconcile_imported_workflow_follow_ups(conn, entity_id, batch_id)
+    elif entity_type == "REQUEST" and "request_date" in changes:
+        # A request-date correction can move a KHS with no later milestones
+        # from REQUEST_RECEIVED to DISPATCH, so reconcile its reminders too.
+        related_items = conn.execute(
+            """
+            SELECT khs_id
+            FROM khs_items
+            WHERE request_id = %s
+            ORDER BY khs_id
+            FOR UPDATE
+            """,
+            (entity_id,),
+        ).fetchall()
+        for (related_khs_id,) in related_items:
+            _reconcile_imported_workflow_follow_ups(conn, related_khs_id, batch_id)
 
     return "UPDATED"
 

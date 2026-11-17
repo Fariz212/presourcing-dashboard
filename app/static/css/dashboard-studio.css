@@ -4104,3 +4104,201 @@ button:disabled {
   #workflowCards .workflow-stage-bottom { align-items: flex-start; }
   #workflowCards .workflow-stage-action { margin-left: auto; }
 }
+
+/* KHS closure and historical process-duration controls */
+.detail-header-actions{display:flex;align-items:center;gap:8px}
+.danger-button{border:1px solid #e4b8b4;background:#fff5f4;color:#9c3d37;border-radius:8px;padding:9px 13px;font-weight:750;font-size:12px}
+.danger-button:hover{background:#ffebe9}
+.danger-button:disabled{opacity:.5;cursor:not-allowed}
+.process-duration-section{margin:16px 0;padding:18px;border:1px solid var(--line);border-radius:12px;background:#fff}
+.process-duration-summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:14px 0}
+.process-duration-summary>div{display:grid;gap:3px;padding:12px;border-radius:9px;background:#f5f7fa}
+.process-duration-summary span{font-size:10px;color:var(--muted)}
+.process-duration-summary strong{font-size:19px;color:var(--ink)}
+.process-duration-list{display:grid;gap:0}
+.process-duration-row{display:grid;grid-template-columns:minmax(180px,1.2fr) minmax(170px,1fr) minmax(75px,.45fr);gap:12px;align-items:center;padding:11px 0;border-bottom:1px solid #edf0f4}
+.process-duration-main{display:grid;gap:5px;min-width:0}
+.process-duration-main strong{font-size:12px}
+.process-duration-status{font-size:9px;color:#667085}
+.process-duration-status.status-completed{color:#16845f}
+.process-duration-status.status-stopped{color:#a34a44}
+.process-duration-status.status-in_progress{color:#3568c8}
+.process-duration-dates{display:flex;align-items:center;gap:7px;color:#748094;font-size:10px;white-space:nowrap}
+.process-duration-days{text-align:right;font-size:12px;white-space:nowrap}
+.closure-summary{margin:14px 0;padding:14px 16px;border:1px solid #edcfbf;border-radius:10px;background:#fff8f3;color:#71432f}
+.closure-summary-heading{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:8px}
+.closure-summary-heading strong{font-size:13px;color:#963f37}
+.closure-summary p{margin:6px 0;font-size:12px}
+.closure-summary small{color:#8b7064}
+#closureDialog .form-field,#reopenDialog .form-field{display:grid;gap:6px;margin:14px 0}
+#closureDialog .form-field label,#reopenDialog .form-field label{font-size:11px;font-weight:700;color:#526179}
+#closureDialog input,#closureDialog select,#closureDialog textarea,#reopenDialog textarea{width:100%;padding:10px 11px;border:1px solid #dce3ec;border-radius:8px;background:#fff;color:var(--ink)}
+#closureDialog textarea,#reopenDialog textarea{resize:vertical}
+@media(max-width:760px){
+  .detail-header-actions{gap:5px;flex-wrap:wrap;justify-content:flex-end}
+  .detail-header-actions .danger-button,.detail-header-actions .primary-button{padding:7px 9px;font-size:10px}
+  .process-duration-row{grid-template-columns:minmax(0,1fr) auto;gap:6px}
+  .process-duration-dates{grid-column:1 / -1;grid-row:2}
+  .process-duration-days{grid-column:2;grid-row:1}
+  .process-duration-summary strong{font-size:16px}
+}
+
+.status-not_proceeded{background:#fff0ec;color:#a54c40}
+.lp-timeline-item.stopped .lp-timeline-marker{border-color:#d48d83;background:#fff0ec;color:#a54c40}
+.lp-timeline-item.not-reached{opacity:.62}
+.lp-timeline-item.not-reached .lp-timeline-marker{border-style:dashed}
+
+.language-toggle{min-width:42px;height:34px;padding:0 10px;font-size:11px;font-weight:800;letter-spacing:.04em}
+@media(max-width:560px){.topbar-actions{gap:6px}.language-toggle{min-width:38px;padding:0 8px}}
+
+/* Lean operations analytics */
+.operations-analytics{display:grid;gap:16px;margin:18px 0 28px}
+.section-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:16px}
+.section-heading h2{margin:3px 0 5px;font-size:22px;letter-spacing:-.025em}
+.section-heading p{margin:0;color:var(--muted);font-size:12px}
+.as-of-label{font-size:10px;color:var(--muted);white-space:nowrap}
+.operations-kpi-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px}
+.operations-kpi{min-width:0;padding:14px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.operations-kpi span{display:block;color:var(--muted);font-size:10px;font-weight:700}
+.operations-kpi strong{display:block;margin:5px 0 2px;font-size:25px;line-height:1.1;letter-spacing:-.04em}
+.operations-kpi small{display:block;color:var(--muted);font-size:10px}
+.operations-table-panel{min-width:0;overflow:hidden}
+.operations-table-panel .panel-heading{padding:16px 16px 10px}
+.operations-table-panel .panel-heading h3{margin:0;font-size:15px}
+.operations-table-panel .panel-heading p{margin:3px 0 0;color:var(--muted);font-size:11px}
+.operations-table-panel table{min-width:1120px}
+.operations-note{padding:0 16px 14px;font-size:10px}
+.status-sla-not_configured,.status-sla-age_unavailable{background:#f2f4f7;color:#667085}
+.status-sla-on_track{background:#eaf7f1;color:#16845f}
+.status-sla-due_soon{background:#fff6e8;color:#a66a16}
+.status-sla-overdue{background:#fff0e8;color:#b45b32}
+.status-sla-escalation_due{background:#fcebea;color:#a33e38}
+.operations-stage-row-bottleneck{background:#fffaf1}
+.follow-up-item{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid var(--line)}
+.follow-up-item-main{min-width:0}
+.follow-up-item-main strong{font-size:12px}
+.follow-up-item-main p{margin:4px 0;color:var(--ink);font-size:12px}
+.follow-up-item-main small{font-size:10px;color:var(--muted)}
+.follow-up-item-actions{display:flex;gap:6px;flex-shrink:0}
+.follow-up-open{border-left:3px solid var(--amber);padding-left:10px}
+.follow-up-closed{opacity:.72}
+.follow-up-section{margin:18px 0;padding:18px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.follow-up-section .document-section-heading{margin-bottom:12px}
+.follow-up-form{display:grid;grid-template-columns:minmax(140px,.7fr) minmax(160px,1fr) minmax(220px,2fr) auto;gap:10px;align-items:end;padding:12px;background:#f7f8fa;border:1px solid var(--line);border-radius:10px}
+.follow-up-form label,.form-field label{display:grid;gap:6px;color:var(--muted);font-size:10px;font-weight:750}
+.follow-up-form input,.follow-up-form textarea,.form-field input,.form-field textarea{width:100%;min-width:0;padding:9px 10px;border:1px solid #dce3ec;border-radius:8px;background:#fff;color:var(--ink);font:inherit;font-size:12px}
+.follow-up-form textarea{resize:vertical;min-height:38px}
+.follow-up-list{margin-top:12px}
+.workbench-nav{position:sticky;top:0;z-index:5;display:flex;gap:6px;overflow-x:auto;padding:9px 0;background:rgba(255,255,255,.96);border-bottom:1px solid var(--line);backdrop-filter:blur(10px)}
+.workbench-nav button{flex:0 0 auto;border:1px solid var(--line);border-radius:999px;background:#fff;color:var(--ink);padding:7px 11px;font-size:10px;font-weight:750;white-space:nowrap}
+.workbench-nav button:hover{border-color:#a9c0b3;background:#f3f8f5}
+#detailDialog .process-duration-section,#detailDialog .lp-timeline-section,#detailDialog .contract-detail-summary,#detailDialog #detailGrid,#detailDialog .follow-up-section,#detailDialog .document-section{scroll-margin-top:68px}
+#detailDialog .dialog-header{gap:14px}
+#detailDialog .dialog-header>div:first-child{min-width:0}
+#detailDialog .detail-header-actions{flex-wrap:wrap}
+#detailDialog .detail-header-actions button{white-space:nowrap}
+#progressDialog .form-field{display:grid;gap:6px;margin:14px 0}
+#progressDialog input,#progressDialog textarea{width:100%;padding:10px;border:1px solid #dce3ec;border-radius:8px;background:#fff;color:var(--ink)}
+#progressDialog input[readonly]{background:#f2f4f7}
+@media(max-width:1120px){
+  .operations-kpi-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .follow-up-form{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .follow-up-note-field{grid-column:1/-1}
+}
+@media(max-width:760px){
+  .section-heading{align-items:flex-start;flex-direction:column}
+  .operations-kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .operations-kpi{padding:12px}
+  .operations-kpi strong{font-size:22px}
+  .follow-up-form{grid-template-columns:1fr}
+  .follow-up-note-field{grid-column:auto}
+  .follow-up-item{align-items:flex-start;flex-direction:column}
+  .follow-up-item-actions{width:100%}
+  #detailDialog .dialog-header{align-items:flex-start}
+  #detailDialog .detail-header-actions{max-width:58%;justify-content:flex-end}
+}
+
+/* On compact screens, the operations matrices become labelled record cards. */
+@media (max-width: 920px) {
+  .operations-table-panel .table-wrap {
+    overflow: visible;
+  }
+  .operations-table-panel .table-wrap table,
+  .operations-table-panel .table-wrap tbody {
+    width: 100%;
+    min-width: 0;
+  }
+  .operations-table-panel .table-wrap tbody tr {
+    min-width: 0;
+  }
+  .operations-table-panel .table-wrap tbody td {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+}
+
+.analytics-filter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 27px;
+  min-height: 25px;
+  padding: 3px 6px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: #f1f5fa;
+  color: #365c91;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 750;
+  cursor: pointer;
+}
+.analytics-filter:hover,
+.analytics-filter:focus-visible {
+  border-color: #b8cbe5;
+  background: #eaf1fb;
+  outline: none;
+}
+.analytics-stage-filter {
+  justify-content: flex-start;
+  max-width: 210px;
+  min-height: 28px;
+  padding-left: 0;
+  background: transparent;
+  color: #304b70;
+  text-align: left;
+}
+.analytics-stage-filter:hover,
+.analytics-stage-filter:focus-visible {
+  padding-left: 6px;
+}
+.analytics-total-filter {
+  min-width: 32px;
+  background: #eaf0f8;
+  color: #1e395e;
+}
+.bottleneck-rank {
+  display: inline-grid;
+  width: 19px;
+  height: 19px;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #e9eff8;
+  color: #526b8d;
+  font-size: 9px;
+}
+.operational-table td {
+  vertical-align: middle;
+}
+.operational-table th:first-child {
+  min-width: 190px;
+}
+.operational-table td:first-child {
+  min-width: 190px;
+}
+@media (max-width: 920px) {
+  .operations-table-panel .table-wrap tbody td:first-child {
+    grid-column: 1 / -1;
+  }
+}

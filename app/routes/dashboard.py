@@ -2,7 +2,8 @@ import calendar
 import csv
 from datetime import date, datetime, timedelta
 import hashlib
-from io import StringIO
+import hmac
+from io import BytesIO, StringIO
 import mimetypes
 from pathlib import Path
 import re
@@ -24,10 +25,10 @@ SUMMARY_QUERY = """
 SELECT
     (SELECT COUNT(*) FROM khs_requests) AS total_requests,
     COUNT(*) AS total_khs,
-
-    COUNT(*) FILTER (WHERE lp_completion_date IS NOT NULL) AS lp_completed,
+    COUNT(*) FILTER (WHERE process_status = 'ACTIVE' AND lp_completion_date IS NOT NULL) AS lp_completed,
     COUNT(*) FILTER (
-        WHERE lp_completion_date IS NULL
+        WHERE process_status = 'ACTIVE'
+          AND lp_completion_date IS NULL
           AND (
                 lp_circulation_start_date IS NOT NULL
              OR lp_contract_team_completion_date IS NOT NULL
@@ -37,46 +38,45 @@ SELECT
           )
     ) AS lp_in_progress,
     COUNT(*) FILTER (
-        WHERE lp_circulation_start_date IS NULL
-          AND lp_contract_team_completion_date IS NULL
-          AND lp_junior_manager_approval_date IS NULL
-          AND lp_senior_manager_approval_date IS NULL
-          AND lp_gm_scm_approval_date IS NULL
-          AND lp_completion_date IS NULL
-    ) AS lp_not_started,
-
-    COUNT(*) FILTER (
-        WHERE khs_inject_completion_date IS NOT NULL
-    ) AS inject_completed,
-    COUNT(*) FILTER (
-        WHERE khs_inject_start_date IS NOT NULL
-          AND khs_inject_completion_date IS NULL
-    ) AS inject_in_progress,
-    COUNT(*) FILTER (
-        WHERE lp_completion_date IS NOT NULL
-          AND khs_inject_start_date IS NULL
-    ) AS inject_pending,
-
-    COUNT(*) FILTER (WHERE mi_gm_approval_date IS NOT NULL) AS mi_gm_approved,
-    COUNT(*) FILTER (WHERE mi_gm_approval_date IS NULL) AS mi_gm_pending,
-    COUNT(*) FILTER (WHERE legal_submission_date IS NOT NULL) AS legal_submitted,
-    COUNT(*) FILTER (
-        WHERE lp_circulation_start_date IS NOT NULL
-          AND (
-                mi_gm_approval_date IS NULL
-             OR lp_circulation_start_date < mi_gm_approval_date
-          )
-    ) AS lp_started_without_mi_gm,
-    COUNT(*) FILTER (
-        WHERE mi_gm_approval_date IS NOT NULL
+        WHERE process_status = 'ACTIVE'
           AND lp_circulation_start_date IS NULL
           AND lp_contract_team_completion_date IS NULL
           AND lp_junior_manager_approval_date IS NULL
           AND lp_senior_manager_approval_date IS NULL
           AND lp_gm_scm_approval_date IS NULL
           AND lp_completion_date IS NULL
-    ) AS awaiting_lp_circulation
-
+    ) AS lp_not_started,
+    COUNT(*) FILTER (WHERE process_status = 'ACTIVE' AND khs_inject_completion_date IS NOT NULL) AS inject_completed,
+    COUNT(*) FILTER (
+        WHERE process_status = 'ACTIVE'
+          AND khs_inject_start_date IS NOT NULL
+          AND khs_inject_completion_date IS NULL
+    ) AS inject_in_progress,
+    COUNT(*) FILTER (
+        WHERE process_status = 'ACTIVE'
+          AND lp_completion_date IS NOT NULL
+          AND khs_inject_start_date IS NULL
+    ) AS inject_pending,
+    COUNT(*) FILTER (WHERE process_status = 'ACTIVE' AND mi_gm_approval_date IS NOT NULL) AS mi_gm_approved,
+    COUNT(*) FILTER (WHERE process_status = 'ACTIVE' AND mi_gm_approval_date IS NULL) AS mi_gm_pending,
+    COUNT(*) FILTER (WHERE process_status = 'ACTIVE' AND legal_submission_date IS NOT NULL) AS legal_submitted,
+    COUNT(*) FILTER (
+        WHERE process_status = 'ACTIVE'
+          AND lp_circulation_start_date IS NOT NULL
+          AND (mi_gm_approval_date IS NULL OR lp_circulation_start_date < mi_gm_approval_date)
+    ) AS lp_started_without_mi_gm,
+    COUNT(*) FILTER (
+        WHERE process_status = 'ACTIVE'
+          AND mi_gm_approval_date IS NOT NULL
+          AND lp_circulation_start_date IS NULL
+          AND lp_contract_team_completion_date IS NULL
+          AND lp_junior_manager_approval_date IS NULL
+          AND lp_senior_manager_approval_date IS NULL
+          AND lp_gm_scm_approval_date IS NULL
+          AND lp_completion_date IS NULL
+    ) AS awaiting_lp_circulation,
+    COUNT(*) FILTER (WHERE process_status = 'ACTIVE') AS active_khs_total,
+    COUNT(*) FILTER (WHERE process_status = 'NOT_PROCEEDED') AS not_proceeded_khs
 FROM khs_items;
 """
 
@@ -114,19 +114,18 @@ def dashboard_summary():
         legal_submitted,
         lp_started_without_mi_gm,
         awaiting_lp_circulation,
-    ) = row
-
-    completion_rate = (
-        round((lp_completed / total_khs) * 100, 2)
-        if total_khs
-        else 0.0
-    )
+    ) = row[:13]
+    active_khs_total = row[13] if len(row) > 13 else total_khs
+    not_proceeded_khs = row[14] if len(row) > 14 else 0
+    completion_rate = round((lp_completed / active_khs_total) * 100, 2) if active_khs_total else 0.0
 
     return jsonify({
         "success": True,
         "data": {
             "total_requests": total_requests,
             "total_khs": total_khs,
+            "active_khs": active_khs_total,
+            "not_proceeded_khs": not_proceeded_khs,
             "lp": {
                 "completed": lp_completed,
                 "in_progress": lp_in_progress,
@@ -138,8 +137,8 @@ def dashboard_summary():
                 "in_progress": inject_in_progress,
                 "pending": inject_pending,
                 "completion_rate_percent": (
-                    round((inject_completed / total_khs) * 100, 2)
-                    if total_khs else 0.0
+                    round((inject_completed / active_khs_total) * 100, 2)
+                    if active_khs_total else 0.0
                 ),
             },
             "fully_injected": inject_completed,
@@ -277,6 +276,16 @@ SELECT
     k.lp_completion_date,
     k.khs_inject_start_date,
     k.khs_inject_completion_date,
+    k.action_owner,
+    k.process_status,
+    k.closure_date,
+    k.closure_reason_code,
+    k.closure_notes,
+    k.closed_at,
+    k.closed_by,
+    k.reopened_at,
+    k.reopened_by,
+    k.reopen_reason,
 
     k.waiting_for,
     k.waiting_reason,
@@ -289,7 +298,9 @@ SELECT
 
     derived.lp_status,
     derived.workflow_status,
-    derived.current_stage_code,
+    CASE WHEN k.process_status = 'NOT_PROCEEDED'
+         THEN 'NOT_PROCEEDED' ELSE derived.current_stage_code END AS current_stage_code,
+    derived.current_stage_code AS workflow_stage_code,
     stage.stage_name AS current_stage_name,
     derived.lp_stage_key,
     derived.lp_timeline_has_gaps,
@@ -317,6 +328,52 @@ SELECT
         WHEN 'KHS_INJECTION' THEN k.lp_completion_date
         ELSE NULL
     END AS current_stage_started_on,
+
+    NOT EXISTS (
+        SELECT 1
+        FROM (VALUES
+        (1, r.request_date),
+        (2, k.dispatch_date),
+        (3, k.boq_confirmation_date),
+        (4, k.negotiation_date),
+        (5, k.final_negotiation_date),
+        (6, k.mi_head_approval_date),
+        (7, k.mi_sm_approval_date),
+        (8, k.mi_gm_approval_date),
+        (9, k.legal_submission_date),
+        (10, k.lp_circulation_start_date),
+        (11, k.lp_contract_team_completion_date),
+        (12, k.lp_junior_manager_approval_date),
+        (13, k.lp_senior_manager_approval_date),
+        (14, k.lp_gm_scm_approval_date),
+        (15, k.lp_completion_date),
+        (16, k.khs_inject_start_date),
+        (17, k.khs_inject_completion_date)
+        ) AS earlier(sequence_no, milestone_date)
+        JOIN (VALUES
+        (1, r.request_date),
+        (2, k.dispatch_date),
+        (3, k.boq_confirmation_date),
+        (4, k.negotiation_date),
+        (5, k.final_negotiation_date),
+        (6, k.mi_head_approval_date),
+        (7, k.mi_sm_approval_date),
+        (8, k.mi_gm_approval_date),
+        (9, k.legal_submission_date),
+        (10, k.lp_circulation_start_date),
+        (11, k.lp_contract_team_completion_date),
+        (12, k.lp_junior_manager_approval_date),
+        (13, k.lp_senior_manager_approval_date),
+        (14, k.lp_gm_scm_approval_date),
+        (15, k.lp_completion_date),
+        (16, k.khs_inject_start_date),
+        (17, k.khs_inject_completion_date)
+        ) AS later(sequence_no, milestone_date)
+          ON later.sequence_no > earlier.sequence_no
+        WHERE earlier.milestone_date IS NOT NULL
+          AND later.milestone_date IS NOT NULL
+          AND earlier.milestone_date > later.milestone_date
+    ) AS milestone_chronology_valid,
 
     (
         k.lp_circulation_start_date IS NOT NULL
@@ -349,6 +406,7 @@ CROSS JOIN LATERAL (
         END AS lp_status,
 
         CASE
+            WHEN k.process_status = 'NOT_PROCEEDED' THEN 'not_proceeded'
             WHEN k.khs_inject_completion_date IS NOT NULL
                 THEN 'completed'
             WHEN k.dispatch_date IS NOT NULL
@@ -479,7 +537,8 @@ CROSS JOIN LATERAL (
 ) AS derived
 
 LEFT JOIN khs_stage_config stage
-    ON stage.stage_code = derived.current_stage_code
+    ON stage.stage_code = CASE WHEN k.process_status = 'NOT_PROCEEDED'
+                               THEN 'NOT_PROCEEDED' ELSE derived.current_stage_code END
 """
 
 
@@ -520,6 +579,8 @@ def _waiting_role_case_sql(column):
     """
 
 
+ALLOWED_AGE_BANDS = {"0_7", "8_14", "15_30", "31_plus", "unavailable"}
+
 ALLOWED_STAGES = {
     "REQUEST_RECEIVED",
     "DISPATCH",
@@ -534,6 +595,7 @@ ALLOWED_STAGES = {
     "LP_CIRCULATION",
     "KHS_INJECTION",
     "COMPLETED",
+    "NOT_PROCEEDED",
 }
 
 
@@ -632,6 +694,7 @@ def _lp_timeline_summary(record, today=None):
         and not any(values[1:])
         and legacy_status in {"done", "completed"}
     )
+    chronology_valid = record.get("milestone_chronology_valid", True) is not False
 
     if completion_date is not None:
         stage_key = "completed"
@@ -673,7 +736,12 @@ def _lp_timeline_summary(record, today=None):
         stage_key = stage_keys[next_index]
         prior_dates = [value for value in values[:next_index] if value is not None]
         stage_started = prior_dates[-1] if prior_dates else start_date
-        stage_age = max((today - stage_started).days, 0) if stage_started else None
+        stage_age = (
+            max((today - stage_started).days, 0)
+            if chronology_valid and stage_started else None
+        )
+        if not chronology_valid:
+            stage_started = None
 
     if has_gaps:
         data_status = "legacy_incomplete"
@@ -813,26 +881,298 @@ def _contract_lifecycle_data(record, today=None):
     }
 
 
-def _register_enriched(row, today=None):
+
+PROCESS_DURATION_STAGES = (
+    ("DISPATCH", "Dispatch", "request_date", "dispatch_date"),
+    ("BOQ_CONFIRMATION", "BOQ Confirmation", "dispatch_date", "boq_confirmation_date"),
+    ("NEGOTIATION", "Negotiation", "boq_confirmation_date", "negotiation_date"),
+    ("FINAL_NEGOTIATION", "Final Negotiation", "negotiation_date", "final_negotiation_date"),
+    ("MI_HEAD_APPROVAL", "MI Head Approval", "final_negotiation_date", "mi_head_approval_date"),
+    ("MI_SM_APPROVAL", "MI Senior Manager Approval", "mi_head_approval_date", "mi_sm_approval_date"),
+    ("MI_GM_APPROVAL", "MI General Manager Approval", "mi_sm_approval_date", "mi_gm_approval_date"),
+    ("LEGAL_SUBMISSION", "Legal Submission", "mi_gm_approval_date", "legal_submission_date"),
+    ("LEGAL_PROCESSING", "Legal Processing", "legal_submission_date", "lp_circulation_start_date"),
+    ("LP_CONTRACT_TEAM", "LP Contract Team", "lp_circulation_start_date", "lp_contract_team_completion_date"),
+    ("LP_JUNIOR_MANAGER", "LP Junior Manager", "lp_contract_team_completion_date", "lp_junior_manager_approval_date"),
+    ("LP_SENIOR_MANAGER", "LP Senior Manager", "lp_junior_manager_approval_date", "lp_senior_manager_approval_date"),
+    ("LP_GM_SCM", "LP GM SCM", "lp_senior_manager_approval_date", "lp_gm_scm_approval_date"),
+    ("LP_DIRECTOR", "LP Director Sign-off", "lp_gm_scm_approval_date", "lp_completion_date"),
+    ("INJECTION_PREPARATION", "Injection Preparation", "lp_completion_date", "khs_inject_start_date"),
+    ("KHS_INJECTION", "KHS Injection", "khs_inject_start_date", "khs_inject_completion_date"),
+)
+
+
+def _duration_stage_is_current(stage_code, record):
+    workflow_stage = record.get("workflow_stage_code") or record.get("current_stage_code")
+    lp_stage_map = {
+        "LP_CONTRACT_TEAM": "contract_team",
+        "LP_JUNIOR_MANAGER": "junior_manager",
+        "LP_SENIOR_MANAGER": "senior_manager",
+        "LP_GM_SCM": "general_manager",
+        "LP_DIRECTOR": "director",
+    }
+    if stage_code in lp_stage_map:
+        return workflow_stage == "LP_CIRCULATION" and record.get("lp_stage_key") == lp_stage_map[stage_code]
+    if stage_code == "INJECTION_PREPARATION":
+        return workflow_stage == "KHS_INJECTION" and not _date_only(record.get("khs_inject_start_date"))
+    if stage_code == "KHS_INJECTION":
+        return workflow_stage == "KHS_INJECTION" and _date_only(record.get("khs_inject_start_date")) is not None
+    return workflow_stage == stage_code
+
+
+def _process_duration_history(record, today=None):
+    """Calculate calendar-day durations from business milestone dates only."""
+    today = today or _jakarta_today()
+    process_status = record.get("process_status") or "ACTIVE"
+    closure_date = _date_only(record.get("closure_date"))
+    chronology_valid = record.get("milestone_chronology_valid", True) is not False
+    stages = []
+    for stage_code, label, start_field, end_field in PROCESS_DURATION_STAGES:
+        start, end = _date_only(record.get(start_field)), _date_only(record.get(end_field))
+        is_current = _duration_stage_is_current(stage_code, record)
+        if not start and not end and not is_current:
+            continue
+        status, duration_days, display_end = "history_incomplete", None, end
+        if start and end:
+            if end < start:
+                status = "invalid_chronology"
+            else:
+                status, duration_days = "completed", (end - start).days
+        elif start and is_current and process_status == "NOT_PROCEEDED":
+            display_end = closure_date
+            if closure_date and closure_date >= start:
+                status, duration_days = "stopped", (closure_date - start).days
+            else:
+                status = "invalid_chronology" if closure_date else "date_unavailable"
+        elif start and is_current and process_status == "ACTIVE":
+            display_end = today
+            if today >= start:
+                status, duration_days = "in_progress", (today - start).days
+            else:
+                status = "invalid_chronology"
+        elif not start and not end and is_current:
+            status = "date_unavailable"
+        if not chronology_valid and is_current:
+            status, duration_days, display_end = "invalid_chronology", None, None
+        stages.append({
+            "stage_code": stage_code, "stage_label": label,
+            "start_date": start.isoformat() if start else None,
+            "end_date": display_end.isoformat() if display_end else None,
+            "duration_days": duration_days, "status": status,
+        })
+
+    request_date = _date_only(record.get("request_date"))
+    injected_date = _date_only(record.get("khs_inject_completion_date"))
+    if injected_date:
+        process_end, total_status = injected_date, "completed"
+    elif process_status == "NOT_PROCEEDED":
+        process_end, total_status = closure_date, "stopped" if closure_date else "date_unavailable"
+    else:
+        process_end, total_status = today, "in_progress"
+    total_days = None
+    if request_date and process_end:
+        if process_end >= request_date:
+            total_days = (process_end - request_date).days
+        else:
+            total_status = "invalid_chronology"
+    if not chronology_valid:
+        total_days, total_status = None, "invalid_chronology"
+
+    lp_start, lp_end = _date_only(record.get("lp_circulation_start_date")), _date_only(record.get("lp_completion_date"))
+    lp_status, lp_days = "not_started", None
+    if lp_start and lp_end:
+        if lp_end >= lp_start:
+            lp_status, lp_days = "completed", (lp_end - lp_start).days
+        else:
+            lp_status = "invalid_chronology"
+    elif lp_start and process_status == "NOT_PROCEEDED":
+        if closure_date and closure_date >= lp_start:
+            lp_status, lp_days = "stopped", (closure_date - lp_start).days
+        else:
+            lp_status = "date_unavailable"
+    elif lp_start:
+        lp_status, lp_days = "in_progress", (today - lp_start).days if today >= lp_start else None
+    if not chronology_valid and (lp_start or lp_end):
+        lp_status, lp_days = "invalid_chronology", None
+
+    return {
+        "process_duration_history": stages,
+        "total_processing_duration_days": total_days,
+        "total_processing_status": total_status if request_date else "date_unavailable",
+        "total_processing_start_date": request_date.isoformat() if request_date else None,
+        "total_processing_end_date": process_end.isoformat() if process_end else None,
+        "lp_circulation_duration_days": lp_days,
+        "lp_circulation_duration_status": lp_status,
+    }
+
+
+def _register_enriched(row, today=None, include_duration_history=False):
     today = today or _jakarta_today()
     record = _register_json_safe(row)
     record.update(_lp_timeline_summary(row, today=today))
-
-    stage_started = (
-        None
-        if row.get("current_stage_code") == "COMPLETED"
-        else _date_only(row.get("current_stage_started_on"))
-    )
-    record["current_stage_started_on"] = (
-        stage_started.isoformat() if stage_started else None
-    )
+    stage_started = _date_only(row.get("current_stage_started_on"))
+    if row.get("workflow_status") == "completed":
+        stage_started = None
+    record["current_stage_started_on"] = stage_started.isoformat() if stage_started else None
+    chronology_valid = record.get("milestone_chronology_valid", True) is not False
+    age_end = _date_only(row.get("closure_date")) if row.get("process_status") == "NOT_PROCEEDED" else today
     record["current_stage_age_days"] = (
-        (today - stage_started).days
-        if stage_started and stage_started <= today
-        else None
+        (age_end - stage_started).days
+        if chronology_valid and stage_started and age_end and age_end >= stage_started else None
+    )
+    record["current_stage_age_status"] = (
+        "history_inconsistent" if not chronology_valid
+        else "stopped" if row.get("process_status") == "NOT_PROCEEDED"
+        else "completed" if row.get("workflow_status") == "completed" else "in_progress"
     )
     record["contract_lifecycle"] = _contract_lifecycle_data(row, today=today)
+    if include_duration_history:
+        record.update(_process_duration_history(row, today=today))
+    record["guided_progress"] = (
+        None if record.get("process_status") == "NOT_PROCEEDED"
+        or record.get("workflow_status") == "completed"
+        else _guided_progress_definition(record)
+    )
     return record
+
+
+
+GUIDED_MILESTONE_LABELS = {
+    "dispatch_date": "Dispatch completed",
+    "boq_confirmation_date": "BOQ confirmed",
+    "negotiation_date": "Negotiation completed",
+    "final_negotiation_date": "Final negotiation completed",
+    "mi_head_approval_date": "MI Head approval recorded",
+    "mi_sm_approval_date": "MI Senior Manager approval recorded",
+    "mi_gm_approval_date": "MI GM approval recorded",
+    "legal_submission_date": "Legal submission recorded",
+    "lp_circulation_start_date": "LP submitted by User",
+    "lp_contract_team_completion_date": "Contract Team completed",
+    "lp_junior_manager_approval_date": "Junior Manager approval recorded",
+    "lp_senior_manager_approval_date": "Senior Manager approval recorded",
+    "lp_gm_scm_approval_date": "GM SCM approval recorded",
+    "lp_completion_date": "Director sign-off recorded",
+    "khs_inject_start_date": "KHS injection started",
+    "khs_inject_completion_date": "KHS fully injected",
+}
+GUIDED_STAGE_FIELD = {
+    "DISPATCH": "dispatch_date",
+    "BOQ_CONFIRMATION": "boq_confirmation_date",
+    "NEGOTIATION": "negotiation_date",
+    "FINAL_NEGOTIATION": "final_negotiation_date",
+    "MI_HEAD_APPROVAL": "mi_head_approval_date",
+    "MI_SM_APPROVAL": "mi_sm_approval_date",
+    "MI_GM_APPROVAL": "mi_gm_approval_date",
+    "LEGAL_SUBMISSION": "legal_submission_date",
+    "LEGAL_PROCESSING": "lp_circulation_start_date",
+}
+
+
+
+def _workflow_stage_identity(record):
+    """Return the exact operational sub-stage that owns actions and reminders."""
+    stage = record.get("workflow_stage_code") or record.get("current_stage_code")
+    if stage == "LP_CIRCULATION":
+        stage_key = record.get("lp_stage_key") or ""
+    elif stage == "KHS_INJECTION":
+        stage_key = (
+            "khs_injection"
+            if _date_only(record.get("khs_inject_start_date")) is not None
+            else "injection_preparation"
+        )
+    else:
+        stage_key = stage or ""
+    return stage, stage_key
+
+
+def _guided_progress_definition(record):
+    if record.get("milestone_chronology_valid", True) is False:
+        return None
+    stage, stage_key = _workflow_stage_identity(record)
+    field = GUIDED_STAGE_FIELD.get(stage)
+    lp_fields = {
+        "contract_team": "lp_contract_team_completion_date",
+        "junior_manager": "lp_junior_manager_approval_date",
+        "senior_manager": "lp_senior_manager_approval_date",
+        "general_manager": "lp_gm_scm_approval_date",
+        "director": "lp_completion_date",
+    }
+    if stage == "LP_CIRCULATION":
+        field = lp_fields.get(record.get("lp_stage_key"))
+    elif stage == "KHS_INJECTION":
+        field = (
+            "khs_inject_completion_date"
+            if stage_key == "khs_injection"
+            else "khs_inject_start_date"
+        )
+    if not field or record.get(field) is not None:
+        return None
+    previous = {
+        "dispatch_date": "request_date",
+        "boq_confirmation_date": "dispatch_date",
+        "negotiation_date": "boq_confirmation_date",
+        "final_negotiation_date": "negotiation_date",
+        "mi_head_approval_date": "final_negotiation_date",
+        "mi_sm_approval_date": "mi_head_approval_date",
+        "mi_gm_approval_date": "mi_sm_approval_date",
+        "legal_submission_date": "mi_gm_approval_date",
+        "lp_circulation_start_date": "legal_submission_date",
+        "lp_contract_team_completion_date": "lp_circulation_start_date",
+        "lp_junior_manager_approval_date": "lp_contract_team_completion_date",
+        "lp_senior_manager_approval_date": "lp_junior_manager_approval_date",
+        "lp_gm_scm_approval_date": "lp_senior_manager_approval_date",
+        "lp_completion_date": "lp_gm_scm_approval_date",
+        "khs_inject_start_date": "lp_completion_date",
+        "khs_inject_completion_date": "khs_inject_start_date",
+    }.get(field)
+    started = _date_only(record.get("current_stage_started_on"))
+    return {
+        "field": field,
+        "label": GUIDED_MILESTONE_LABELS[field],
+        "stage_code": stage,
+        "stage_key": stage_key,
+        "previous_milestone": previous,
+        "current_stage_started_on": started.isoformat() if started else None,
+    }
+
+
+def _guided_progress_date_error(record, field, value):
+    previous_fields = {
+        "dispatch_date": "request_date",
+        "boq_confirmation_date": "dispatch_date",
+        "negotiation_date": "boq_confirmation_date",
+        "final_negotiation_date": "negotiation_date",
+        "mi_head_approval_date": "final_negotiation_date",
+        "mi_sm_approval_date": "mi_head_approval_date",
+        "mi_gm_approval_date": "mi_sm_approval_date",
+        "legal_submission_date": "mi_gm_approval_date",
+        "lp_circulation_start_date": "legal_submission_date",
+        "lp_contract_team_completion_date": "lp_circulation_start_date",
+        "lp_junior_manager_approval_date": "lp_contract_team_completion_date",
+        "lp_senior_manager_approval_date": "lp_junior_manager_approval_date",
+        "lp_gm_scm_approval_date": "lp_senior_manager_approval_date",
+        "lp_completion_date": "lp_gm_scm_approval_date",
+        "khs_inject_start_date": "lp_completion_date",
+        "khs_inject_completion_date": "khs_inject_start_date",
+    }
+    following_fields = {previous: next_field for next_field, previous in previous_fields.items()}
+    previous = previous_fields.get(field)
+    next_field = following_fields.get(field)
+    previous_date = _date_only(record.get(previous)) if previous else None
+    next_date = _date_only(record.get(next_field)) if next_field else None
+    if previous and previous_date is None:
+        return "PREVIOUS_MILESTONE_REQUIRED", f"{previous} must be recorded before {field}."
+    if previous_date and value < previous_date:
+        return "MILESTONE_BEFORE_PREVIOUS", f"{field} cannot precede {previous}."
+    if next_date and value > next_date:
+        return "MILESTONE_AFTER_NEXT", f"{field} cannot follow {next_field}."
+    if field == "lp_circulation_start_date" and not record.get("mi_gm_approval_date"):
+        return "MI_GM_REQUIRED", "LP circulation cannot start before GM SCM MI approval."
+    if field.startswith("lp_"):
+        error = _lp_milestone_update_error(record, {field: value})
+        if error:
+            return error
+    return None
 
 
 def _lp_date_order_error(record):
@@ -844,6 +1184,73 @@ def _lp_date_order_error(record):
     for previous, current in zip(populated, populated[1:]):
         if current[1] < previous[1]:
             return current[0]
+    return None
+
+
+KHS_MILESTONE_DATE_ORDER = (
+    "request_date",
+    "dispatch_date",
+    "boq_confirmation_date",
+    "negotiation_date",
+    "final_negotiation_date",
+    "mi_head_approval_date",
+    "mi_sm_approval_date",
+    "mi_gm_approval_date",
+    "legal_submission_date",
+    "lp_circulation_start_date",
+    "lp_contract_team_completion_date",
+    "lp_junior_manager_approval_date",
+    "lp_senior_manager_approval_date",
+    "lp_gm_scm_approval_date",
+    "lp_completion_date",
+    "khs_inject_start_date",
+    "khs_inject_completion_date",
+)
+
+
+def _milestone_chronology_violations(record):
+    populated = [
+        (field, _date_only(record.get(field)))
+        for field in KHS_MILESTONE_DATE_ORDER
+        if _date_only(record.get(field)) is not None
+    ]
+    return {
+        (earlier_field, later_field)
+        for index, (earlier_field, earlier_date) in enumerate(populated)
+        for later_field, later_date in populated[index + 1:]
+        if earlier_date > later_date
+    }
+
+
+def _milestone_edit_error(before, after, changed_fields):
+    """Protect sequential milestone edits while allowing legacy-history repair."""
+    field_indexes = {field: index for index, field in enumerate(KHS_MILESTONE_DATE_ORDER)}
+    for field in changed_fields:
+        index = field_indexes[field]
+        value = _date_only(after.get(field))
+        previous_field = KHS_MILESTONE_DATE_ORDER[index - 1] if index else None
+        later_fields = KHS_MILESTONE_DATE_ORDER[index + 1:]
+
+        if value is None and any(_date_only(after.get(later)) for later in later_fields):
+            return (
+                "MILESTONE_PREVIOUS_REQUIRED",
+                f"{field} cannot be cleared while a later milestone remains recorded.",
+            )
+        if value is not None and previous_field and not _date_only(after.get(previous_field)):
+            return (
+                "PREVIOUS_MILESTONE_REQUIRED",
+                f"{previous_field} must be recorded before {field}.",
+            )
+
+    before_violations = _milestone_chronology_violations(before)
+    after_violations = _milestone_chronology_violations(after)
+    introduced = sorted(after_violations - before_violations)
+    if introduced:
+        earlier_field, later_field = introduced[0]
+        return (
+            "MILESTONE_CHRONOLOGY",
+            f"{later_field} cannot precede {earlier_field}.",
+        )
     return None
 
 
@@ -989,6 +1396,11 @@ def khs_register():
             "message": "Unsupported LP approval role filter.",
         }), 400
 
+    process_status = request.args.get("process_status", "").strip().upper()
+    if process_status and process_status not in {"ACTIVE", "NOT_PROCEEDED"}:
+        return jsonify({"success": False, "code": "INVALID_PROCESS_STATUS",
+                        "message": "Unsupported KHS process status."}), 400
+
     waiting_for = request.args.get("waiting_for", "").strip()
     if len(waiting_for) > 100:
         return jsonify({
@@ -997,7 +1409,16 @@ def khs_register():
             "message": "Waiting-for filter is too long.",
         }), 400
 
-    # Construct parameterized filters.
+    age_band = request.args.get("age_band", "").strip().lower()
+    if age_band and age_band not in ALLOWED_AGE_BANDS:
+        return jsonify({
+            "success": False,
+            "code": "INVALID_AGE_BAND",
+            "message": "Unsupported WIP age band filter.",
+        }), 400
+
+    # Construct parameterized filters. Age filters are based on the current
+    # stage's recorded opening milestone and Jakarta-local calendar date.
     filters = []
     params = []
 
@@ -1045,12 +1466,48 @@ def khs_register():
     if waiting_for:
         filters.append("register.waiting_for = %s")
         params.append(waiting_for)
+    if process_status:
+        filters.append("register.process_status = %s")
+        params.append(process_status)
+
+    if age_band:
+        wip_only = (
+            "register.process_status = 'ACTIVE' "
+            "AND register.workflow_status <> 'completed' "
+            "AND register.current_stage_code NOT IN ('COMPLETED', 'NOT_PROCEEDED')"
+        )
+        if age_band == "unavailable":
+            filters.append(
+                "(" + wip_only +
+                " AND (register.current_stage_started_on IS NULL "
+                "OR register.current_stage_started_on > %s "
+                "OR register.milestone_chronology_valid IS FALSE))"
+            )
+            params.append(_jakarta_today())
+        else:
+            ranges = {
+                "0_7": "BETWEEN 0 AND 7",
+                "8_14": "BETWEEN 8 AND 14",
+                "15_30": "BETWEEN 15 AND 30",
+                "31_plus": ">= 31",
+            }
+            filters.append(
+                "(" + wip_only +
+                " AND register.current_stage_started_on IS NOT NULL "
+                "AND register.current_stage_started_on <= %s "
+                "AND register.milestone_chronology_valid IS TRUE "
+                "AND (%s::date - register.current_stage_started_on) " +
+                ranges[age_band] + ")"
+            )
+            today = _jakarta_today()
+            params.extend([today, today])
 
     attention = request.args.get("attention", "").strip().lower() in {"1", "true", "yes"}
     if attention:
         filters.append("""
             (
                 register.workflow_status <> 'completed'
+                AND register.process_status = 'ACTIVE'
                 AND (
                     NULLIF(BTRIM(COALESCE(register.waiting_for, '')), '') IS NOT NULL
                     OR NULLIF(BTRIM(COALESCE(register.waiting_reason, '')), '') IS NOT NULL
@@ -1139,6 +1596,8 @@ def khs_register():
             "stage": stage or None,
             "waiting_for": waiting_for or None,
             "waiting_role": waiting_role or None,
+            "process_status": process_status or None,
+            "age_band": age_band or None,
         },
     }), 200
 
@@ -1232,6 +1691,7 @@ def lp_circulation_register():
             )::int AS prerequisite_exceptions
         FROM ({REGISTER_BASE_QUERY}) AS register
         WHERE {lp_record_condition}
+          AND register.process_status = 'ACTIVE'
         GROUP BY register.lp_stage_key
     """
 
@@ -1326,6 +1786,7 @@ def contract_lifecycle_register():
                     JOIN khs_requests r ON r.request_id = k.request_id
                     LEFT JOIN khs_executors e ON e.executor_code = k.executor_code
                     WHERE k.khs_inject_completion_date IS NOT NULL
+                      AND k.process_status = 'ACTIVE'
                     ORDER BY k.contract_end_date ASC NULLS FIRST, k.khs_id
                     """
                 )
@@ -1429,7 +1890,7 @@ ITEM_FIELDS = {
     "lp_contract_team_completion_date", "lp_junior_manager_approval_date",
     "lp_senior_manager_approval_date", "lp_gm_scm_approval_date", "lp_completion_date",
     "khs_inject_start_date", "khs_inject_completion_date",
-    "waiting_for", "waiting_reason", "last_updated_date", "remarks",
+    "waiting_for", "waiting_reason", "action_owner", "last_updated_date", "remarks",
 }
 DATE_FIELDS = {
     "request_date", "dispatch_date", "contract_start_date", "contract_end_date",
@@ -1439,12 +1900,14 @@ DATE_FIELDS = {
     "lp_contract_team_completion_date", "lp_junior_manager_approval_date",
     "lp_senior_manager_approval_date", "lp_gm_scm_approval_date", "lp_completion_date",
     "khs_inject_start_date", "khs_inject_completion_date",
-    "last_updated_date",
+    "last_updated_date", "closure_date", "milestone_date", "due_date",
 }
 TEXT_LIMITS = {
     "request_id": 64, "request_subject": 300, "requester_owner": 160,
     "khs_id": 64, "vendor_name": 240, "executor_code": 32, "waiting_for": 160,
-    "waiting_reason": 1000, "remarks": 2000,
+    "waiting_reason": 1000, "action_owner": 160, "remarks": 2000,
+    "note": 1000, "follow_up_to": 160,
+    "closure_reason_code": 64, "closure_notes": 2000, "reopen_reason": 1000,
 }
 ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{1,63}$")
 
@@ -1594,8 +2057,12 @@ def request_register():
                             WHERE k.khs_inject_completion_date IS NOT NULL
                         )::int AS completed_khs,
                         COUNT(k.khs_id) FILTER (
-                            WHERE k.khs_inject_completion_date IS NULL
+                            WHERE k.process_status = 'ACTIVE'
+                              AND k.khs_inject_completion_date IS NULL
                         )::int AS open_khs,
+                        COUNT(k.khs_id) FILTER (
+                            WHERE k.process_status = 'NOT_PROCEEDED'
+                        )::int AS not_proceeded_khs,
                         COALESCE(
                             string_agg(DISTINCT k.vendor_name, ' · ' ORDER BY k.vendor_name)
                                 FILTER (WHERE k.vendor_name IS NOT NULL),
@@ -1755,6 +2222,42 @@ def create_khs():
         return jsonify(success=False,message="Unable to create KHS."),500
 
 
+
+LP_FOLLOW_UP_STAGE_LABELS = {
+    "contract_team": "LP Contract Team",
+    "junior_manager": "LP Junior Manager Vendor Management",
+    "senior_manager": "LP Senior Manager Strategic Sourcing",
+    "general_manager": "LP GM SCM",
+    "director": "LP Director Sign-off",
+}
+
+
+def _follow_up_detail_projection(row, current_stage_code, current_lp_stage_key, today=None):
+    """Add human-readable stage and due-state metadata to KHS workbench reminders."""
+    today = today or _jakarta_today()
+    result = _row_dict(dict(row))
+    stage_code = result.get("stage_code")
+    stage_key = result.get("stage_key") or ""
+    if stage_code == "LP_CIRCULATION":
+        result["stage_name"] = LP_FOLLOW_UP_STAGE_LABELS.get(stage_key, "LP Circulation")
+        current_stage_key = current_lp_stage_key or ""
+    else:
+        result["stage_name"] = str(stage_code or "").replace("_", " ").title() or "Unknown stage"
+        current_stage_key = current_stage_code or ""
+    result["stage_changed"] = (
+        stage_code != current_stage_code or stage_key != current_stage_key
+    )
+    due_date = _date_only(result.get("due_date"))
+    result["days_from_due"] = (today - due_date).days if due_date else None
+    result["due_state"] = (
+        "overdue" if result["days_from_due"] is not None and result["days_from_due"] > 0
+        else "due_today" if result["days_from_due"] == 0
+        else "upcoming" if result["days_from_due"] is not None
+        else "date_unavailable"
+    )
+    return result
+
+
 @dashboard_bp.get("/khs/<path:khs_id>")
 def khs_detail(khs_id):
     try:
@@ -1775,6 +2278,17 @@ def khs_detail(khs_id):
                 history = cur.fetchall()
 
                 cur.execute(
+                    """SELECT id, stage_code, stage_key, due_date, follow_up_to, note, status,
+                              created_at, created_by, completed_at, completed_by
+                       FROM khs_follow_ups
+                       WHERE khs_id=%s
+                       ORDER BY CASE WHEN status='OPEN' THEN 0 ELSE 1 END,
+                                due_date ASC, id DESC""",
+                    (khs_id,),
+                )
+                follow_ups = cur.fetchall()
+
+                cur.execute(
                     """SELECT id, document_type, original_file_name, mime_type,
                               uploaded_by, uploaded_at
                        FROM khs_documents
@@ -1792,8 +2306,16 @@ def khs_detail(khs_id):
 
         return jsonify(
             success=True,
-            data=_register_enriched(item),
+            data=_register_enriched(item, include_duration_history=True),
             history=[_row_dict(x) for x in history],
+            follow_ups=[
+                _follow_up_detail_projection(
+                    x,
+                    item.get("workflow_stage_code"),
+                    item.get("lp_stage_key"),
+                )
+                for x in follow_ups
+            ],
             documents=document_rows,
         ), 200
     except Exception:
@@ -1837,13 +2359,10 @@ def upload_khs_document(khs_id):
     if not target.is_relative_to(upload_root):
         return jsonify(success=False, message="Invalid storage location."), 400
 
-    target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    target.parent.chmod(0o700)
     digest = hashlib.sha256(payload).hexdigest()
     mime_type = mimetypes.guess_type(original_name)[0] or "application/octet-stream"
-    target.write_bytes(payload)
-    target.chmod(0o600)
 
+    target_created = False
     try:
         with get_db_pool().connection() as conn, conn.transaction():
             exists = conn.execute(
@@ -1851,8 +2370,14 @@ def upload_khs_document(khs_id):
                 (khs_id,),
             ).fetchone()
             if not exists:
-                target.unlink(missing_ok=True)
                 return jsonify(success=False, message="KHS not found."), 404
+
+            target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            target.parent.chmod(0o700)
+            with target.open("xb") as stored_file:
+                target_created = True
+                stored_file.write(payload)
+            target.chmod(0o600)
 
             document = conn.execute(
                 """INSERT INTO khs_documents (
@@ -1871,7 +2396,14 @@ def upload_khs_document(khs_id):
                 khs_id,
                 "DOCUMENT_UPLOADED",
                 {},
-                {"document_id": document_id, "document_type": saved_type, "file_name": saved_name},
+                {
+                    "document_id": document_id,
+                    "document_type": saved_type,
+                    "file_name": saved_name,
+                    "file_sha256": digest,
+                    "file_size_bytes": len(payload),
+                    "mime_type": mime_type,
+                },
             )
         return jsonify(
             success=True,
@@ -1885,7 +2417,8 @@ def upload_khs_document(khs_id):
             },
         ), 201
     except Exception:
-        target.unlink(missing_ok=True)
+        if target_created:
+            target.unlink(missing_ok=True)
         current_app.logger.exception("KHS document upload failed.")
         return jsonify(success=False, message="Unable to save KHS evidence document."), 500
 
@@ -1896,7 +2429,7 @@ def download_khs_document(document_id):
         with get_db_pool().connection() as conn:
             with conn.cursor(row_factory=dict_row) as cursor:
                 cursor.execute(
-                    """SELECT original_file_name, storage_key, mime_type
+                    """SELECT original_file_name, storage_key, mime_type, file_sha256
                        FROM khs_documents WHERE id=%s""",
                     (document_id,),
                 )
@@ -1905,19 +2438,61 @@ def download_khs_document(document_id):
             return jsonify(success=False, message="Document not found."), 404
 
         upload_root = Path(current_app.config["UPLOAD_DIR"]).resolve()
-        file_path = (upload_root / document["storage_key"]).resolve()
-        if not file_path.is_relative_to(upload_root) or not file_path.is_file():
-            return jsonify(success=False, message="Stored document is unavailable."), 404
+        storage_key = document.get("storage_key")
+        if not isinstance(storage_key, str) or not storage_key.strip():
+            return jsonify(success=False, code="DOCUMENT_UNAVAILABLE",
+                           message="Stored document is unavailable."), 404
 
+        file_path = (upload_root / storage_key).resolve()
+        if not file_path.is_relative_to(upload_root) or not file_path.is_file():
+            return jsonify(success=False, code="DOCUMENT_UNAVAILABLE",
+                           message="Stored document is unavailable."), 404
+
+        max_bytes = int(current_app.config.get("MAX_CONTENT_LENGTH", 16 * 1024 * 1024))
+        with file_path.open("rb") as stored_file:
+            payload = stored_file.read(max_bytes + 1)
+        if len(payload) > max_bytes:
+            return jsonify(success=False, code="DOCUMENT_SIZE_INVALID",
+                           message="Stored document exceeds the permitted download size."), 409
+        expected_digest = document.get("file_sha256")
+        if (
+            not isinstance(expected_digest, str)
+            or not re.fullmatch(r"[0-9a-fA-F]{64}", expected_digest.strip())
+        ):
+            current_app.logger.warning(
+                "KHS document %s has no valid SHA-256 integrity metadata.",
+                document_id,
+            )
+            return jsonify(
+                success=False,
+                code="DOCUMENT_INTEGRITY_UNAVAILABLE",
+                message="This stored document has no valid integrity checksum. Re-upload the original document to enable verified downloads.",
+            ), 409
+
+        actual_digest = hashlib.sha256(payload).hexdigest()
+        if not hmac.compare_digest(actual_digest, expected_digest.strip().lower()):
+            current_app.logger.warning(
+                "KHS document %s failed SHA-256 integrity verification.",
+                document_id,
+            )
+            return jsonify(
+                success=False,
+                code="DOCUMENT_INTEGRITY_MISMATCH",
+                message="The stored document failed integrity verification and was not downloaded.",
+            ), 409
+
+        safe_download_name = secure_filename(document.get("original_file_name") or "") or "evidence-document"
+        mime_type = mimetypes.guess_type(safe_download_name)[0] or "application/octet-stream"
         response = send_file(
-            file_path,
-            mimetype=document["mime_type"] or "application/octet-stream",
+            BytesIO(payload),
+            mimetype=mime_type,
             as_attachment=True,
-            download_name=document["original_file_name"],
-            conditional=True,
+            download_name=safe_download_name,
+            conditional=False,
         )
         response.headers["Cache-Control"] = "private, no-store"
         response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Document-Integrity"] = "verified"
         return response
     except Exception:
         current_app.logger.exception("KHS document download failed.")
@@ -1942,11 +2517,52 @@ def update_khs(khs_id):
                 if before is None:
                     return jsonify(success=False,message="KHS not found."),404
                 before=dict(before)
+                cur.execute(REGISTER_BASE_QUERY + " WHERE k.khs_id=%s", (khs_id,))
+                before_derived = cur.fetchone()
+            if before.get("process_status") == "NOT_PROCEEDED":
+                return jsonify(success=False, code="KHS_CLOSED",
+                               message="Reopen this KHS before editing its milestones."),409
             merged={**before,**data}
+            parent_request_date = _date_only(before_derived.get("request_date")) if before_derived else None
             if "request_id" in data:
-                parent = conn.execute("SELECT 1 FROM khs_requests WHERE request_id=%s", (data["request_id"],)).fetchone()
+                parent = conn.execute(
+                    "SELECT request_date FROM khs_requests WHERE request_id=%s",
+                    (data["request_id"],),
+                ).fetchone()
                 if not parent:
                     return jsonify(success=False,code="PARENT_REQUEST_NOT_FOUND",message="Parent request does not exist."),422
+                parent_request_date = _date_only(parent[0])
+
+            changed_milestone_fields = {
+                field for field in KHS_MILESTONE_DATE_ORDER[1:]
+                if field in data and data[field] != before.get(field)
+            }
+            previous_request_date = _date_only(before_derived.get("request_date")) if before_derived else None
+            if parent_request_date != previous_request_date:
+                changed_milestone_fields.add("request_date")
+            today = _jakarta_today()
+            if parent_request_date and parent_request_date > today and "request_id" in data:
+                return jsonify(
+                    success=False, code="FUTURE_MILESTONE_DATE",
+                    message="The parent request date cannot be in the future.",
+                ),422
+            for field in changed_milestone_fields:
+                milestone_value = _date_only(merged.get(field))
+                if milestone_value and milestone_value > today:
+                    return jsonify(
+                        success=False, code="FUTURE_MILESTONE_DATE",
+                        message=f"{field} cannot be in the future.",
+                    ),422
+
+            before_timeline = {**before, "request_date": _date_only(before_derived.get("request_date")) if before_derived else None}
+            after_timeline = {**merged, "request_date": parent_request_date}
+            milestone_error = _milestone_edit_error(
+                before_timeline, after_timeline, changed_milestone_fields
+            )
+            if milestone_error:
+                code, message = milestone_error
+                return jsonify(success=False, code=code, message=message),422
+
             historic_lp_exception = bool(before.get("lp_circulation_start_date") and not before.get("mi_gm_approval_date"))
             lp_start_changed = ("lp_circulation_start_date" in data and data["lp_circulation_start_date"] != before.get("lp_circulation_start_date"))
             gm_approval_cleared = ("mi_gm_approval_date" in data and data["mi_gm_approval_date"] is None)
@@ -1979,12 +2595,217 @@ def update_khs(khs_id):
                          [data[c] for c in cols]+[khs_id])
             after={**before,**data}
             _audit(conn,"KHS_ITEM",khs_id,"UPDATED",before,after)
+            if before_derived:
+                cur.execute(REGISTER_BASE_QUERY + " WHERE k.khs_id=%s", (khs_id,))
+                after_derived = cur.fetchone()
+                before_stage_identity = _workflow_stage_identity(before_derived)
+                after_stage_identity = _workflow_stage_identity(after_derived) if after_derived else None
+                if after_derived and before_stage_identity != after_stage_identity:
+                    conn.execute(
+                        """UPDATE khs_follow_ups
+                           SET status='SUPERSEDED', cancelled_at=NOW(), cancelled_by='system'
+                           WHERE khs_id=%s AND stage_code=%s AND stage_key=%s AND status='OPEN'""",
+                        (khs_id, before_stage_identity[0], before_stage_identity[1]),
+                    )
         return jsonify(success=True,message="KHS updated."),200
     except ValueError as exc:
         return jsonify(success=False,message=str(exc)),400
     except Exception:
         current_app.logger.exception("KHS update failed.")
         return jsonify(success=False,message="Unable to update KHS."),500
+
+
+
+
+@dashboard_bp.post("/khs/<path:khs_id>/progress")
+def update_khs_guided_progress(khs_id):
+    body = _body_object()
+    if body is None:
+        return jsonify(success=False, message="A JSON object is required."),400
+    try:
+        payload = _validate_payload(body, {"milestone_date", "note"}, {"milestone_date"})
+        milestone_date = payload["milestone_date"]
+        if milestone_date > _jakarta_today():
+            return jsonify(success=False, code="FUTURE_MILESTONE_DATE",
+                           message="Milestone date cannot be in the future."),422
+        with get_db_pool().connection() as conn, conn.transaction():
+            with conn.cursor(row_factory=dict_row) as cur:
+                cur.execute("SELECT process_status FROM khs_items WHERE khs_id=%s FOR UPDATE", (khs_id,))
+                locked = cur.fetchone()
+                if locked is None:
+                    return jsonify(success=False, message="KHS not found."),404
+                if locked["process_status"] != "ACTIVE":
+                    return jsonify(success=False, code="KHS_NOT_ACTIVE",
+                                   message="Only active KHS records can receive progress updates."),409
+                cur.execute(REGISTER_BASE_QUERY + " WHERE k.khs_id=%s", (khs_id,))
+                record = cur.fetchone()
+                if record is None:
+                    return jsonify(success=False, message="KHS not found."),404
+                record = dict(record)
+            if record.get("milestone_chronology_valid") is False:
+                return jsonify(
+                    success=False,
+                    code="HISTORY_INCONSISTENT",
+                    message="Milestone history is not chronologically consistent. Review the recorded dates before continuing guided progress.",
+                ),409
+            definition = _guided_progress_definition(record)
+            if not definition:
+                return jsonify(success=False, code="NO_GUIDED_MILESTONE",
+                               message="There is no pending guided milestone for this KHS."),409
+            field = definition["field"]
+            chronology_error = _guided_progress_date_error(record, field, milestone_date)
+            if chronology_error:
+                code, message = chronology_error
+                return jsonify(success=False, code=code, message=message),422
+            conn.execute(
+                f"UPDATE khs_items SET {field}=%s, updated_at=NOW(), last_updated_date=CURRENT_DATE WHERE khs_id=%s",
+                (milestone_date, khs_id),
+            )
+            after = {**record, field: milestone_date}
+            if payload.get("note"):
+                after["_progress_note"] = payload["note"]
+            _audit(conn, "KHS_ITEM", khs_id, "PROGRESS_UPDATED", record, after)
+            conn.execute(
+                """UPDATE khs_follow_ups
+                   SET status='SUPERSEDED', cancelled_at=NOW(), cancelled_by='system'
+                   WHERE khs_id=%s AND stage_code=%s AND stage_key=%s AND status='OPEN'""",
+                (khs_id, definition["stage_code"], definition["stage_key"]),
+            )
+        with get_db_pool().connection() as conn:
+            with conn.cursor(row_factory=dict_row) as cur:
+                cur.execute(REGISTER_BASE_QUERY + " WHERE k.khs_id=%s", (khs_id,))
+                updated = cur.fetchone()
+        return jsonify(success=True, message="Progress updated.",
+                       data=_register_enriched(updated, include_duration_history=True)),200
+    except ValueError as exc:
+        return jsonify(success=False, message=str(exc)),400
+    except Exception:
+        current_app.logger.exception("Guided KHS progress update failed.")
+        return jsonify(success=False, code="GUIDED_PROGRESS_UNAVAILABLE",
+                       message="Unable to update KHS progress."),500
+
+
+KHS_CLOSURE_REASON_CODES = {
+    "NO_MUTUAL_AGREEMENT", "REQUESTER_WITHDRAWAL", "VENDOR_DECLINED",
+    "INTERNAL_REJECTION", "DUPLICATE", "OTHER",
+}
+
+
+@dashboard_bp.post("/khs/<path:khs_id>/close")
+def close_khs(khs_id):
+    body = _body_object()
+    if body is None:
+        return jsonify(success=False, message="A JSON object is required."),400
+    try:
+        data = _validate_payload(body, {"closure_date", "closure_reason_code", "closure_notes"},
+                                 {"closure_date", "closure_reason_code"})
+        reason_code = data["closure_reason_code"].upper()
+        if reason_code not in KHS_CLOSURE_REASON_CODES:
+            return jsonify(success=False, code="INVALID_CLOSURE_REASON",
+                           message="Select a supported closure reason."),422
+        closure_date = data["closure_date"]
+        if closure_date > _jakarta_today():
+            return jsonify(success=False, code="FUTURE_CLOSURE_DATE",
+                           message="Closure date cannot be in the future."),422
+        if reason_code == "OTHER" and not data.get("closure_notes"):
+            return jsonify(success=False, code="CLOSURE_NOTES_REQUIRED",
+                           message="Add a note when selecting Other."),422
+        milestone_fields = (
+            "dispatch_date", "boq_confirmation_date", "negotiation_date",
+            "final_negotiation_date", "mi_head_approval_date", "mi_sm_approval_date",
+            "mi_gm_approval_date", "legal_submission_date", "lp_circulation_start_date",
+            "lp_contract_team_completion_date", "lp_junior_manager_approval_date",
+            "lp_senior_manager_approval_date", "lp_gm_scm_approval_date",
+            "lp_completion_date", "khs_inject_start_date",
+        )
+        with get_db_pool().connection() as conn, conn.transaction():
+            with conn.cursor(row_factory=dict_row) as cur:
+                cur.execute(
+                    """SELECT k.*, r.request_date AS parent_request_date
+                       FROM khs_items k
+                       JOIN khs_requests r ON r.request_id = k.request_id
+                       WHERE k.khs_id=%s
+                       FOR UPDATE OF k""",
+                    (khs_id,),
+                )
+                before = cur.fetchone()
+                if before is None:
+                    return jsonify(success=False, message="KHS not found."),404
+                before = dict(before)
+            if before.get("process_status") == "NOT_PROCEEDED":
+                return jsonify(success=False, code="KHS_ALREADY_CLOSED",
+                               message="This KHS is already marked as Not Proceeded."),409
+            if before.get("khs_inject_completion_date"):
+                return jsonify(success=False, code="KHS_ALREADY_INJECTED",
+                               message="A fully injected KHS cannot be closed as Not Proceeded."),409
+            parent_request_date = _date_only(before.get("parent_request_date"))
+            if parent_request_date and closure_date < parent_request_date:
+                return jsonify(success=False, code="CLOSURE_DATE_BEFORE_REQUEST",
+                               message="Closure date cannot precede the original request date."),422
+            recorded_dates = [_date_only(before.get(field)) for field in milestone_fields]
+            recorded_dates = [value for value in recorded_dates if value is not None]
+            if recorded_dates and closure_date < max(recorded_dates):
+                return jsonify(success=False, code="CLOSURE_DATE_BEFORE_LAST_MILESTONE",
+                               message="Closure date cannot precede the latest recorded milestone."),422
+            after = {**before, "process_status": "NOT_PROCEEDED",
+                     "closure_date": closure_date, "closure_reason_code": reason_code,
+                     "closure_notes": data.get("closure_notes"), "closed_by": "manual-entry"}
+            conn.execute(
+                """UPDATE khs_items SET process_status='NOT_PROCEEDED', closure_date=%s,
+                   closure_reason_code=%s, closure_notes=%s, closed_at=NOW(),
+                   closed_by='manual-entry', updated_at=NOW(), last_updated_date=CURRENT_DATE
+                   WHERE khs_id=%s""",
+                (closure_date, reason_code, data.get("closure_notes"), khs_id),
+            )
+            conn.execute(
+                """UPDATE khs_follow_ups
+                   SET status='SUPERSEDED', cancelled_at=NOW(), cancelled_by='system'
+                   WHERE khs_id=%s AND status='OPEN'""",
+                (khs_id,),
+            )
+            _audit(conn, "KHS_ITEM", khs_id, "CLOSED_NOT_PROCEEDED", before, after)
+        return jsonify(success=True, message="KHS closed as Not Proceeded."),200
+    except ValueError as exc:
+        return jsonify(success=False, message=str(exc)),400
+    except Exception:
+        current_app.logger.exception("KHS closure failed.")
+        return jsonify(success=False, code="KHS_CLOSURE_UNAVAILABLE",
+                       message="Unable to close KHS."),500
+
+
+@dashboard_bp.post("/khs/<path:khs_id>/reopen")
+def reopen_khs(khs_id):
+    body = _body_object()
+    if body is None:
+        return jsonify(success=False, message="A JSON object is required."),400
+    try:
+        data = _validate_payload(body, {"reopen_reason"}, {"reopen_reason"})
+        with get_db_pool().connection() as conn, conn.transaction():
+            with conn.cursor(row_factory=dict_row) as cur:
+                cur.execute("SELECT * FROM khs_items WHERE khs_id=%s FOR UPDATE", (khs_id,))
+                before = cur.fetchone()
+                if before is None:
+                    return jsonify(success=False, message="KHS not found."),404
+                before = dict(before)
+            if before.get("process_status") != "NOT_PROCEEDED":
+                return jsonify(success=False, code="KHS_NOT_CLOSED",
+                               message="Only a Not Proceeded KHS can be reopened."),409
+            after = {**before, "process_status": "ACTIVE",
+                     "reopen_reason": data["reopen_reason"], "reopened_by": "manual-entry"}
+            conn.execute(
+                """UPDATE khs_items SET process_status='ACTIVE', reopened_at=NOW(),
+                   reopened_by='manual-entry', reopen_reason=%s,
+                   updated_at=NOW(), last_updated_date=CURRENT_DATE WHERE khs_id=%s""",
+                (data["reopen_reason"], khs_id),
+            )
+            _audit(conn, "KHS_ITEM", khs_id, "REOPENED", before, after)
+        return jsonify(success=True, message="KHS reopened."),200
+    except ValueError as exc:
+        return jsonify(success=False, message=str(exc)),400
+    except Exception:
+        current_app.logger.exception("KHS reopening failed.")
+        return jsonify(success=False, code="KHS_REOPEN_UNAVAILABLE",
+                       message="Unable to reopen KHS."),500
 
 
 @dashboard_bp.get("/workflow")
@@ -2011,13 +2832,15 @@ def workflow_monitoring():
             )::int AS completed,
             MAX(
                 CASE
-                    WHEN register.stage_started_on <= """ + as_of_sql + """
+                    WHEN register.process_status = 'ACTIVE'
+                     AND register.stage_started_on <= """ + as_of_sql + """
                     THEN """ + as_of_sql + """ - register.stage_started_on
                     ELSE NULL
                 END
             )::int AS oldest_stage_age_days,
             COUNT(register.khs_id) FILTER (
-                WHERE stage.stage_code <> 'COMPLETED'
+                WHERE stage.stage_code NOT IN ('COMPLETED', 'NOT_PROCEEDED')
+                  AND register.process_status = 'ACTIVE'
                   AND (
                       register.stage_started_on IS NULL
                       OR register.stage_started_on > """ + as_of_sql + """
@@ -2049,7 +2872,8 @@ WITH register_state AS (
 active_lp AS (
     SELECT *
     FROM register_state
-    WHERE lp_completion_date IS NULL
+    WHERE process_status = 'ACTIVE'
+      AND lp_completion_date IS NULL
       AND (
             lp_circulation_start_date IS NOT NULL
          OR lp_contract_team_completion_date IS NOT NULL
@@ -2076,6 +2900,7 @@ mi_queue AS (
               AND mi_gm_approval_date IS NULL
         )::int AS general_manager
     FROM khs_items
+    WHERE process_status = 'ACTIVE'
 ),
 lp_queue AS (
     SELECT
@@ -2193,6 +3018,476 @@ def workflow_overview():
             code="WORKFLOW_OVERVIEW_UNAVAILABLE",
             message="Approval workflow overview is temporarily unavailable.",
         ), 503
+
+
+
+def _sla_status_for_age(age_days, warning_after_days=None, target_days=None, escalation_after_days=None):
+    if age_days is None or target_days is None:
+        return "not_configured" if target_days is None else "age_unavailable"
+    if escalation_after_days is not None and age_days >= escalation_after_days:
+        return "escalation_due"
+    if age_days >= target_days:
+        return "overdue"
+    if warning_after_days is not None and age_days >= warning_after_days:
+        return "due_soon"
+    return "on_track"
+
+
+def _rank_operations_stages(stage_rows):
+    ranked = sorted(
+        (row for row in stage_rows if int(row.get("wip_count") or 0) > 0),
+        key=lambda row: (
+            -int(row.get("wip_count") or 0),
+            -(row.get("p90_age_days") if row.get("p90_age_days") is not None else -1),
+            -(row.get("oldest_age_days") if row.get("oldest_age_days") is not None else -1),
+            int(row.get("sequence_number") or 0),
+        ),
+    )
+    ranks = {row["stage_code"]: rank for rank, row in enumerate(ranked, start=1)}
+    for row in stage_rows:
+        row["bottleneck_rank"] = ranks.get(row["stage_code"])
+    return stage_rows
+
+
+def _operations_stage_totals(stage_rows):
+    return {
+        "active_wip": sum(int(row.get("wip_count") or 0) for row in stage_rows),
+        "older_than_30_days": sum(int(row.get("age_over_30") or 0) for row in stage_rows),
+        "stage_age_unavailable": sum(int(row.get("age_unavailable") or 0) for row in stage_rows),
+    }
+
+
+def _operations_stage_query(as_of):
+    as_of_sql = f"DATE '{as_of.isoformat()}'"
+    return """
+        WITH register_state AS (
+            SELECT *
+            FROM (""" + REGISTER_BASE_QUERY + """) AS register
+        ),
+        active_wip AS (
+            SELECT
+                register.*,
+                CASE
+                    WHEN register.current_stage_started_on IS NOT NULL
+                     AND register.current_stage_started_on <= """ + as_of_sql + """
+                     AND register.milestone_chronology_valid IS TRUE
+                    THEN (""" + as_of_sql + """ - register.current_stage_started_on)::int
+                    ELSE NULL
+                END AS stage_age_days
+            FROM register_state AS register
+            WHERE register.process_status = 'ACTIVE'
+              AND register.workflow_status <> 'completed'
+              AND register.current_stage_code NOT IN ('COMPLETED', 'NOT_PROCEEDED')
+        )
+        SELECT
+            stage.stage_code,
+            stage.stage_name,
+            stage.sequence_number,
+            COUNT(wip.khs_id)::int AS wip_count,
+            COUNT(wip.khs_id) FILTER (WHERE wip.stage_age_days BETWEEN 0 AND 7)::int AS age_0_7,
+            COUNT(wip.khs_id) FILTER (WHERE wip.stage_age_days BETWEEN 8 AND 14)::int AS age_8_14,
+            COUNT(wip.khs_id) FILTER (WHERE wip.stage_age_days BETWEEN 15 AND 30)::int AS age_15_30,
+            COUNT(wip.khs_id) FILTER (WHERE wip.stage_age_days > 30)::int AS age_over_30,
+            COUNT(wip.khs_id) FILTER (WHERE wip.khs_id IS NOT NULL AND wip.stage_age_days IS NULL)::int AS age_unavailable,
+            (percentile_disc(0.5) WITHIN GROUP (ORDER BY wip.stage_age_days)
+                FILTER (WHERE wip.stage_age_days IS NOT NULL))::int AS median_age_days,
+            (percentile_disc(0.9) WITHIN GROUP (ORDER BY wip.stage_age_days)
+                FILTER (WHERE wip.stage_age_days IS NOT NULL))::int AS p90_age_days,
+            MAX(wip.stage_age_days)::int AS oldest_age_days
+        FROM khs_stage_config AS stage
+        LEFT JOIN active_wip AS wip ON wip.current_stage_code = stage.stage_code
+        WHERE stage.is_active = TRUE
+          AND stage.stage_code NOT IN ('COMPLETED', 'NOT_PROCEEDED')
+        GROUP BY stage.stage_code, stage.stage_name, stage.sequence_number
+        ORDER BY stage.sequence_number
+    """
+
+
+
+@dashboard_bp.get("/operations/overview")
+def operations_overview():
+    today = _jakarta_today()
+    try:
+        with get_db_pool().connection() as conn:
+            with conn.cursor(row_factory=dict_row) as cur:
+                cur.execute(_operations_stage_query(today))
+                stage_rows = [dict(row) for row in cur.fetchall()]
+        stage_rows = _rank_operations_stages(stage_rows)
+        totals = _operations_stage_totals(stage_rows)
+        return jsonify(
+            success=True,
+            as_of_date=today.isoformat(),
+            data={
+                "summary": totals,
+                "stages": [_row_dict(row) for row in stage_rows],
+                "aging_bucket_note": "Aging buckets (0-7, 8-14, 15-30, 31+ days) are descriptive, not SLA targets.",
+                "bottleneck_basis": "Occupied stages are ranked by WIP count, then P90 stage age, then oldest stage age. This is an operational triage order, not proof of root cause.",
+            },
+        ),200
+    except Exception:
+        current_app.logger.exception("Operations overview query failed.")
+        return jsonify(success=False, code="OPERATIONS_OVERVIEW_UNAVAILABLE",
+                       message="Operations analytics are temporarily unavailable."),503
+
+
+
+
+
+def _operations_sla_query(as_of):
+    as_of_sql = f"DATE '{as_of.isoformat()}'"
+    return """
+        WITH register_state AS (
+            SELECT *
+            FROM (""" + REGISTER_BASE_QUERY + """) AS register
+        ),
+        active_wip AS (
+            SELECT
+                register.*,
+                CASE
+                    WHEN register.current_stage_started_on IS NOT NULL
+                     AND register.current_stage_started_on <= """ + as_of_sql + """
+                     AND register.milestone_chronology_valid IS TRUE
+                    THEN (""" + as_of_sql + """ - register.current_stage_started_on)::int
+                    ELSE NULL
+                END AS stage_age_days
+            FROM register_state AS register
+            WHERE register.process_status = 'ACTIVE'
+              AND register.workflow_status <> 'completed'
+              AND register.current_stage_code NOT IN ('COMPLETED', 'NOT_PROCEEDED')
+        )
+        SELECT
+            stage.stage_code,
+            stage.stage_name,
+            stage.sequence_number,
+            MAX(wip.stage_age_days)::int AS oldest_age_days,
+            policy.warning_after_days,
+            COALESCE(policy.target_days, stage.default_sla_days) AS target_days,
+            policy.escalation_after_days,
+            COUNT(wip.khs_id) FILTER (
+                WHERE COALESCE(policy.target_days, stage.default_sla_days) IS NOT NULL
+                  AND wip.stage_age_days >= COALESCE(policy.target_days, stage.default_sla_days)
+            )::int AS overdue_count,
+            COUNT(wip.khs_id) FILTER (
+                WHERE policy.escalation_after_days IS NOT NULL
+                  AND wip.stage_age_days >= policy.escalation_after_days
+            )::int AS escalation_count
+        FROM khs_stage_config AS stage
+        LEFT JOIN active_wip AS wip ON wip.current_stage_code = stage.stage_code
+        LEFT JOIN khs_stage_sla_policies AS policy ON policy.stage_code = stage.stage_code
+        WHERE stage.is_active = TRUE
+          AND stage.stage_code NOT IN ('COMPLETED', 'NOT_PROCEEDED')
+        GROUP BY stage.stage_code, stage.stage_name, stage.sequence_number, stage.default_sla_days,
+                 policy.warning_after_days, policy.target_days, policy.escalation_after_days
+        ORDER BY stage.sequence_number
+    """
+
+
+@dashboard_bp.get("/operations/sla-overview")
+def operations_sla_overview():
+    today = _jakarta_today()
+    try:
+        with get_db_pool().connection() as conn:
+            with conn.cursor(row_factory=dict_row) as cur:
+                cur.execute(_operations_sla_query(today))
+                stage_rows = [dict(row) for row in cur.fetchall()]
+        for row in stage_rows:
+            row["sla_status"] = _sla_status_for_age(
+                row.get("oldest_age_days"),
+                row.get("warning_after_days"),
+                row.get("target_days"),
+                row.get("escalation_after_days"),
+            )
+            row["sla_configured"] = row.get("target_days") is not None
+        summary = {
+            "sla_overdue_records": sum(int(row.get("overdue_count") or 0) for row in stage_rows),
+            "escalation_records": sum(int(row.get("escalation_count") or 0) for row in stage_rows),
+            "sla_not_configured_stages": sum(1 for row in stage_rows if row.get("target_days") is None),
+        }
+        return jsonify(
+            success=True,
+            as_of_date=today.isoformat(),
+            data={
+                "summary": summary,
+                "stages": [_row_dict(row) for row in stage_rows],
+            },
+        ), 200
+    except Exception:
+        current_app.logger.exception("Operations SLA overview query failed.")
+        return jsonify(
+            success=False,
+            code="OPERATIONS_SLA_OVERVIEW_UNAVAILABLE",
+            message="SLA policy analytics are temporarily unavailable.",
+        ), 503
+
+
+@dashboard_bp.get("/operations/follow-ups")
+def list_khs_follow_ups():
+    status = request.args.get("status", "OPEN").strip().upper()
+    if status not in {"OPEN", "COMPLETED", "CANCELLED", "SUPERSEDED", "ALL"}:
+        return jsonify(success=False, code="INVALID_FOLLOW_UP_STATUS",
+                       message="Unsupported follow-up status."),400
+    today = _jakarta_today()
+    try:
+        with get_db_pool().connection() as conn:
+            with conn.cursor(row_factory=dict_row) as cur:
+                cur.execute(
+                    """WITH register_state AS (
+                           SELECT * FROM (""" + REGISTER_BASE_QUERY + """) AS register
+                       )
+                       SELECT
+                           f.id, f.khs_id, f.stage_code, f.stage_key,
+                           CASE WHEN register.workflow_stage_code='LP_CIRCULATION' THEN
+                               CASE register.lp_stage_key
+                                   WHEN 'contract_team' THEN 'LP Contract Team'
+                                   WHEN 'junior_manager' THEN 'LP Junior Manager'
+                                   WHEN 'senior_manager' THEN 'LP Senior Manager'
+                                   WHEN 'general_manager' THEN 'LP GM SCM'
+                                   WHEN 'director' THEN 'LP Director Sign-off'
+                                   ELSE sc.stage_name
+                               END
+                           ELSE CASE
+                               WHEN register.workflow_stage_code='KHS_INJECTION'
+                                 AND register.khs_inject_start_date IS NULL
+                               THEN 'Injection Preparation'
+                               ELSE sc.stage_name
+                           END END AS stage_name,
+                           f.due_date, f.follow_up_to, f.note, f.status,
+                           f.created_at, f.created_by, f.completed_at,
+                           k.vendor_name, k.action_owner,
+                           register.current_stage_code,
+                           (
+                             f.stage_code <> register.workflow_stage_code
+                             OR f.stage_key <> CASE
+                                 WHEN register.workflow_stage_code='LP_CIRCULATION'
+                                   THEN COALESCE(register.lp_stage_key,'')
+                                 WHEN register.workflow_stage_code='KHS_INJECTION'
+                                   THEN CASE WHEN register.khs_inject_start_date IS NULL
+                                             THEN 'injection_preparation' ELSE 'khs_injection' END
+                                 ELSE register.workflow_stage_code
+                             END
+                           ) AS stage_changed,
+                           (%s - f.due_date)::int AS days_from_due
+                       FROM khs_follow_ups f
+                       JOIN khs_items k ON k.khs_id=f.khs_id
+                       JOIN khs_stage_config sc ON sc.stage_code=f.stage_code
+                       JOIN register_state register ON register.khs_id=f.khs_id
+                       WHERE (%s='ALL' OR f.status=%s)
+                       ORDER BY
+                           CASE WHEN f.status='OPEN' AND f.due_date < %s THEN 0
+                                WHEN f.status='OPEN' AND f.due_date = %s THEN 1
+                                WHEN f.status='OPEN' THEN 2 ELSE 3 END,
+                           f.due_date ASC, f.id DESC
+                       LIMIT 200""",
+                    (today, status, status, today, today),
+                )
+                rows = [_row_dict(dict(row)) for row in cur.fetchall()]
+        return jsonify(success=True, as_of_date=today.isoformat(), data=rows),200
+    except Exception:
+        current_app.logger.exception("KHS follow-up list failed.")
+        return jsonify(success=False, code="FOLLOW_UP_LIST_UNAVAILABLE",
+                       message="Follow-up reminders are temporarily unavailable."),503
+
+
+@dashboard_bp.get("/khs/<path:khs_id>/follow-ups")
+def list_khs_record_follow_ups(khs_id):
+    try:
+        with get_db_pool().connection() as conn:
+            with conn.cursor(row_factory=dict_row) as cur:
+                cur.execute(
+                    """SELECT id, khs_id, stage_code, stage_key, due_date, follow_up_to, note,
+                              status, created_at, created_by, completed_at, completed_by,
+                              cancelled_at, cancelled_by
+                       FROM khs_follow_ups
+                       WHERE khs_id=%s
+                       ORDER BY CASE WHEN status='OPEN' THEN 0 ELSE 1 END,
+                                due_date ASC, id DESC""",
+                    (khs_id,),
+                )
+                rows = [_row_dict(dict(row)) for row in cur.fetchall()]
+        return jsonify(success=True, data=rows),200
+    except Exception:
+        current_app.logger.exception("KHS record follow-up query failed.")
+        return jsonify(success=False, message="Unable to load KHS follow-ups."),503
+
+
+@dashboard_bp.post("/khs/<path:khs_id>/follow-ups")
+def create_khs_follow_up(khs_id):
+    body = _body_object()
+    if body is None:
+        return jsonify(success=False, message="A JSON object is required."),400
+    try:
+        data = _validate_payload(body, {"due_date", "follow_up_to", "note"},
+                                 {"due_date", "note"})
+        with get_db_pool().connection() as conn, conn.transaction():
+            with conn.cursor(row_factory=dict_row) as cur:
+                cur.execute("SELECT process_status FROM khs_items WHERE khs_id=%s FOR UPDATE", (khs_id,))
+                locked = cur.fetchone()
+                if locked is None:
+                    return jsonify(success=False, message="KHS not found."),404
+                if locked["process_status"] != "ACTIVE":
+                    return jsonify(success=False, code="KHS_NOT_ACTIVE",
+                                   message="Follow-ups can only be scheduled for active KHS records."),409
+                cur.execute(REGISTER_BASE_QUERY + " WHERE k.khs_id=%s", (khs_id,))
+                record = cur.fetchone()
+                if record is None:
+                    return jsonify(success=False, message="KHS not found."),404
+                record = dict(record)
+            stage_code, stage_key = _workflow_stage_identity(record)
+            if stage_code in (None, "COMPLETED", "NOT_PROCEEDED"):
+                return jsonify(success=False, code="NO_ACTIVE_STAGE",
+                               message="This KHS has no active workflow stage."),409
+            with conn.cursor(row_factory=dict_row) as insert_cursor:
+                insert_cursor.execute(
+                    """INSERT INTO khs_follow_ups
+                       (khs_id, stage_code, stage_key, due_date, follow_up_to, note)
+                       VALUES (%s,%s,%s,%s,%s,%s)
+                       RETURNING id, khs_id, stage_code, stage_key, due_date, follow_up_to, note, status, created_at""",
+                    (khs_id, stage_code, stage_key, data["due_date"], data.get("follow_up_to"), data["note"]),
+                )
+                follow_up = _row_dict(dict(insert_cursor.fetchone()))
+            if data.get("follow_up_to"):
+                conn.execute(
+                    "UPDATE khs_items SET action_owner=%s, updated_at=NOW(), last_updated_date=CURRENT_DATE WHERE khs_id=%s",
+                    (data["follow_up_to"], khs_id),
+                )
+                after = {**record, "action_owner": data["follow_up_to"]}
+                _audit(conn, "KHS_ITEM", khs_id, "ACTION_OWNER_UPDATED", record, after)
+            _audit(conn, "KHS_ITEM", khs_id, "FOLLOW_UP_SCHEDULED", {},
+                   {"follow_up": follow_up})
+        return jsonify(success=True, data=follow_up),201
+    except ValueError as exc:
+        return jsonify(success=False, message=str(exc)),400
+    except Exception:
+        current_app.logger.exception("KHS follow-up scheduling failed.")
+        return jsonify(success=False, code="FOLLOW_UP_CREATE_UNAVAILABLE",
+                       message="Unable to schedule the follow-up."),500
+
+
+def _follow_up_matches_current_stage(follow_up, record):
+    """A reminder is actionable only while its original workflow stage is current."""
+    if not record or record.get("process_status") != "ACTIVE":
+        return False
+
+    stage_code, stage_key = _workflow_stage_identity(record)
+    if stage_code in (None, "COMPLETED", "NOT_PROCEEDED"):
+        return False
+
+    return (
+        follow_up.get("stage_code") == stage_code
+        and (follow_up.get("stage_key") or "") == (stage_key or "")
+    )
+
+
+def _set_follow_up_status(follow_up_id, status):
+    with get_db_pool().connection() as conn, conn.transaction():
+        with conn.cursor(row_factory=dict_row) as cur:
+            # Lock the KHS first, matching the lock order used by milestone
+            # updates and closure. This prevents a stage transition racing a
+            # completion/cancellation action.
+            cur.execute(
+                """SELECT k.khs_id
+                   FROM khs_items k
+                   JOIN khs_follow_ups f ON f.khs_id = k.khs_id
+                   WHERE f.id = %s
+                   FOR UPDATE OF k""",
+                (follow_up_id,),
+            )
+            owner = cur.fetchone()
+            if owner is None:
+                return None
+            khs_id = owner["khs_id"]
+
+            cur.execute(REGISTER_BASE_QUERY + " WHERE k.khs_id=%s", (khs_id,))
+            current_record = cur.fetchone()
+            if current_record is None:
+                return None
+            current_record = dict(current_record)
+
+            cur.execute(
+                """SELECT f.*, k.process_status
+                   FROM khs_follow_ups f
+                   JOIN khs_items k ON k.khs_id=f.khs_id
+                   WHERE f.id=%s
+                   FOR UPDATE OF f""",
+                (follow_up_id,),
+            )
+            before = cur.fetchone()
+            if before is None:
+                return None
+            before = dict(before)
+
+        if before["status"] != "OPEN":
+            return {"conflict": True}
+
+        if not _follow_up_matches_current_stage(before, current_record):
+            conn.execute(
+                """UPDATE khs_follow_ups
+                   SET status='SUPERSEDED',
+                       cancelled_at=NOW(),
+                       cancelled_by='system'
+                   WHERE id=%s AND status='OPEN'""",
+                (follow_up_id,),
+            )
+            after = {
+                **before,
+                "status": "SUPERSEDED",
+                "cancelled_by": "system",
+            }
+            _audit(
+                conn,
+                "KHS_ITEM",
+                before["khs_id"],
+                "FOLLOW_UP_SUPERSEDED",
+                before,
+                after,
+            )
+            return {"conflict": True, "superseded": True}
+
+        actor_field = "completed_by" if status == "COMPLETED" else "cancelled_by"
+        time_field = "completed_at" if status == "COMPLETED" else "cancelled_at"
+        conn.execute(
+            f"UPDATE khs_follow_ups SET status=%s, {time_field}=NOW(), {actor_field}='manual-entry' WHERE id=%s",
+            (status, follow_up_id),
+        )
+        after = {**before, "status": status, actor_field: "manual-entry"}
+        _audit(conn, "KHS_ITEM", before["khs_id"], "FOLLOW_UP_" + status, before, after)
+        return {"id": follow_up_id, "khs_id": before["khs_id"], "status": status}
+
+
+@dashboard_bp.post("/operations/follow-ups/<int:follow_up_id>/complete")
+def complete_khs_follow_up(follow_up_id):
+    try:
+        result = _set_follow_up_status(follow_up_id, "COMPLETED")
+        if result is None:
+            return jsonify(success=False, message="Follow-up not found."),404
+        if result.get("superseded"):
+            return jsonify(success=False, code="FOLLOW_UP_SUPERSEDED",
+                           message="This reminder belonged to a previous workflow stage and was superseded."),409
+        if result.get("conflict"):
+            return jsonify(success=False, code="FOLLOW_UP_NOT_OPEN",
+                           message="Only open follow-ups can be completed."),409
+        return jsonify(success=True, data=result),200
+    except Exception:
+        current_app.logger.exception("Follow-up completion failed.")
+        return jsonify(success=False, message="Unable to complete follow-up."),503
+
+
+@dashboard_bp.post("/operations/follow-ups/<int:follow_up_id>/cancel")
+def cancel_khs_follow_up(follow_up_id):
+    try:
+        result = _set_follow_up_status(follow_up_id, "CANCELLED")
+        if result is None:
+            return jsonify(success=False, message="Follow-up not found."),404
+        if result.get("superseded"):
+            return jsonify(success=False, code="FOLLOW_UP_SUPERSEDED",
+                           message="This reminder belonged to a previous workflow stage and was superseded."),409
+        if result.get("conflict"):
+            return jsonify(success=False, code="FOLLOW_UP_NOT_OPEN",
+                           message="Only open follow-ups can be cancelled."),409
+        return jsonify(success=True, data=result),200
+    except Exception:
+        current_app.logger.exception("Follow-up cancellation failed.")
+        return jsonify(success=False, message="Unable to cancel follow-up."),503
 
 
 @dashboard_bp.get("/activity")

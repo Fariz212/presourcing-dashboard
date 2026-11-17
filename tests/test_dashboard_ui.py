@@ -80,6 +80,10 @@ def test_root_serves_dashboard_and_static_assets(monkeypatch, tmp_path):
     assert b"lp_gm_scm_approval_date" in javascript.data
     assert b"lp_circulation_start_date" in javascript.data
     assert b"lp_completion_date" in javascript.data
+    assert b"languageToggle" in response.data
+    assert b"I18N_ID" in javascript.data
+    assert b"initLanguageSwitcher" in javascript.data
+    assert b"localStorage.setItem(\"khs-dashboard-language\"" in javascript.data
 
 def test_dashboard_contains_separate_operational_modules(monkeypatch, tmp_path):
     monkeypatch.setattr(

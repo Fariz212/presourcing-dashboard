@@ -4,10 +4,10 @@
 INSERT INTO khs_requests (
     request_id, request_date, request_subject, requester_owner
 ) VALUES
-    ('REQ-VIS-001', DATE '2026-11-10', 'Cloud Infrastructure & Managed Services', 'IT Procurement'),
-    ('REQ-VIS-002', DATE '2026-10-02', 'Network Connectivity and MPLS Renewal', 'Technology Sourcing'),
-    ('REQ-VIS-003', DATE '2026-09-18', 'Enterprise Software Licensing', 'Digital Workplace'),
-    ('REQ-VIS-004', DATE '2026-11-03', 'Facilities and Workplace Services', 'General Procurement')
+    ('REQ-VIS-001', DATE '2026-08-01', 'Cloud Infrastructure & Managed Services', 'IT Procurement'),
+    ('REQ-VIS-002', DATE '2026-07-01', 'Network Connectivity and MPLS Renewal', 'Technology Sourcing'),
+    ('REQ-VIS-003', DATE '2026-06-01', 'Enterprise Software Licensing', 'Digital Workplace'),
+    ('REQ-VIS-004', DATE '2026-04-01', 'Facilities and Workplace Services', 'General Procurement')
 ON CONFLICT (request_id) DO NOTHING;
 
 INSERT INTO khs_items (
@@ -113,5 +113,49 @@ INSERT INTO khs_items (
         DATE '2026-11-03', DATE '2026-11-04', NULL, NULL,
         'KHS Injection Team', 'Injection is in progress',
         DATE '2026-11-14', 'Synthetic visual-preview record'
+    )
+ON CONFLICT (khs_id) DO NOTHING;
+
+INSERT INTO khs_requests (
+    request_id, request_date, request_subject, requester_owner
+) VALUES
+    ('REQ-AGING-001', CURRENT_DATE - 60, 'WIP Aging 0–7 day fixture', 'CI fixture'),
+    ('REQ-AGING-002', CURRENT_DATE - 60, 'WIP Aging 8–14 day fixture', 'CI fixture'),
+    ('REQ-AGING-003', CURRENT_DATE - 60, 'WIP Aging 15–30 day fixture', 'CI fixture'),
+    ('REQ-AGING-004', CURRENT_DATE - 60, 'WIP Aging 31+ day fixture', 'CI fixture'),
+    ('REQ-AGING-005', CURRENT_DATE - 60, 'WIP Aging inconsistent chronology fixture', 'CI fixture')
+ON CONFLICT (request_id) DO NOTHING;
+
+INSERT INTO khs_items (
+    khs_id, request_id, source_row_no, dispatch_date, executor_code,
+    subtype, vendor_name, boq_confirmation_date, negotiation_date,
+    final_negotiation_date, mi_head_approval_date, mi_sm_approval_date,
+    waiting_for, waiting_reason, remarks
+) VALUES
+    (
+        'KHS-AGING-007', 'REQ-AGING-001', 1, CURRENT_DATE - 5, 'FZK',
+        'Kontrak Baru', 'Aging Fixture 0–7', NULL, NULL, NULL, NULL, NULL,
+        NULL, NULL, 'Synthetic Phase 1 age bucket fixture'
+    ),
+    (
+        'KHS-AGING-014', 'REQ-AGING-002', 2, CURRENT_DATE - 20, 'FZK',
+        'Kontrak Baru', 'Aging Fixture 8–14', CURRENT_DATE - 12, NULL, NULL, NULL, NULL,
+        NULL, NULL, 'Synthetic Phase 1 age bucket fixture'
+    ),
+    (
+        'KHS-AGING-022', 'REQ-AGING-003', 3, CURRENT_DATE - 30, 'FZK',
+        'Kontrak Baru', 'Aging Fixture 15–30', CURRENT_DATE - 27, CURRENT_DATE - 22, NULL, NULL, NULL,
+        NULL, NULL, 'Synthetic Phase 1 age bucket fixture'
+    ),
+    (
+        'KHS-AGING-040', 'REQ-AGING-004', 4, CURRENT_DATE - 55, 'FZK',
+        'Kontrak Baru', 'Aging Fixture 31+', CURRENT_DATE - 52, CURRENT_DATE - 50,
+        CURRENT_DATE - 48, CURRENT_DATE - 45, CURRENT_DATE - 40,
+        NULL, NULL, 'Synthetic Phase 1 age bucket fixture'
+    ),
+    (
+        'KHS-AGING-INVALID', 'REQ-AGING-005', 5, CURRENT_DATE - 5, 'FZK',
+        'Kontrak Baru', 'Aging Fixture Inconsistent History', CURRENT_DATE - 7, NULL, NULL, NULL, NULL,
+        NULL, NULL, 'Dispatch date is later than BOQ confirmation date'
     )
 ON CONFLICT (khs_id) DO NOTHING;

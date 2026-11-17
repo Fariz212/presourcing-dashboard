@@ -68,6 +68,9 @@ def assert_stage_and_age(page, body_id, khs_id, stage_text, expected_age_text,
 
 def main() -> int:
     api_failures: list[dict[str, object]] = []
+    expected_api_validations: list[dict[str, object]] = []
+    expected_validation_console_messages: list[str] = []
+    expected_validation_in_flight = False
     page_errors: list[str] = []
     console_errors: list[str] = []
     capture_errors: list[str] = []
@@ -83,20 +86,40 @@ def main() -> int:
         )
 
         def inspect_response(response) -> None:
-            if "/api/" in response.url and response.status >= 400:
-                api_failures.append({
+            if "/api/" not in response.url or response.status < 400:
+                return
+            expected_progress_rejection = (
+                expected_validation_in_flight
+                and response.status == 422
+                and response.url.endswith("/api/dashboard/khs/KHS-VIS-002/progress")
+            )
+            if expected_progress_rejection:
+                expected_api_validations.append({
                     "status": response.status,
                     "url": response.url,
+                    "reason": "MILESTONE_BEFORE_PREVIOUS",
                 })
+                return
+            api_failures.append({
+                "status": response.status,
+                "url": response.url,
+            })
+
+        def inspect_console(message) -> None:
+            expected_rejection_message = (
+                expected_validation_in_flight
+                and message.type == "error"
+                and "server responded with a status of 422" in message.text
+                and "UNPROCESSABLE ENTITY" in message.text
+            )
+            if expected_rejection_message:
+                expected_validation_console_messages.append(message.text)
+            elif message.type == "error":
+                console_errors.append(message.text)
 
         page.on("response", inspect_response)
         page.on("pageerror", lambda error: page_errors.append(str(error)))
-        page.on(
-            "console",
-            lambda message: console_errors.append(message.text)
-            if message.type == "error"
-            else None,
-        )
+        page.on("console", inspect_console)
 
         current_page: str | None = None
 
@@ -373,6 +396,335 @@ def main() -> int:
             capture_errors.append(f"KHS detail/form interaction captures: {error}")
             print(f"FAILED KHS detail/form interaction captures: {error}")
 
+        try:
+            # Use desktop navigation for this interaction check; mobile navigation
+            # is intentionally collapsed until its menu toggle is opened.
+            page.set_viewport_size({"width": 1440, "height": 1000})
+            # Verify both languages on real, API-backed pages and persist the choice.
+            page.goto(f"{BASE_URL}/dashboard", wait_until="networkidle", timeout=45_000)
+            language_button = page.locator("#languageToggle")
+            language_button.wait_for(state="visible", timeout=10_000)
+            language_button.click()
+            page.wait_for_function("document.documentElement.lang === 'id'", timeout=10_000)
+            overview_nav = page.locator('a.nav-link[data-page="overview"]')
+            if "Pemantauan Kontrak" not in overview_nav.inner_text():
+                raise AssertionError("Bahasa Indonesia did not translate the overview navigation.")
+            page.locator('a.nav-link[data-page="requests"]').click()
+            page.locator("#page-requests.active h1").wait_for(state="visible", timeout=10_000)
+            if page.locator("#page-requests h1").inner_text() != "Manajemen Permintaan":
+                raise AssertionError("Bahasa Indonesia did not translate the Request Management page.")
+            if page.locator("#requestSearch").get_attribute("placeholder") != "Cari subjek, vendor, atau PIC…":
+                raise AssertionError("Bahasa Indonesia did not translate the request search placeholder.")
+            page.reload(wait_until="networkidle", timeout=45_000)
+            page.wait_for_function("document.documentElement.lang === 'id'", timeout=10_000)
+            if page.locator("#languageToggle").inner_text() != "EN":
+                raise AssertionError("Language preference did not persist after reload.")
+            page.locator('a.nav-link[data-page="register"]').click()
+            page.locator("#page-register.active h1").wait_for(state="visible", timeout=10_000)
+            if page.locator("#page-register h1").inner_text() != "Daftar KHS":
+                raise AssertionError("Bahasa Indonesia did not translate the KHS Register.")
+            detail_row = page.locator("#registerBody tr").filter(has_text="KHS-VIS-002").first
+            detail_row.wait_for(state="visible", timeout=15_000)
+            detail_row.locator('[data-view-khs="KHS-VIS-002"]').click()
+            page.locator("#detailDialog[open]").wait_for(state="visible", timeout=10_000)
+            if page.locator("#processDurationTitle").inner_text() != "Riwayat Durasi Proses":
+                raise AssertionError("Bahasa Indonesia did not translate process-duration detail content.")
+            if page.locator("#closeKhsButton").inner_text() != "Tutup KHS":
+                raise AssertionError("Bahasa Indonesia did not translate the KHS closure action.")
+            page.locator("#closeKhsButton").click()
+            page.locator("#closureDialog[open]").wait_for(state="visible", timeout=10_000)
+            if page.locator("#closureDialog h2").inner_text() != "Tutup KHS sebagai Tidak Dilanjutkan":
+                raise AssertionError("Bahasa Indonesia did not translate the closure dialog.")
+            if page.locator('#closureReason option[value="NO_MUTUAL_AGREEMENT"]').inner_text() != "Tidak tercapai kesepakatan":
+                raise AssertionError("Bahasa Indonesia did not translate closure-reason options.")
+            page.locator("#cancelClosure").click()
+            page.locator("#closeDialog").click()
+            page.locator("#languageToggle").click()
+            page.wait_for_function("document.documentElement.lang === 'en'", timeout=10_000)
+            if page.locator("#page-register h1").inner_text() != "KHS Register":
+                raise AssertionError("Switching back to English did not restore the original text.")
+            print("Bilingual browser check passed: navigation, API-backed detail, closure dialog, placeholder, and preference persistence.")
+
+            # Phase 1 browser validation: WIP age profile and register drill-down.
+            page.locator('a.nav-link[data-page="workflow"]').click()
+            page.locator("#page-workflow.active").wait_for(state="visible", timeout=10_000)
+            age_drilldown = page.locator(
+                '#operationsStageBody [data-operations-stage="MI_GM_APPROVAL"][data-operations-age-band="31_plus"]'
+            )
+            age_drilldown.wait_for(state="visible", timeout=15_000)
+            page.wait_for_function(
+                "() => { const value = document.querySelector('#opsActiveWip')?.textContent.trim(); return value && value !== '—'; }",
+                timeout=10_000,
+            )
+            if page.locator("#slaConfigurationStatus").inner_text() != "SLA not configured":
+                raise AssertionError("Unconfigured SLA thresholds were incorrectly presented as approved.")
+            if page.locator("#opsActiveWip").inner_text() in ("", "0"):
+                raise AssertionError("WIP analytics did not return active work-in-progress records.")
+            if page.locator("#operationsStageBody .bottleneck-rank").count() == 0:
+                raise AssertionError("No bottleneck ranks were rendered for occupied workflow stages.")
+
+            # Every active WIP record must reconcile to exactly one age bucket.
+            bucket_totals = {"0_7": 0, "8_14": 0, "15_30": 0, "31_plus": 0, "unavailable": 0}
+            stage_rows = page.locator("#operationsStageBody tr")
+            for index in range(stage_rows.count()):
+                cells = stage_rows.nth(index).locator("td")
+                if cells.count() < 10:
+                    continue
+                wip_count = int(cells.nth(1).locator("button").inner_text().strip())
+                bucket_cells = [("0_7", 4), ("8_14", 5), ("15_30", 6), ("31_plus", 7), ("unavailable", 8)]
+                stage_bucket_total = 0
+                for band, cell_index in bucket_cells:
+                    value = int(cells.nth(cell_index).locator("button").inner_text().strip())
+                    bucket_totals[band] += value
+                    stage_bucket_total += value
+                if stage_bucket_total != wip_count:
+                    raise AssertionError(
+                        f"Age buckets do not reconcile for {cells.nth(0).inner_text()}: "
+                        f"{stage_bucket_total} buckets vs {wip_count} WIP."
+                    )
+                median_text = cells.nth(2).inner_text().strip().removesuffix("d")
+                p90_text = cells.nth(3).inner_text().strip().removesuffix("d")
+                oldest_text = cells.nth(9).inner_text().strip().removesuffix("d")
+                if median_text != "—":
+                    median, p90, oldest = int(median_text), int(p90_text), int(oldest_text)
+                    if not (median <= p90 <= oldest):
+                        raise AssertionError(
+                            f"Percentile/oldest ordering is invalid for {cells.nth(0).inner_text()}."
+                        )
+            if any(value == 0 for value in bucket_totals.values()):
+                raise AssertionError(f"Visual fixtures did not exercise every age bucket: {bucket_totals}")
+
+            with page.expect_response(
+                lambda response: "/api/dashboard/khs?" in response.url
+                and "age_band=31_plus" in response.url
+                and "stage=MI_GM_APPROVAL" in response.url
+            ) as age_filter_response:
+                age_drilldown.click()
+            if age_filter_response.value.status != 200:
+                raise AssertionError(f"WIP register drill-down returned {age_filter_response.value.status}.")
+            page.locator("#page-register.active").wait_for(state="visible", timeout=10_000)
+            page.locator('#registerBody [data-view-khs="KHS-VIS-002"]').wait_for(
+                state="visible", timeout=10_000
+            )
+            active_filters = page.locator("#activeRegisterFilters").inner_text()
+            if "31+ days" not in active_filters:
+                raise AssertionError("The active register age-band filter was not displayed.")
+            if "MI GM APPROVAL" not in active_filters:
+                raise AssertionError("The active register stage filter was not displayed.")
+
+            page.locator('a.nav-link[data-page="workflow"]').click()
+            page.locator("#page-workflow.active").wait_for(state="visible", timeout=10_000)
+            unavailable_drilldown = page.locator(
+                '#operationsStageBody [data-operations-stage="NEGOTIATION"][data-operations-age-band="unavailable"]'
+            )
+            unavailable_drilldown.wait_for(state="visible", timeout=10_000)
+            with page.expect_response(
+                lambda response: "/api/dashboard/khs?" in response.url
+                and "age_band=unavailable" in response.url
+                and "stage=NEGOTIATION" in response.url
+            ) as unavailable_filter_response:
+                unavailable_drilldown.click()
+            if unavailable_filter_response.value.status != 200:
+                raise AssertionError(
+                    f"Inconsistent-history register drill-down returned {unavailable_filter_response.value.status}."
+                )
+            page.locator("#page-register.active").wait_for(state="visible", timeout=10_000)
+            invalid_row = page.locator('#registerBody [data-view-khs="KHS-AGING-INVALID"]')
+            invalid_row.wait_for(state="visible", timeout=10_000)
+            if "History needs review" not in invalid_row.locator("xpath=ancestor::tr").inner_text():
+                raise AssertionError("Chronologically inconsistent history was not labelled for review.")
+
+            invalid_row.click()
+            page.locator("#detailDialog[open]").wait_for(state="visible", timeout=10_000)
+            if page.locator("#updateProgressButton").is_visible():
+                raise AssertionError("Guided Progress remained available for globally inconsistent history.")
+            if page.locator("#totalProcessingDays").inner_text().strip() != "Unavailable":
+                raise AssertionError("Workbench displayed an overall duration for globally inconsistent history.")
+            if page.locator("#lpProcessingDays").inner_text().strip() != "Unavailable":
+                raise AssertionError("Workbench displayed an LP duration for globally inconsistent history.")
+            page.locator("#processDurationNotice").wait_for(state="visible", timeout=10_000)
+            page.locator("#workSummaryNotice").wait_for(state="visible", timeout=10_000)
+            if "chronologically consistent" not in page.locator("#processDurationNotice").inner_text():
+                raise AssertionError("Workbench did not explain why duration totals are withheld.")
+            page.locator("#closeDialog").click()
+
+            print(
+                "WIP analytics browser check passed: bucket reconciliation, median/P90/oldest ordering, "
+                "all five aging bands, normal 31+ drill-down, and inconsistent-history drill-down."
+            )
+
+            # Phase 1 drill-down leaves an active Register filter. Reset it
+            # before the independent Phase 2/3 browser scenarios.
+            phase1_clear_filters = page.locator('#activeRegisterFilters [data-clear-filter="all"]')
+            if phase1_clear_filters.count():
+                phase1_clear_filters.click(timeout=10_000)
+                page.wait_for_load_state("networkidle", timeout=20_000)
+            page.locator('#registerBody [data-view-khs="KHS-VIS-002"]').wait_for(
+                state="visible", timeout=15_000
+            )
+
+            try:
+                # Phase 2 browser validation: reject an out-of-order date, then
+                # record the next allowed MI milestone and verify the derived next step.
+                detail_row = page.locator("#registerBody tr").filter(has_text="KHS-VIS-002").first
+                detail_row.locator('[data-view-khs="KHS-VIS-002"]').click()
+                page.locator("#detailDialog[open]").wait_for(state="visible", timeout=10_000)
+                page.locator("#updateProgressButton").wait_for(state="visible", timeout=10_000)
+                page.locator("#updateProgressButton").click()
+                page.locator("#progressDialog[open]").wait_for(state="visible", timeout=10_000)
+                if page.locator("#progressMilestoneLabel").input_value() != "MI GM approval recorded":
+                    raise AssertionError("Guided progress did not select the next MI GM milestone.")
+    
+                # MI SM approval is 20 September 2026 in the synthetic seed.
+                page.locator("#progressMilestoneDate").fill("2026-09-19")
+                page.locator("#progressNote").fill("Synthetic chronology rejection check.")
+                expected_validation_in_flight = True
+                with page.expect_response(
+                    lambda response: "/progress" in response.url and response.request.method == "POST"
+                ) as invalid_progress_response:
+                    page.locator("#confirmProgress").click()
+                expected_validation_in_flight = False
+                if invalid_progress_response.value.status != 422:
+                    raise AssertionError(
+                        f"Out-of-order guided progress returned {invalid_progress_response.value.status}, expected 422."
+                    )
+                invalid_payload = invalid_progress_response.value.json()
+                if invalid_payload.get("code") != "MILESTONE_BEFORE_PREVIOUS":
+                    raise AssertionError(
+                        "Chronology guard returned an unexpected error: " + repr(invalid_payload)
+                    )
+                page.locator("#progressError").wait_for(state="visible", timeout=10_000)
+    
+                jakarta_today = page.evaluate(
+                    "() => new Intl.DateTimeFormat('en-CA', {timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())"
+                )
+                page.locator("#progressMilestoneDate").fill(jakarta_today)
+                page.locator("#progressNote").fill("Synthetic guided-progress validation.")
+                with page.expect_response(
+                    lambda response: "/progress" in response.url and response.request.method == "POST"
+                ) as valid_progress_response:
+                    page.locator("#confirmProgress").click()
+                if valid_progress_response.value.status != 200:
+                    raise AssertionError(
+                        f"Valid guided progress returned {valid_progress_response.value.status}, expected 200."
+                    )
+                progress_payload = valid_progress_response.value.json()
+                next_progress = (progress_payload.get("data") or {}).get("guided_progress") or {}
+                if next_progress.get("field") != "legal_submission_date":
+                    raise AssertionError(
+                        "Completing MI GM approval did not derive Legal submission as the next milestone: "
+                        + repr(next_progress)
+                    )
+                page.locator("#progressDialog").wait_for(state="hidden", timeout=10_000)
+                page.wait_for_function(
+                    "() => document.querySelector('#updateProgressButton')?.textContent.includes('Legal submission recorded')",
+                    timeout=10_000,
+                )
+                if "PROGRESS_UPDATED" not in page.locator("#detailGrid").inner_text():
+                    raise AssertionError("Guided progress update was not written to the KHS activity history.")
+                print("Guided progress browser check passed: chronology guard, MI GM update, next-stage derivation, and audit entry.")
+            except Exception as error:
+                capture_errors.append(f"Guided progress browser interaction: {error}")
+                print(f"FAILED guided progress browser interaction: {error}")
+            page.locator("#closeDialog").click()
+
+            # Exercise the complete LP approval chain and both injection substages
+            # on an independent synthetic record, including stage-scoped reminder
+            # supersession after LP circulation and injection preparation advance.
+            clear_filters = page.locator('#activeRegisterFilters [data-clear-filter="all"]')
+            if clear_filters.count():
+                clear_filters.click()
+            lp_detail_row = page.locator("#registerBody tr").filter(has_text="KHS-VIS-003").first
+            lp_detail_row.wait_for(state="visible", timeout=15_000)
+            lp_detail_row.locator('[data-view-khs="KHS-VIS-003"]').click()
+            page.locator("#detailDialog[open]").wait_for(state="visible", timeout=10_000)
+            jakarta_today = page.evaluate(
+                "() => new Intl.DateTimeFormat('en-CA', {timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())"
+            )
+            page.locator("#followUpDueDate").fill(jakarta_today)
+            page.locator("#followUpTo").fill("CI LP Contract Owner")
+            page.locator("#followUpNote").fill("CI LP stage reminder supersession.")
+            with page.expect_response(
+                lambda response: "/follow-ups" in response.url and response.request.method == "POST"
+            ) as lp_followup_response:
+                page.locator("#saveFollowUpButton").click()
+            if lp_followup_response.value.status != 201:
+                raise AssertionError(f"LP stage reminder creation returned {lp_followup_response.value.status}.")
+            if lp_followup_response.value.json()["data"]["stage_key"] != "contract_team":
+                raise AssertionError("LP follow-up was not assigned to the Contract Team sub-stage.")
+
+            lp_and_injection_steps = [
+                ("lp_contract_team_completion_date", "Contract Team completed", "lp_junior_manager_approval_date"),
+                ("lp_junior_manager_approval_date", "Junior Manager approval recorded", "lp_senior_manager_approval_date"),
+                ("lp_senior_manager_approval_date", "Senior Manager approval recorded", "lp_gm_scm_approval_date"),
+                ("lp_gm_scm_approval_date", "GM SCM approval recorded", "lp_completion_date"),
+                ("lp_completion_date", "Director sign-off recorded", "khs_inject_start_date"),
+                ("khs_inject_start_date", "KHS injection started", "khs_inject_completion_date"),
+                ("khs_inject_completion_date", "KHS fully injected", None),
+            ]
+            for step_index, (expected_field, expected_label, next_field) in enumerate(lp_and_injection_steps):
+                progress_button = page.locator("#updateProgressButton")
+                progress_button.wait_for(state="visible", timeout=10_000)
+                if not progress_button.inner_text().startswith("Update: " + expected_label):
+                    raise AssertionError(
+                        f"Expected guided stage {expected_label}, got {progress_button.inner_text()}."
+                    )
+                progress_button.click()
+                page.locator("#progressDialog[open]").wait_for(state="visible", timeout=10_000)
+                if page.locator("#progressMilestoneLabel").input_value() != expected_label:
+                    raise AssertionError(f"Guided dialog did not select {expected_label}.")
+                page.locator("#progressMilestoneDate").fill(jakarta_today)
+                page.locator("#progressNote").fill("Synthetic CI: " + expected_label)
+                with page.expect_response(
+                    lambda response: "/progress" in response.url and response.request.method == "POST"
+                ) as lp_progress_response:
+                    page.locator("#confirmProgress").click()
+                if lp_progress_response.value.status != 200:
+                    raise AssertionError(
+                        f"{expected_label} returned {lp_progress_response.value.status}, expected 200."
+                    )
+                updated_record = lp_progress_response.value.json().get("data") or {}
+                guided_next = updated_record.get("guided_progress")
+                actual_next = guided_next.get("field") if guided_next else None
+                if actual_next != next_field:
+                    raise AssertionError(
+                        f"{expected_label} derived {actual_next!r}, expected {next_field!r}."
+                    )
+                page.locator("#progressDialog").wait_for(state="hidden", timeout=10_000)
+                if step_index == 0:
+                    page.locator("#followUpList").get_by_text("SUPERSEDED").wait_for(timeout=10_000)
+                if step_index < len(lp_and_injection_steps) - 1:
+                    page.wait_for_function(
+                        "(label) => document.querySelector('#updateProgressButton')?.textContent.includes(label)",
+                        arg=lp_and_injection_steps[step_index + 1][1],
+                        timeout=10_000,
+                    )
+
+                if expected_field == "lp_completion_date":
+                    # Director sign-off enters the Injection Preparation sub-stage.
+                    page.locator("#followUpDueDate").fill(jakarta_today)
+                    page.locator("#followUpTo").fill("CI Injection Preparation Owner")
+                    page.locator("#followUpNote").fill("CI injection preparation reminder supersession.")
+                    with page.expect_response(
+                        lambda response: "/follow-ups" in response.url and response.request.method == "POST"
+                    ) as injection_followup_response:
+                        page.locator("#saveFollowUpButton").click()
+                    if injection_followup_response.value.status != 201:
+                        raise AssertionError("Injection Preparation reminder could not be created.")
+                    if injection_followup_response.value.json()["data"]["stage_key"] != "injection_preparation":
+                        raise AssertionError("Injection Preparation reminder has the wrong sub-stage identity.")
+
+                if expected_field == "khs_inject_start_date":
+                    page.locator("#followUpList").get_by_text("SUPERSEDED").nth(1).wait_for(timeout=10_000)
+
+            page.locator("#updateProgressButton").wait_for(state="hidden", timeout=10_000)
+            print("LP and injection guided-progress browser check passed: all five LP approvals, injection preparation/execution, chronology guards, audit trail, and stage-specific reminder supersession.")
+            page.locator("#closeDialog").click()
+
+        except Exception as error:
+            capture_errors.append(f"Workflow analytics and WIP drill-down interaction: {error}")
+            print(f"FAILED workflow analytics and WIP drill-down interaction: {error}")
+
         browser.close()
 
     report = {
@@ -382,6 +734,8 @@ def main() -> int:
         "expected_capture_count": len(CAPTURES) + 4,
         "captures": captures,
         "api_failures": api_failures,
+        "expected_api_validations": expected_api_validations,
+        "expected_validation_console_messages": expected_validation_console_messages,
         "uncaught_page_errors": page_errors,
         "console_errors": console_errors,
         "capture_errors": capture_errors,
@@ -397,6 +751,8 @@ def main() -> int:
              "", "=== Uncaught page errors ===", *page_errors,
              "", "=== API failures ===",
              *[f'{item["status"]} {item["url"]}' for item in api_failures],
+             "", "=== Expected API validations ===",
+             *[f'{item["status"]} {item["reason"]} {item["url"]}' for item in expected_api_validations],
              "", "=== Capture errors ===", *capture_errors]
         ),
         encoding="utf-8",

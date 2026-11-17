@@ -32,7 +32,7 @@
 </aside>
 <main class="main-content">
 <header class="topbar"><div class="breadcrumbs"><span>Operations</span><span>/</span><strong id="breadcrumbCurrent">Overview</strong></div>
-<div class="topbar-actions"><div class="system-status" id="systemStatus"><span class="online-dot"></span><span id="systemStatusText">Ready</span></div><button class="refresh-button" id="refreshButton" type="button">↻ Refresh</button></div></header>
+<div class="topbar-actions"><div class="system-status" id="systemStatus"><span class="online-dot"></span><span id="systemStatusText">Ready</span></div><button class="secondary-button language-toggle" id="languageToggle" type="button" aria-label="Switch to Bahasa Indonesia" title="Switch to Bahasa Indonesia">ID</button><button class="refresh-button" id="refreshButton" type="button">↻ Refresh</button></div></header>
 <section class="page-view active" id="page-overview" data-title="Contract Monitoring &amp; Tracking">
 <div class="page-heading overview-page-heading">
   <div class="overview-heading-copy">
@@ -53,7 +53,8 @@
 <article class="kpi-card"><span class="kpi-label">Total Requests</span><strong class="kpi-value" id="totalRequests">—</strong><small>Parent requests</small></article>
 <article class="kpi-card"><span class="kpi-label">Total KHS</span><strong class="kpi-value" id="totalKhs">—</strong><small>Contract records</small></article>
 <article class="kpi-card"><span class="kpi-label">Needs Attention</span><strong class="kpi-value" id="attentionCount">—</strong><small>Waiting / exception records</small></article>
-<article class="kpi-card"><span class="kpi-label">Fully Injected</span><strong class="kpi-value" id="injectCompleted">—</strong><small><span id="completionRate">0%</span> of all KHS records</small></article>
+<article class="kpi-card"><span class="kpi-label">Fully Injected</span><strong class="kpi-value" id="injectCompleted">—</strong><small><span id="completionRate">0%</span> of active KHS records</small></article>
+<article class="kpi-card"><span class="kpi-label">Not Proceeded</span><strong class="kpi-value" id="notProceededKhs">—</strong><small>Closed without full injection</small></article>
 </div>
 
 <article class="panel attention-panel"><div class="panel-heading"><div><div class="eyebrow">ACTION REQUIRED</div><h2>Priority action queue</h2><p>Records awaiting approval, owner follow-up, or prerequisite review.</p></div><button class="text-button" data-go="register" data-attention-only="true">View attention queue →</button></div>
@@ -135,6 +136,7 @@
 <label for="subtypeFilter">Contract type<select id="subtypeFilter"><option value="">All subtypes</option></select></label>
 <label for="waitingFilter">Waiting for<select id="waitingFilter"><option value="">All waiting parties</option></select></label>
 <label for="stageFilter">Workflow stage<select id="stageFilter"><option value="">All workflow stages</option></select></label>
+<label for="processStatusFilter">Process status<select id="processStatusFilter"><option value="">All process statuses</option><option value="ACTIVE">Active</option><option value="NOT_PROCEEDED">Not Proceeded</option></select></label>
 </div></details>
 <button class="reset-button" id="resetFilters" type="button">Reset filters</button>
 </div>
@@ -189,6 +191,26 @@
   <button type="button" class="workflow-empty-toggle" id="workflowEmptyToggle" aria-expanded="false" hidden>Show empty stages</button>
 </div>
 <div class="workflow-cards" id="workflowCards"><div class="panel">Loading workflow…</div></div>
+<section class="operations-analytics" id="operationsAnalytics">
+  <div class="section-heading"><div><div class="eyebrow">LEAN OPERATIONS CONTROL</div><h2>WIP Aging &amp; Bottleneck Analytics</h2><p>Current active work-in-progress, stage aging, and configured service-level signals.</p></div><span class="as-of-label" id="operationsAsOf">—</span></div>
+  <div class="operations-kpi-grid">
+    <article class="operations-kpi"><span>Active WIP</span><strong id="opsActiveWip">—</strong><small>Open workflow records</small></article>
+    <article class="operations-kpi"><span>Over 30 days</span><strong id="opsOver30">—</strong><small>Descriptive aging bucket</small></article>
+    <article class="operations-kpi"><span>Age unavailable</span><strong id="opsAgeUnavailable">—</strong><small>Missing, future or inconsistent stage-start history</small></article>
+    <article class="operations-kpi"><span>SLA overdue</span><strong id="opsSlaOverdue">—</strong><small>Only configured policies</small></article>
+    <article class="operations-kpi"><span>Escalation due</span><strong id="opsEscalations">—</strong><small>Only configured policies</small></article>
+    <article class="operations-kpi"><span>Follow-ups overdue</span><strong id="opsFollowUpsOverdue">—</strong><small>In-app reminders</small></article>
+  </div>
+  <div class="panel operations-table-panel">
+    <div class="panel-heading"><div><h3>Stage aging profile</h3><p>Median, P90 and oldest age help identify where work accumulates.</p></div><span class="status-badge status-neutral" id="slaConfigurationStatus">SLA not configured</span></div>
+    <div class="table-wrap"><table class="operational-table"><thead><tr><th>WORKFLOW STAGE / BOTTLENECK RANK</th><th>WIP</th><th>MEDIAN</th><th>P90</th><th>0–7 DAYS</th><th>8–14 DAYS</th><th>15–30 DAYS</th><th>31+ DAYS</th><th>AGE UNAVAILABLE</th><th>OLDEST</th><th>SLA SIGNAL</th><th>OVERDUE</th><th>ESCALATION</th></tr></thead><tbody id="operationsStageBody"><tr><td colspan="13" class="table-message">Loading aging profile…</td></tr></tbody></table></div>
+    <p class="muted operations-note">Select a stage or any age count to open the matching KHS Register worklist. Aging buckets are descriptive, not SLA targets. Configure stage SLA thresholds only after the responsible business owners approve them. Missing, future-dated or chronologically inconsistent stage history is not assigned an estimated age.</p>
+  </div>
+  <div class="panel operations-table-panel">
+    <div class="panel-heading"><div><h3>Follow-up &amp; escalation inbox</h3><p>Scheduled follow-ups due today, overdue, or upcoming for active KHS records.</p></div><button class="secondary-button" id="refreshOperationsButton" type="button">Refresh operations</button></div>
+    <div class="table-wrap"><table class="operational-table"><thead><tr><th>DUE DATE</th><th>KHS / VENDOR</th><th>STAGE</th><th>FOLLOW UP TO</th><th>NOTE</th><th>STATUS</th><th>ACTION</th></tr></thead><tbody id="operationsFollowUpBody"><tr><td colspan="7" class="table-message">Loading follow-ups…</td></tr></tbody></table></div>
+  </div>
+</section>
 <article class="panel"><div class="panel-heading"><div><div class="eyebrow">LP CIRCULATION</div><h2>LoA Sign-off Route</h2></div></div><div class="loa-route"><span>User</span><i>→</i><span>Tim Kontrak</span><i>→</i><span>Junior Manager Vendor Management</span><i>→</i><span>Senior Manager Strategic Sourcing</span><i>→</i><span>GM SCM</span><i>→</i><span>Direktur</span></div><p class="muted">LP circulation is gated by GM SCM MI approval. The route is shown for process visibility; individual sign-off dates remain tracked on each KHS record.</p></article>
 </section>
 <section class="page-view" id="page-contracts" data-title="Contract Lifecycle">
@@ -253,8 +275,90 @@
 <footer class="main-footer"><span>KHS Contract Operations</span><span>Contract Monitoring &amp; Tracking · Internal workspace</span></footer>
 </main></div>
 <dialog id="recordDialog" class="record-dialog"><form id="recordForm" method="dialog"><div class="dialog-header"><div><div class="eyebrow" id="dialogEyebrow">NEW RECORD</div><h2 id="dialogTitle">Create record</h2></div><button type="button" class="dialog-close" id="closeRecordDialog">×</button></div><div id="recordError" class="form-error" role="alert" hidden></div><div id="dialogFields" class="form-grid"></div><div id="dialogHint" class="form-hint"></div><div class="dialog-footer"><button type="button" class="secondary-button" id="cancelRecord">Cancel</button><button type="submit" class="primary-button" id="saveRecord">Save record</button></div></form></dialog>
-<dialog id="detailDialog" class="detail-dialog"><div class="dialog-header"><div><div class="eyebrow">KHS RECORD</div><h2 id="detailTitle">KHS Details</h2><p class="detail-subtitle" id="detailSubtitle"></p></div><button class="dialog-close" id="closeDialog">×</button></div><div id="detailStatus" class="dialog-status-row"></div>
-<section class="lp-timeline-section" aria-labelledby="lpTimelineTitle">
+<dialog id="progressDialog" class="record-dialog">
+  <form id="progressForm">
+    <div class="dialog-header"><div><div class="eyebrow">GUIDED PROGRESS UPDATE</div><h2>Update current milestone</h2><p class="detail-subtitle" id="progressKhsLabel"></p></div><button type="button" class="dialog-close" id="closeProgressDialog">×</button></div>
+    <div class="form-hint">This action updates only the next milestone allowed by the recorded KHS workflow. Existing milestone history is preserved.</div>
+    <div class="form-field"><label for="progressMilestoneLabel">Next milestone</label><input type="text" id="progressMilestoneLabel" readonly></div>
+    <div class="form-field"><label for="progressMilestoneDate">Completion / submission date</label><input id="progressMilestoneDate" name="milestone_date" type="date" required></div>
+    <div class="form-field"><label for="progressNote">Update note (optional)</label><textarea id="progressNote" name="note" rows="3" maxlength="1000"></textarea></div>
+    <div id="progressError" class="form-error" role="alert" hidden></div>
+    <div class="dialog-footer"><button type="button" class="secondary-button" id="cancelProgress">Cancel</button><button type="submit" class="primary-button" id="confirmProgress">Save progress</button></div>
+  </form>
+</dialog>
+<dialog id="closureDialog" class="record-dialog">
+  <form id="closureForm">
+    <div class="dialog-header"><div><div class="eyebrow">PROCESS CLOSURE</div><h2>Close KHS as Not Proceeded</h2><p class="detail-subtitle" id="closureKhsLabel"></p></div><button type="button" class="dialog-close" id="closeClosureDialog">×</button></div>
+    <div class="form-hint">Use this only when the process will not continue. Existing milestones and evidence will be preserved.</div>
+    <div class="form-field"><label for="closureDate">Closure date</label><input id="closureDate" name="closure_date" type="date" required></div>
+    <div class="form-field"><label for="closureReason">Closure reason</label><select id="closureReason" name="closure_reason_code" required><option value="">Select a reason</option><option value="NO_MUTUAL_AGREEMENT">No mutual agreement</option><option value="REQUESTER_WITHDRAWAL">Withdrawn by requester</option><option value="VENDOR_DECLINED">Vendor declined</option><option value="INTERNAL_REJECTION">Internally rejected</option><option value="DUPLICATE">Duplicate / created in error</option><option value="OTHER">Other</option></select></div>
+    <div class="form-field"><label for="closureNotes">Closure notes</label><textarea id="closureNotes" name="closure_notes" rows="3" placeholder="Add context or decision reference"></textarea></div>
+    <div id="closureError" class="form-error" role="alert" hidden></div>
+    <div class="dialog-footer"><button type="button" class="secondary-button" id="cancelClosure">Cancel</button><button type="submit" class="danger-button" id="confirmClosure">Confirm closure</button></div>
+  </form>
+</dialog>
+<dialog id="reopenDialog" class="record-dialog">
+  <form id="reopenForm">
+    <div class="dialog-header"><div><div class="eyebrow">REOPEN PROCESS</div><h2>Reopen KHS</h2><p class="detail-subtitle" id="reopenKhsLabel"></p></div><button type="button" class="dialog-close" id="closeReopenDialog">×</button></div>
+    <div class="form-hint">Reopening restores this KHS to the active work queue. The previous closure remains in the audit history.</div>
+    <div class="form-field"><label for="reopenReason">Reason for reopening</label><textarea id="reopenReason" name="reopen_reason" rows="3" required></textarea></div>
+    <div id="reopenError" class="form-error" role="alert" hidden></div>
+    <div class="dialog-footer"><button type="button" class="secondary-button" id="cancelReopen">Cancel</button><button type="submit" class="primary-button" id="confirmReopen">Reopen KHS</button></div>
+  </form>
+</dialog>
+<dialog id="detailDialog" class="detail-dialog">
+<div class="dialog-header">
+  <div class="workbench-header-title">
+    <div><div class="eyebrow">KHS WORKBENCH</div><h2 id="detailTitle">KHS Details</h2><p class="detail-subtitle" id="detailSubtitle"></p></div>
+    <button type="button" class="dialog-close" id="closeDialog" aria-label="Close KHS workbench">×</button>
+  </div>
+  <div class="detail-header-actions">
+    <button type="button" class="secondary-button" id="updateProgressButton" hidden>Update Progress</button>
+    <button type="button" class="secondary-button" id="scheduleFollowUpButton" hidden>Schedule Follow-up</button>
+    <button type="button" class="danger-button" id="closeKhsButton">Close KHS</button>
+    <button type="button" class="primary-button" id="reopenKhsButton" hidden>Reopen KHS</button>
+  </div>
+</div>
+<div id="detailStatus" class="dialog-status-row"></div>
+<nav class="workbench-nav" aria-label="KHS workbench sections">
+  <button type="button" data-workbench-target="workSummarySection" aria-current="location">Overview</button>
+  <button type="button" data-workbench-target="processDurationSection">Process history</button>
+  <button type="button" data-workbench-target="lpTimelineSection">LP milestones</button>
+  <button type="button" data-workbench-target="contractDetailSection">Contract</button>
+  <button type="button" data-workbench-target="detailGrid">Record &amp; activity</button>
+  <button type="button" data-workbench-target="followUpSection">Follow-ups</button>
+  <button type="button" data-workbench-target="documentSection">Evidence</button>
+</nav>
+<section id="workSummarySection" class="work-summary-section" aria-labelledby="workSummaryTitle">
+  <div class="work-summary-heading">
+    <div><div class="eyebrow">CURRENT WORK STATE</div><h3 id="workSummaryTitle">Work Summary</h3><p>Current stage, ownership, and the next evidence-backed action for this KHS.</p></div>
+    <span id="workSummaryState" class="status-badge">—</span>
+  </div>
+  <div class="work-summary-grid">
+    <article class="work-summary-card work-summary-stage">
+      <span>Current Stage</span><strong id="workSummaryStage">—</strong><small id="workSummaryStageAge">—</small>
+    </article>
+    <article class="work-summary-card">
+      <span>Action Owner / PIC</span><strong id="workSummaryOwner">—</strong><small id="workSummaryOwnerMeta">Accountability for the next action</small>
+    </article>
+    <article class="work-summary-card">
+      <span>Waiting For</span><strong id="workSummaryWaitingFor">—</strong><small id="workSummaryWaitingReason">No waiting reason recorded</small>
+    </article>
+    <article class="work-summary-card work-summary-next">
+      <span>Next Milestone</span><strong id="workSummaryNextMilestone">—</strong><small id="workSummaryNextMeta">—</small>
+    </article>
+  </div>
+  <div id="workSummaryNotice" class="work-summary-notice" role="note" hidden></div>
+</section>
+<section id="processDurationSection" class="process-duration-section" aria-labelledby="processDurationTitle">
+  <div class="lp-timeline-heading"><div><div class="eyebrow">END-TO-END PROCESS</div><h3 id="processDurationTitle">Process Duration History</h3><p>Elapsed time is calculated from recorded milestone dates.</p></div><span id="totalProcessDuration" class="status-badge">—</span></div>
+  <div class="process-duration-summary"><div><span>Total processing time</span><strong id="totalProcessingDays">—</strong></div><div><span>LP circulation time</span><strong id="lpProcessingDays">—</strong></div></div>
+  <div id="processDurationNotice" class="process-duration-notice" role="note" hidden></div>
+  <div id="processDurationHistory" class="process-duration-list"></div>
+  <p class="form-hint">Missing or inconsistent milestone dates are shown as incomplete history; the system does not estimate missing dates.</p>
+</section>
+<div id="closureSummary" class="closure-summary" hidden></div>
+<section id="lpTimelineSection" class="lp-timeline-section" aria-labelledby="lpTimelineTitle">
   <div class="lp-timeline-heading">
     <div><div class="eyebrow">LP CIRCULATION</div><h3 id="lpTimelineTitle">Approval journey</h3><p>Evidence-led view of the six LP milestones</p></div>
     <span id="lpTimelineStage" class="status-badge status-in_progress" aria-live="polite">—</span>
@@ -279,9 +383,22 @@
   <div id="lpTimeline" class="lp-timeline" role="list" aria-label="LP approval milestones"></div>
   <div id="lpTimelineNotice" class="lp-timeline-notice" role="note" hidden></div>
 </section>
-<section class="contract-detail-summary"><div class="contract-detail-heading"><div><div class="eyebrow">POST-INJECTION</div><h3>Contract Lifecycle</h3></div><span id="contractDetailStatus" class="status-badge">—</span></div><div id="contractDetailGrid" class="contract-detail-grid"></div></section>
+<section id="contractDetailSection" class="contract-detail-summary"><div class="contract-detail-heading"><div><div class="eyebrow">POST-INJECTION</div><h3>Contract Lifecycle</h3></div><span id="contractDetailStatus" class="status-badge">—</span></div><div id="contractDetailGrid" class="contract-detail-grid"></div></section>
 <div id="detailGrid" class="detail-groups"></div>
-<section class="document-section">
+<section id="followUpSection" class="follow-up-section">
+  <div class="document-section-heading"><div><div class="eyebrow">NEXT ACTION CONTROL</div><h3>Follow-up reminders</h3><p>Schedule an in-app reminder for the current KHS stage and assign the person to follow up.</p><small id="followUpCurrentStage" class="follow-up-current-stage">—</small></div></div>
+  <div id="followUpComposer">
+  <form id="followUpForm" class="follow-up-form">
+    <label>Due date<input type="date" id="followUpDueDate" name="due_date" required></label>
+    <label>Follow up to / PIC<input type="text" id="followUpTo" name="follow_up_to" maxlength="160" placeholder="Person responsible for follow-up"></label>
+    <label class="follow-up-note-field">Follow-up note<textarea id="followUpNote" name="note" rows="2" maxlength="1000" required placeholder="What needs to be followed up?"></textarea></label>
+    <button class="primary-button" id="saveFollowUpButton" type="submit">Schedule follow-up</button>
+  </form>
+  </div>
+  <p id="followUpReadOnlyNotice" class="follow-up-readonly" hidden>This KHS has no active stage for new follow-ups. Existing reminders remain visible below.</p>
+  <div id="followUpList" class="follow-up-list"><p class="muted">No follow-ups loaded.</p></div>
+</section>
+<section id="documentSection" class="document-section">
   <div class="document-section-heading"><div><h3>Evidence Documents</h3><p class="muted">Supporting files attached to this KHS record.</p></div></div>
   <form id="documentUploadForm" class="document-upload-form" enctype="multipart/form-data">
     <label>Document type
