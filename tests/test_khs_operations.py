@@ -22,6 +22,32 @@ def test_guided_progress_maps_the_next_mi_milestone_only():
     assert result["previous_milestone"] == "mi_head_approval_date"
 
 
+def test_guided_progress_advances_from_mi_gm_to_legal_submission():
+    record = {
+        "workflow_stage_code": "LEGAL_SUBMISSION",
+        "current_stage_code": "LEGAL_SUBMISSION",
+        "mi_sm_approval_date": date(2026, 11, 10),
+        "mi_gm_approval_date": date(2026, 11, 11),
+        "legal_submission_date": None,
+        "current_stage_started_on": date(2026, 11, 11),
+    }
+    result = _guided_progress_definition(record)
+    assert result["field"] == "legal_submission_date"
+    assert result["previous_milestone"] == "mi_gm_approval_date"
+
+
+def test_guided_progress_rejects_a_milestone_that_would_invalidate_a_later_date():
+    record = {
+        "mi_sm_approval_date": date(2026, 11, 10),
+        "mi_gm_approval_date": None,
+        "legal_submission_date": date(2026, 11, 12),
+    }
+    error = _guided_progress_date_error(
+        record, "mi_gm_approval_date", date(2026, 11, 13)
+    )
+    assert error[0] == "MILESTONE_AFTER_NEXT"
+
+
 def test_guided_progress_maps_lp_and_injection_steps_without_skipping():
     lp_record = {
         "workflow_stage_code": "LP_CIRCULATION",
