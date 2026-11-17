@@ -275,6 +275,7 @@ SELECT
     k.lp_completion_date,
     k.khs_inject_start_date,
     k.khs_inject_completion_date,
+    k.action_owner,
     k.process_status,
     k.closure_date,
     k.closure_reason_code,
@@ -963,7 +964,125 @@ def _register_enriched(row, today=None, include_duration_history=False):
     record["contract_lifecycle"] = _contract_lifecycle_data(row, today=today)
     if include_duration_history:
         record.update(_process_duration_history(row, today=today))
+    record["guided_progress"] = (
+        None if record.get("process_status") == "NOT_PROCEEDED"
+        or record.get("workflow_status") == "completed"
+        else _guided_progress_definition(record)
+    )
     return record
+
+
+
+GUIDED_MILESTONE_LABELS = {
+    "dispatch_date": "Dispatch completed",
+    "boq_confirmation_date": "BOQ confirmed",
+    "negotiation_date": "Negotiation completed",
+    "final_negotiation_date": "Final negotiation completed",
+    "mi_head_approval_date": "MI Head approval recorded",
+    "mi_sm_approval_date": "MI Senior Manager approval recorded",
+    "mi_gm_approval_date": "MI GM approval recorded",
+    "legal_submission_date": "Legal submission recorded",
+    "lp_circulation_start_date": "LP submitted by User",
+    "lp_contract_team_completion_date": "Contract Team completed",
+    "lp_junior_manager_approval_date": "Junior Manager approval recorded",
+    "lp_senior_manager_approval_date": "Senior Manager approval recorded",
+    "lp_gm_scm_approval_date": "GM SCM approval recorded",
+    "lp_completion_date": "Director sign-off recorded",
+    "khs_inject_start_date": "KHS injection started",
+    "khs_inject_completion_date": "KHS fully injected",
+}
+GUIDED_STAGE_FIELD = {
+    "DISPATCH": "dispatch_date",
+    "BOQ_CONFIRMATION": "boq_confirmation_date",
+    "NEGOTIATION": "negotiation_date",
+    "FINAL_NEGOTIATION": "final_negotiation_date",
+    "MI_HEAD_APPROVAL": "mi_head_approval_date",
+    "MI_SM_APPROVAL": "mi_sm_approval_date",
+    "MI_GM_APPROVAL": "mi_gm_approval_date",
+    "LEGAL_SUBMISSION": "legal_submission_date",
+    "LEGAL_PROCESSING": "lp_circulation_start_date",
+}
+
+
+def _guided_progress_definition(record):
+    stage = record.get("workflow_stage_code") or record.get("current_stage_code")
+    field = GUIDED_STAGE_FIELD.get(stage)
+    lp_fields = {
+        "contract_team": "lp_contract_team_completion_date",
+        "junior_manager": "lp_junior_manager_approval_date",
+        "senior_manager": "lp_senior_manager_approval_date",
+        "general_manager": "lp_gm_scm_approval_date",
+        "director": "lp_completion_date",
+    }
+    if stage == "LP_CIRCULATION":
+        field = lp_fields.get(record.get("lp_stage_key"))
+    elif stage == "KHS_INJECTION":
+        field = "khs_inject_completion_date" if _date_only(record.get("khs_inject_start_date")) else "khs_inject_start_date"
+    if not field or record.get(field) is not None:
+        return None
+    previous = {
+        "dispatch_date": "request_date",
+        "boq_confirmation_date": "dispatch_date",
+        "negotiation_date": "boq_confirmation_date",
+        "final_negotiation_date": "negotiation_date",
+        "mi_head_approval_date": "final_negotiation_date",
+        "mi_sm_approval_date": "mi_head_approval_date",
+        "mi_gm_approval_date": "mi_sm_approval_date",
+        "legal_submission_date": "mi_gm_approval_date",
+        "lp_circulation_start_date": "legal_submission_date",
+        "lp_contract_team_completion_date": "lp_circulation_start_date",
+        "lp_junior_manager_approval_date": "lp_contract_team_completion_date",
+        "lp_senior_manager_approval_date": "lp_junior_manager_approval_date",
+        "lp_gm_scm_approval_date": "lp_senior_manager_approval_date",
+        "lp_completion_date": "lp_gm_scm_approval_date",
+        "khs_inject_start_date": "lp_completion_date",
+        "khs_inject_completion_date": "khs_inject_start_date",
+    }.get(field)
+    started = _date_only(record.get("current_stage_started_on"))
+    return {
+        "field": field,
+        "label": GUIDED_MILESTONE_LABELS[field],
+        "stage_code": stage,
+        "previous_milestone": previous,
+        "current_stage_started_on": started.isoformat() if started else None,
+    }
+
+
+def _guided_progress_date_error(record, field, value):
+    previous_fields = {
+        "dispatch_date": "request_date",
+        "boq_confirmation_date": "dispatch_date",
+        "negotiation_date": "boq_confirmation_date",
+        "final_negotiation_date": "negotiation_date",
+        "mi_head_approval_date": "final_negotiation_date",
+        "mi_sm_approval_date": "mi_head_approval_date",
+        "mi_gm_approval_date": "mi_sm_approval_date",
+        "legal_submission_date": "mi_gm_approval_date",
+        "lp_circulation_start_date": "legal_submission_date",
+        "lp_contract_team_completion_date": "lp_circulation_start_date",
+        "lp_junior_manager_approval_date": "lp_contract_team_completion_date",
+        "lp_senior_manager_approval_date": "lp_junior_manager_approval_date",
+        "lp_gm_scm_approval_date": "lp_senior_manager_approval_date",
+        "lp_completion_date": "lp_gm_scm_approval_date",
+        "khs_inject_start_date": "lp_completion_date",
+        "khs_inject_completion_date": "khs_inject_start_date",
+    }
+    following_fields = {previous: next_field for next_field, previous in previous_fields.items()}
+    previous = previous_fields.get(field)
+    next_field = following_fields.get(field)
+    previous_date = _date_only(record.get(previous)) if previous else None
+    next_date = _date_only(record.get(next_field)) if next_field else None
+    if previous_date and value < previous_date:
+        return "MILESTONE_BEFORE_PREVIOUS", f"{field} cannot precede {previous}."
+    if next_date and value > next_date:
+        return "MILESTONE_AFTER_NEXT", f"{field} cannot follow {next_field}."
+    if field == "lp_circulation_start_date" and not record.get("mi_gm_approval_date"):
+        return "MI_GM_REQUIRED", "LP circulation cannot start before GM SCM MI approval."
+    if field.startswith("lp_"):
+        error = _lp_milestone_update_error(record, {field: value})
+        if error:
+            return error
+    return None
 
 
 def _lp_date_order_error(record):
@@ -1572,7 +1691,7 @@ ITEM_FIELDS = {
     "lp_contract_team_completion_date", "lp_junior_manager_approval_date",
     "lp_senior_manager_approval_date", "lp_gm_scm_approval_date", "lp_completion_date",
     "khs_inject_start_date", "khs_inject_completion_date",
-    "waiting_for", "waiting_reason", "last_updated_date", "remarks",
+    "waiting_for", "waiting_reason", "action_owner", "last_updated_date", "remarks",
 }
 DATE_FIELDS = {
     "request_date", "dispatch_date", "contract_start_date", "contract_end_date",
@@ -1582,12 +1701,13 @@ DATE_FIELDS = {
     "lp_contract_team_completion_date", "lp_junior_manager_approval_date",
     "lp_senior_manager_approval_date", "lp_gm_scm_approval_date", "lp_completion_date",
     "khs_inject_start_date", "khs_inject_completion_date",
-    "last_updated_date", "closure_date",
+    "last_updated_date", "closure_date", "milestone_date",
 }
 TEXT_LIMITS = {
     "request_id": 64, "request_subject": 300, "requester_owner": 160,
     "khs_id": 64, "vendor_name": 240, "executor_code": 32, "waiting_for": 160,
-    "waiting_reason": 1000, "remarks": 2000,
+    "waiting_reason": 1000, "action_owner": 160, "remarks": 2000,
+    "note": 1000, "follow_up_to": 160,
     "closure_reason_code": 64, "closure_notes": 2000, "reopen_reason": 1000,
 }
 ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{1,63}$")
@@ -2137,6 +2257,69 @@ def update_khs(khs_id):
         current_app.logger.exception("KHS update failed.")
         return jsonify(success=False,message="Unable to update KHS."),500
 
+
+
+
+@dashboard_bp.post("/khs/<path:khs_id>/progress")
+def update_khs_guided_progress(khs_id):
+    body = _body_object()
+    if body is None:
+        return jsonify(success=False, message="A JSON object is required."),400
+    try:
+        payload = _validate_payload(body, {"milestone_date", "note"}, {"milestone_date"})
+        milestone_date = payload["milestone_date"]
+        if milestone_date > _jakarta_today():
+            return jsonify(success=False, code="FUTURE_MILESTONE_DATE",
+                           message="Milestone date cannot be in the future."),422
+        with get_db_pool().connection() as conn, conn.transaction():
+            with conn.cursor(row_factory=dict_row) as cur:
+                cur.execute("SELECT process_status FROM khs_items WHERE khs_id=%s FOR UPDATE", (khs_id,))
+                locked = cur.fetchone()
+                if locked is None:
+                    return jsonify(success=False, message="KHS not found."),404
+                if locked["process_status"] != "ACTIVE":
+                    return jsonify(success=False, code="KHS_NOT_ACTIVE",
+                                   message="Only active KHS records can receive progress updates."),409
+                cur.execute(REGISTER_BASE_QUERY + " WHERE k.khs_id=%s", (khs_id,))
+                record = cur.fetchone()
+                if record is None:
+                    return jsonify(success=False, message="KHS not found."),404
+                record = dict(record)
+            definition = _guided_progress_definition(record)
+            if not definition:
+                return jsonify(success=False, code="NO_GUIDED_MILESTONE",
+                               message="There is no pending guided milestone for this KHS."),409
+            field = definition["field"]
+            chronology_error = _guided_progress_date_error(record, field, milestone_date)
+            if chronology_error:
+                code, message = chronology_error
+                return jsonify(success=False, code=code, message=message),422
+            conn.execute(
+                f"UPDATE khs_items SET {field}=%s, updated_at=NOW(), last_updated_date=CURRENT_DATE WHERE khs_id=%s",
+                (milestone_date, khs_id),
+            )
+            after = {**record, field: milestone_date}
+            if payload.get("note"):
+                after["_progress_note"] = payload["note"]
+            _audit(conn, "KHS_ITEM", khs_id, "PROGRESS_UPDATED", record, after)
+            conn.execute(
+                """UPDATE khs_follow_ups
+                   SET status='SUPERSEDED', cancelled_at=NOW(), cancelled_by='system'
+                   WHERE khs_id=%s AND stage_code=%s AND status='OPEN'""",
+                (khs_id, definition["stage_code"]),
+            )
+        with get_db_pool().connection() as conn:
+            with conn.cursor(row_factory=dict_row) as cur:
+                cur.execute(REGISTER_BASE_QUERY + " WHERE k.khs_id=%s", (khs_id,))
+                updated = cur.fetchone()
+        return jsonify(success=True, message="Progress updated.",
+                       data=_register_enriched(updated, include_duration_history=True)),200
+    except ValueError as exc:
+        return jsonify(success=False, message=str(exc)),400
+    except Exception:
+        current_app.logger.exception("Guided KHS progress update failed.")
+        return jsonify(success=False, code="GUIDED_PROGRESS_UNAVAILABLE",
+                       message="Unable to update KHS progress."),500
 
 
 KHS_CLOSURE_REASON_CODES = {
