@@ -2,6 +2,670 @@
 "use strict";
 
 const $ = (id) => document.getElementById(id);
+
+const I18N_ID = Object.freeze({
+  "CONTRACT OPERATIONS":"OPERASIONAL KONTRAK",
+  "WORKSPACE":"RUANG KERJA",
+  "DATA MANAGEMENT":"MANAJEMEN DATA",
+  "Contract Monitoring":"Pemantauan Kontrak",
+  "Request Management":"Manajemen Permintaan",
+  "KHS Register":"Daftar KHS",
+  "LP Circulation":"Sirkulasi LP",
+  "Contract Lifecycle":"Siklus Kontrak",
+  "Workflow Monitoring":"Pemantauan Alur Kerja",
+  "Excel Import / Export":"Impor / Ekspor Excel",
+  "Activity & Audit Log":"Aktivitas & Log Audit",
+  "Contract Creation Workspace":"Ruang Kerja Pembuatan Kontrak",
+  "Manage requests, KHS records, and the complete workflow in one place.":"Kelola permintaan, data KHS, dan seluruh alur kerja dalam satu tempat.",
+  "Internal operations":"Operasional internal",
+  "Operations":"Operasional",
+  "Ready":"Siap",
+  "Refresh":"Muat ulang",
+  "Refresh overview":"Muat ulang ikhtisar",
+  "Contract Monitoring & Tracking":"Pemantauan & Pelacakan Kontrak",
+  "CONTRACT OPERATIONS / PORTFOLIO OVERVIEW":"OPERASIONAL KONTRAK / IKHTISAR PORTOFOLIO",
+  "One place to move each request from intake to LP sign-off, injection, and renewal.":"Satu tempat untuk memantau setiap permintaan sejak diterima, persetujuan LP, injeksi KHS, hingga perpanjangan kontrak.",
+  "LAST UPDATED":"PEMBARUAN TERAKHIR",
+  "New Request":"Permintaan Baru",
+  "Import Excel":"Impor Excel",
+  "Total Requests":"Total Permintaan",
+  "Parent requests":"Permintaan induk",
+  "Total KHS":"Total KHS",
+  "Needs Attention":"Perlu Perhatian",
+  "Waiting / exception records":"Data yang menunggu / memiliki pengecualian",
+  "Fully Injected":"Fully Injected",
+  "of active KHS records":"dari KHS aktif",
+  "Not Proceeded":"Tidak Dilanjutkan",
+  "Closed without full injection":"Ditutup sebelum injeksi penuh",
+  "ACTION REQUIRED":"PERLU TINDAKAN",
+  "Priority action queue":"Antrean prioritas tindakan",
+  "Records awaiting approval, owner follow-up, or prerequisite review.":"Data yang menunggu persetujuan, tindak lanjut PIC, atau pemeriksaan prasyarat.",
+  "View attention queue →":"Lihat antrean perhatian →",
+  "REQUEST / KHS":"PERMINTAAN / KHS",
+  "VENDOR":"VENDOR",
+  "CURRENT STAGE":"TAHAP SAAT INI",
+  "WAITING FOR / NEXT ACTION":"MENUNGGU / TINDAKAN BERIKUTNYA",
+  "STAGE AGE / UPDATED":"DURASI TAHAP / DIPERBARUI",
+  "ACTION":"TINDAKAN",
+  "Loading…":"Memuat…",
+  "Showing the three highest-priority items. Open the full queue to see every outstanding record.":"Menampilkan tiga item dengan prioritas tertinggi. Buka antrean lengkap untuk melihat seluruh data yang masih tertunda.",
+  "LIVE WORKFLOW QUEUE":"ANTREAN ALUR KERJA AKTIF",
+  "Approval Pipeline":"Tahapan Persetujuan",
+  "Next approver is calculated from the recorded milestone dates, not the optional Waiting For field.":"Pihak yang harus menyetujui berikutnya dihitung dari tanggal milestone yang tercatat, bukan dari kolom Waiting For yang bersifat opsional.",
+  "Milestone-derived":"Berdasarkan milestone",
+  "Memo Internal":"Memo Internal",
+  "Pending management approvals":"Menunggu persetujuan manajemen",
+  "in queue":"dalam antrean",
+  "Junior Manager":"Manajer Junior",
+  "Senior Manager":"Manajer Senior",
+  "General Manager":"General Manager",
+  "Awaiting Head approval":"Menunggu persetujuan Head",
+  "Awaiting SM approval":"Menunggu persetujuan SM",
+  "Awaiting GM approval":"Menunggu persetujuan GM",
+  "LP Circulation":"Sirkulasi LP",
+  "Fixed six-step sign-off route":"Alur persetujuan enam tahap",
+  "in normal queue":"dalam antrean normal",
+  "Tim Kontrak":"Tim Kontrak",
+  "Initial review":"Pemeriksaan awal",
+  "Vendor Management":"Vendor Management",
+  "Strategic Sourcing":"Strategic Sourcing",
+  "Management approval":"Persetujuan manajemen",
+  "Director":"Direktur",
+  "Final sign-off":"Persetujuan akhir",
+  "MI GM prerequisite":"Prasyarat persetujuan MI GM",
+  "Legacy stage unverified":"Tahap historis belum terverifikasi",
+  "Timeline gaps":"Kesenjangan lini masa",
+  "Records requiring reconciliation are kept outside the normal approval lanes.":"Data yang memerlukan rekonsiliasi dipisahkan dari antrean persetujuan normal.",
+  "Records requiring reconciliation are kept outside normal approval lanes.":"Data yang memerlukan rekonsiliasi dipisahkan dari antrean persetujuan normal.",
+  "POST-INJECTION MONITORING":"PEMANTAUAN SETELAH INJEKSI",
+  "Contract Lifecycle Watch":"Pemantauan Siklus Kontrak",
+  "Renewal visibility starts once a KHS is fully injected.":"Pemantauan perpanjangan dimulai setelah KHS selesai diinjeksikan.",
+  "Open contract lifecycle →":"Buka siklus kontrak →",
+  "Renewal preparation":"Persiapan perpanjangan",
+  "Renewal watch":"Pemantauan perpanjangan",
+  "Action required":"Perlu tindakan",
+  "Expired":"Kedaluwarsa",
+  "Missing dates":"Tanggal belum lengkap",
+  "Past contract end date":"Melewati tanggal akhir kontrak",
+  "Fully injected · incomplete period":"Sudah diinjeksi penuh · periode belum lengkap",
+  "≤ 6 months · cumulative":"≤ 6 bulan · kumulatif",
+  "≤ 3 months · cumulative":"≤ 3 bulan · kumulatif",
+  "≤ 1 month · cumulative":"≤ 1 bulan · kumulatif",
+  "WORKSPACE / INTAKE":"RUANG KERJA / PENERIMAAN",
+  "Create and manage parent requests. One request may contain multiple KHS items.":"Buat dan kelola permintaan induk. Satu permintaan dapat berisi beberapa item KHS.",
+  "Search requests":"Cari permintaan",
+  "Search subject, vendor, owner…":"Cari subjek, vendor, atau PIC…",
+  "Reset":"Atur ulang",
+  "REQUEST SUBJECT":"SUBJEK PERMINTAAN",
+  "VENDOR PORTFOLIO":"PORTOFOLIO VENDOR",
+  "REQUEST DATE":"TANGGAL PERMINTAAN",
+  "REQUESTER / OWNER":"PEMOHON / PIC",
+  "KHS ITEMS":"ITEM KHS",
+  "FULLY INJECTED":"INJEKSI PENUH",
+  "Loading requests…":"Memuat permintaan…",
+  "WORKSPACE / RECORDS":"RUANG KERJA / DATA",
+  "Manage each contract record, assign ownership, and update its milestones.":"Kelola setiap data kontrak, tetapkan PIC, dan perbarui milestone.",
+  "Add KHS":"Tambah KHS",
+  "Filter KHS records":"Filter data KHS",
+  "Search KHS records":"Cari data KHS",
+  "Search by request, vendor or KHS ID…":"Cari berdasarkan permintaan, vendor, atau ID KHS…",
+  "Filter by LP status":"Filter berdasarkan status LP",
+  "All LP statuses":"Semua status LP",
+  "Completed":"Selesai",
+  "In progress":"Sedang Berjalan",
+  "Not started":"Belum Dimulai",
+  "More filters":"Filter lainnya",
+  "Executor":"Pelaksana",
+  "All executors":"Semua pelaksana",
+  "Contract type":"Jenis kontrak",
+  "All subtypes":"Semua jenis",
+  "Waiting for":"Menunggu",
+  "All waiting parties":"Semua pihak",
+  "Workflow stage":"Tahap alur kerja",
+  "All workflow stages":"Semua tahap alur kerja",
+  "Process status":"Status proses",
+  "All process statuses":"Semua status proses",
+  "Active":"Aktif",
+  "Reset filters":"Atur ulang filter",
+  "REQUEST / VENDOR":"PERMINTAAN / VENDOR",
+  "CURRENT STAGE & AGE":"TAHAP SAAT INI & DURASI",
+  "LP STATUS":"STATUS LP",
+  "INJECTION":"INJEKSI",
+  "NEXT ACTION":"TINDAKAN BERIKUTNYA",
+  "No KHS records match the current filters.":"Tidak ada data KHS yang sesuai dengan filter.",
+  "APPROVAL JOURNEY / LP":"ALUR PERSETUJUAN / LP",
+  "Track every LP milestone from User submission through Director sign-off, with current stage and stage age.":"Pantau setiap milestone LP mulai dari pengajuan User hingga tanda tangan Direktur, termasuk tahap dan durasinya.",
+  "All LP records":"Semua data LP",
+  "Started or historically recorded":"Sudah dimulai atau memiliki catatan historis",
+  "Next milestone":"Milestone berikutnya",
+  "Awaiting approval":"Menunggu persetujuan",
+  "LP Completed":"LP Selesai",
+  "Director signed":"Ditandatangani Direktur",
+  "Historical data quality":"Kualitas data historis",
+  "Review these separately from the live approval route.":"Tinjau bagian ini secara terpisah dari alur persetujuan aktif.",
+  "MI GM Exceptions":"Pengecualian MI GM",
+  "LP gate not met":"Prasyarat LP belum terpenuhi",
+  "Legacy Unverified":"Data Lama Belum Terverifikasi",
+  "Director sign-off unverified":"Tanda tangan Direktur belum terverifikasi",
+  "Missing historical dates":"Tanggal historis belum tersedia",
+  "Search LP circulation records":"Cari data sirkulasi LP",
+  "Search KHS, request, vendor…":"Cari KHS, permintaan, vendor…",
+  "All LP stages":"Semua tahap LP",
+  "MI GM prerequisite exception":"Pengecualian prasyarat MI GM",
+  "Legacy stage unverified":"Tahap historis belum terverifikasi",
+  "Director / Direktur":"Direktur",
+  "LP START":"MULAI LP",
+  "STAGE AGE":"DURASI TAHAP",
+  "WAITING FOR / NEXT ACTION":"MENUNGGU / TINDAKAN BERIKUTNYA",
+  "HISTORY":"RIWAYAT",
+  "Loading LP records…":"Memuat data LP…",
+  "No LP records match the selected stage.":"Tidak ada data LP yang sesuai dengan tahap yang dipilih.",
+  "WORKSPACE / PROCESS CONTROL":"RUANG KERJA / KENDALI PROSES",
+  "See where records are waiting and open the matching worklist directly.":"Lihat tahapan tempat data tertahan dan buka daftar kerja terkait secara langsung.",
+  "Loading workflow stages…":"Memuat tahapan alur kerja…",
+  "Show empty stages":"Tampilkan tahap kosong",
+  "Hide empty stages":"Sembunyikan tahap kosong",
+  "Loading workflow…":"Memuat alur kerja…",
+  "LoA Sign-off Route":"Alur Persetujuan LoA",
+  "LP circulation is gated by GM SCM MI approval. The route is shown for process visibility; individual sign-off dates remain tracked on each KHS record.":"Sirkulasi LP mensyaratkan persetujuan MI GM SCM. Alur ini ditampilkan untuk visibilitas proses; tanggal persetujuan setiap tahap tetap dicatat pada masing-masing data KHS.",
+  "POST-INJECTION / RENEWAL CONTROL":"SETELAH INJEKSI / KENDALI PERPANJANGAN",
+  "Monitor contract duration and expiry exposure after KHS is fully injected.":"Pantau durasi kontrak dan risiko kedaluwarsa setelah KHS selesai diinjeksikan.",
+  "Eligible contracts":"Kontrak yang memenuhi kriteria",
+  "Expiring ≤ 6 months":"Akan berakhir ≤ 6 bulan",
+  "Expiring ≤ 3 months":"Akan berakhir ≤ 3 bulan",
+  "Expiring ≤ 1 month":"Akan berakhir ≤ 1 bulan",
+  "Start renewal preparation":"Mulai persiapan perpanjangan",
+  "Renewal action required":"Perlu tindakan perpanjangan",
+  "Escalate renewal":"Eskalasi perpanjangan",
+  "Requires data completion":"Memerlukan pelengkapan data",
+  "Search contract lifecycle records":"Cari data siklus kontrak",
+  "All lifecycle statuses":"Semua status siklus kontrak",
+  "Upcoming contract":"Kontrak yang akan berlaku",
+  "Expiring within 6 months":"Berakhir dalam 6 bulan",
+  "Expiring within 3 months":"Berakhir dalam 3 bulan",
+  "Expiring within 1 month":"Berakhir dalam 1 bulan",
+  "Urgent · 14 days":"Mendesak · 14 hari",
+  "Final warning · 7 days":"Peringatan akhir · 7 hari",
+  "Missing contract dates":"Tanggal kontrak belum lengkap",
+  "Invalid contract dates":"Tanggal kontrak tidak valid",
+  "Active · over 6 months":"Aktif · lebih dari 6 bulan",
+  "CONTRACT PERIOD":"PERIODE KONTRAK",
+  "TERM":"JANGKA WAKTU",
+  "TIME REMAINING":"SISA WAKTU",
+  "CONTRACT STATUS":"STATUS KONTRAK",
+  "RENEWAL ALERT":"PERINGATAN PERPANJANGAN",
+  "Loading contracts…":"Memuat kontrak…",
+  "No fully injected contracts match this lifecycle filter.":"Tidak ada kontrak yang sudah diinjeksi penuh dan sesuai dengan filter ini.",
+  "The 6-, 3-, and 1-month counts are cumulative urgency thresholds, so shorter horizons are included in longer ones. Alert stages use Contract End Date and Jakarta local date. Monitoring is in-app; email and WhatsApp notifications are not enabled.":"Jumlah 6, 3, dan 1 bulan merupakan ambang urgensi kumulatif, sehingga periode yang lebih singkat termasuk dalam periode yang lebih panjang. Tahap peringatan menggunakan tanggal akhir kontrak dan tanggal lokal Jakarta. Pemantauan tersedia di aplikasi; notifikasi email dan WhatsApp belum diaktifkan.",
+  "DATA MANAGEMENT / WORKBOOK WORKSPACE":"MANAJEMEN DATA / RUANG KERJA EXCEL",
+  "Download the latest database workbook, edit existing records by ID, then preview and confirm the changes. Legacy v2.2 and v2.3 workbooks remain supported.":"Unduh workbook database terbaru, ubah data berdasarkan ID, lalu tinjau dan konfirmasi perubahan. Workbook versi lama v2.2 dan v2.3 tetap didukung.",
+  "Download current Excel":"Unduh Excel terbaru",
+  "Export KHS CSV":"Ekspor KHS CSV",
+  "Download the live workbook":"Unduh workbook terbaru",
+  "Start with the latest database snapshot":"Mulai dari salinan database terbaru",
+  "Update in Excel":"Perbarui di Excel",
+  "Keep record IDs unchanged":"Jangan mengubah ID data",
+  "Validate & confirm":"Validasi & konfirmasi",
+  "Review changes before they are saved":"Tinjau perubahan sebelum disimpan",
+  "Upload edited KHS workbook":"Unggah workbook KHS yang telah diubah",
+  "Use the current workbook download for updates. Keep Request ID and KHS ID unchanged. Blank cells preserve existing database values; removed rows do not delete records.":"Gunakan workbook terbaru untuk melakukan pembaruan. Jangan mengubah Request ID dan KHS ID. Sel kosong mempertahankan nilai database; baris yang dihapus tidak menghapus data.",
+  "You can also drag and drop an .xlsx file here.":"Anda juga dapat menarik dan meletakkan file .xlsx di sini.",
+  "Choose file":"Pilih file",
+  "No file selected":"Belum ada file yang dipilih",
+  "Validate workbook":"Validasi workbook",
+  "VALIDATION RESULT":"HASIL VALIDASI",
+  "Workbook preview":"Pratinjau workbook",
+  "PREVIEWED":"SUDAH DITINJAU",
+  "Total rows":"Total baris",
+  "Valid rows":"Baris valid",
+  "Warnings":"Peringatan",
+  "Errors":"Kesalahan",
+  "Changes to be applied":"Perubahan yang akan diterapkan",
+  "New records":"Data baru",
+  "Updated records":"Data diperbarui",
+  "Unchanged records":"Data tidak berubah",
+  "Changed fields":"Kolom berubah",
+  "RECORD":"DATA",
+  "OPERATION":"OPERASI",
+  "FIELDS TO CHANGE":"KOLOM YANG DIUBAH",
+  "The preview is calculated against the current database values. Blank cells remain no-change; no records are written until Confirm Import.":"Pratinjau dihitung berdasarkan nilai database saat ini. Sel kosong tidak mengubah data; tidak ada perubahan yang disimpan sebelum Konfirmasi Impor.",
+  "SEVERITY":"TINGKAT",
+  "ENTITY":"ENTITAS",
+  "SHEET / ROW":"SHEET / BARIS",
+  "DETAIL":"RINCIAN",
+  "Additional issues are not displayed.":"Masalah lainnya tidak ditampilkan.",
+  "I have reviewed and acknowledge the warnings.":"Saya telah meninjau dan memahami peringatan tersebut.",
+  "Review validation result.":"Tinjau hasil validasi.",
+  "Confirm import":"Konfirmasi impor",
+  "AUDIT TRAIL":"JEJAK AUDIT",
+  "Import History":"Riwayat Impor",
+  "Refresh history":"Muat ulang riwayat",
+  "BATCH":"BATCH",
+  "WORKBOOK":"WORKBOOK",
+  "STATUS":"STATUS",
+  "ROWS":"BARIS",
+  "INSERTED":"DITAMBAHKAN",
+  "UPDATED":"DIPERBARUI",
+  "UNCHANGED":"TIDAK BERUBAH",
+  "UPLOADED":"DIUNGGAH",
+  "Not loaded.":"Belum dimuat.",
+  "No import batches yet.":"Belum ada batch impor.",
+  "DATA MANAGEMENT / TRACEABILITY":"MANAJEMEN DATA / KETERLACAKAN",
+  "Manual edits and Excel imports are recorded for traceability. Manual edits are labelled manual-entry until sign-in is introduced.":"Perubahan manual dan impor Excel dicatat agar dapat ditelusuri. Perubahan manual diberi label manual-entry hingga fitur login tersedia.",
+  "Search activity history":"Cari riwayat aktivitas",
+  "Search record ID, actor, action…":"Cari ID data, pelaku, tindakan…",
+  "Filter activity entity":"Filter entitas aktivitas",
+  "All entities":"Semua entitas",
+  "KHS records":"Data KHS",
+  "Requests":"Permintaan",
+  "WHEN":"WAKTU",
+  "ENTITY":"ENTITAS",
+  "RECORD ID":"ID DATA",
+  "ACTOR":"PELAKU",
+  "CHANGES":"PERUBAHAN",
+  "No activity matches the current filters.":"Tidak ada aktivitas yang sesuai dengan filter.",
+  "KHS Contract Operations":"Operasional Kontrak KHS",
+  "Internal workspace":"Ruang kerja internal",
+  "NEW RECORD":"DATA BARU",
+  "Create record":"Buat data",
+  "Save record":"Simpan data",
+  "Cancel":"Batal",
+  "EDIT RECORD":"UBAH DATA",
+  "Edit record":"Ubah data",
+  "Edit Request":"Ubah Permintaan",
+  "Edit KHS item":"Ubah item KHS",
+  "Create Request":"Buat Permintaan",
+  "Create KHS item":"Buat item KHS",
+  "Request":"Permintaan",
+  "KHS item":"Item KHS",
+  "Enter milestone dates only when supported by a recorded submission, approval, or completion. MI GM approval and LP chronology are validated when saved.":"Isi tanggal milestone hanya jika didukung bukti pengajuan, persetujuan, atau penyelesaian. Persetujuan MI GM dan urutan tanggal LP akan divalidasi saat disimpan.",
+  "Request ID is generated automatically when the record is saved.":"Request ID dibuat otomatis saat data disimpan.",
+  "Select request":"Pilih permintaan",
+  "Select executor":"Pilih pelaksana",
+  "Choose contract type":"Pilih jenis kontrak",
+  "current / inactive":"saat ini / tidak aktif",
+  "Edit record.":"Ubah data.",
+  "REQUEST / VENDOR":"PERMINTAAN / VENDOR",
+  "Supplier & request":"Pemasok & permintaan",
+  "Commercial & approval history":"Riwayat komersial & persetujuan",
+  "Coordination & next action":"Koordinasi & tindakan berikutnya",
+  "Request subject":"Subjek permintaan",
+  "Request ID":"ID Permintaan",
+  "Vendor":"Vendor",
+  "Executor":"Pelaksana",
+  "Dispatch":"Pengiriman",
+  "BOQ confirmation":"Konfirmasi BOQ",
+  "Contract start":"Mulai kontrak",
+  "Contract end":"Akhir kontrak",
+  "Negotiation":"Negosiasi",
+  "Final negotiation":"Negosiasi final",
+  "MI Head approval":"Persetujuan MI Head",
+  "MI SM approval":"Persetujuan MI SM",
+  "MI GM approval":"Persetujuan MI GM",
+  "Legal submission":"Pengajuan Legal",
+  "Waiting reason":"Alasan menunggu",
+  "Remarks":"Catatan",
+  "Last updated":"Pembaruan terakhir",
+  "Recent activity":"Aktivitas terbaru",
+  "Download":"Unduh",
+  "No evidence documents uploaded yet.":"Belum ada dokumen bukti yang diunggah.",
+  "KHS RECORD":"DATA KHS",
+  "KHS Details":"Detail KHS",
+  "PROCESS CLOSURE":"PENUTUPAN PROSES",
+  "Close KHS as Not Proceeded":"Tutup KHS sebagai Tidak Dilanjutkan",
+  "Close KHS":"Tutup KHS",
+  "Use this only when the process will not continue. Existing milestones and evidence will be preserved.":"Gunakan hanya jika proses tidak akan dilanjutkan. Milestone dan dokumen bukti yang sudah ada akan tetap disimpan.",
+  "Closure date":"Tanggal penutupan",
+  "Closure reason":"Alasan penutupan",
+  "Select a reason":"Pilih alasan",
+  "No mutual agreement":"Tidak tercapai kesepakatan",
+  "Withdrawn by requester":"Ditarik oleh pemohon",
+  "Vendor declined":"Vendor menolak",
+  "Internally rejected":"Ditolak secara internal",
+  "Duplicate / created in error":"Duplikat / dibuat karena kesalahan",
+  "Other":"Lainnya",
+  "Closure notes":"Catatan penutupan",
+  "Add context or decision reference":"Tambahkan konteks atau referensi keputusan",
+  "Confirm closure":"Konfirmasi penutupan",
+  "REOPEN PROCESS":"BUKA KEMBALI PROSES",
+  "Reopen KHS":"Buka Kembali KHS",
+  "Reopening restores this KHS to the active work queue. The previous closure remains in the audit history.":"Membuka kembali KHS akan mengembalikannya ke antrean aktif. Riwayat penutupan sebelumnya tetap tersimpan dalam log audit.",
+  "Reason for reopening":"Alasan membuka kembali",
+  "Close KHS":"Tutup KHS",
+  "END-TO-END PROCESS":"PROSES MENYELURUH",
+  "Process Duration History":"Riwayat Durasi Proses",
+  "Elapsed time is calculated from recorded milestone dates.":"Durasi dihitung berdasarkan tanggal milestone yang tercatat.",
+  "Total processing time":"Total waktu proses",
+  "LP circulation time":"Durasi sirkulasi LP",
+  "Missing or inconsistent milestone dates are shown as incomplete history; the system does not estimate missing dates.":"Tanggal milestone yang hilang atau tidak konsisten ditampilkan sebagai riwayat tidak lengkap; sistem tidak memperkirakan tanggal yang hilang.",
+  "LP CIRCULATION":"SIRKULASI LP",
+  "Approval journey":"Alur persetujuan",
+  "Evidence-led view of the six LP milestones":"Tampilan enam milestone LP berdasarkan bukti",
+  "Current Stage":"Tahap Saat Ini",
+  "Stage Age":"Durasi Tahap",
+  "Upcoming":"Berikutnya",
+  "POST-INJECTION":"SETELAH INJEKSI",
+  "Evidence Documents":"Dokumen Bukti",
+  "Supporting files attached to this KHS record.":"File pendukung yang dilampirkan pada data KHS ini.",
+  "Document type":"Jenis dokumen",
+  "KHS Evidence":"Bukti KHS",
+  "KHS Inject Evidence":"Bukti Injeksi KHS",
+  "LP Evidence":"Bukti LP",
+  "Supporting Document":"Dokumen Pendukung",
+  "Choose file":"Pilih file",
+  "Upload evidence":"Unggah bukti",
+  "Loading documents…":"Memuat dokumen…",
+  "Close":"Tutup",
+  "Details":"Detail",
+  "View record":"Lihat data",
+  "No records currently require attention.":"Tidak ada data yang memerlukan perhatian saat ini.",
+  "No records match the current filters.":"Tidak ada data yang sesuai dengan filter saat ini.",
+  "Untitled request":"Permintaan tanpa judul",
+  "Unassigned":"Belum ditetapkan",
+  "No waiting owner recorded":"Belum ada PIC penanggung jawab yang tercatat",
+  "Review data / prerequisite":"Tinjau data / prasyarat",
+  "MI GM prerequisite review":"Pemeriksaan prasyarat MI GM",
+  "Director sign-off unverified":"Tanda tangan Direktur belum terverifikasi",
+  "Historical timeline gaps":"Kesenjangan lini masa historis",
+  "Partial history":"Riwayat parsial",
+  "Recorded":"Tercatat",
+  "Review required":"Perlu Ditinjau",
+  "History needs review":"Riwayat perlu ditinjau",
+  "Stage age unavailable":"Durasi tahap tidak tersedia",
+  "Closed stage":"Tahap ditutup",
+  "Not Proceeded":"Tidak Dilanjutkan",
+  "Stopped":"Dihentikan",
+  "Not reached":"Belum Dicapai",
+  "No further LP milestone":"Tidak ada milestone LP berikutnya",
+  "LP not reached":"Tahap LP belum dimulai",
+  "LP completed":"LP selesai",
+  "KHS process stopped":"Proses KHS dihentikan",
+  "No fully-injected completion was recorded.":"Tidak ada penyelesaian injeksi penuh yang tercatat.",
+  "No LP stage was opened.":"Belum ada tahap LP yang dimulai.",
+  "No active LP stage.":"Tidak ada tahap LP yang aktif.",
+  "Data needs review":"Data perlu ditinjau",
+  "History incomplete":"Riwayat tidak lengkap",
+  "Date unavailable":"Tanggal tidak tersedia",
+  "Invalid chronology":"Urutan tanggal tidak valid",
+  "In progress":"Sedang Berjalan",
+  "Stopped":"Dihentikan",
+  "Completed":"Selesai",
+  "Not started":"Belum Dimulai",
+  "Closed":"Ditutup",
+  "Stopped on":"Dihentikan pada",
+  "Since":"Sejak",
+  "Updated":"Diperbarui",
+  "No process milestones are recorded.":"Belum ada milestone proses yang tercatat.",
+  "Request Received":"Permintaan Diterima",
+  "BOQ Confirmation":"Konfirmasi BOQ",
+  "Negotiation":"Negosiasi",
+  "Final Negotiation":"Negosiasi Final",
+  "MI Approval - Head":"Persetujuan MI - Head",
+  "MI Approval - SM":"Persetujuan MI - SM",
+  "MI Approval - GM":"Persetujuan MI - GM",
+  "Legal Submission":"Pengajuan Legal",
+  "Legal Processing":"Proses Legal",
+  "KHS Inject":"Injeksi KHS",
+  "Fully Injected":"Injeksi Penuh",
+  "LP Contract Team":"Tim Kontrak LP",
+  "LP Junior Manager":"Manajer Junior LP",
+  "LP Senior Manager":"Manajer Senior LP",
+  "LP GM SCM":"GM SCM LP",
+  "LP Director Sign-off":"Tanda Tangan Direktur LP",
+  "Injection Preparation":"Persiapan Injeksi",
+  "KHS Injection":"Injeksi KHS",
+  "User submitted":"Diajukan oleh User",
+  "LP circulation started":"Sirkulasi LP dimulai",
+  "Contract Team completion":"Penyelesaian Tim Kontrak",
+  "Vendor Management approval":"Persetujuan Vendor Management",
+  "Strategic Sourcing approval":"Persetujuan Strategic Sourcing",
+  "General Management approval":"Persetujuan General Management",
+  "Director sign-off":"Tanda tangan Direktur",
+  "Director-signed LP completion":"LP selesai ditandatangani Direktur",
+  "The next approval or completion milestone is outstanding.":"Persetujuan atau milestone penyelesaian berikutnya masih menunggu.",
+  "Next milestone in sequence":"Milestone berikutnya dalam urutan",
+  "Final LP milestone":"Milestone LP terakhir",
+  "There is no active LP stage.":"Tidak ada tahap LP yang aktif.",
+  "The clock starts when LP is submitted.":"Penghitungan dimulai saat LP diajukan.",
+  "The available milestone history does not support a reliable active-stage assignment.":"Riwayat milestone yang tersedia belum cukup untuk menentukan tahap aktif secara andal.",
+  "No next approval stage has been inferred.":"Tahap persetujuan berikutnya belum dapat ditentukan.",
+  "Stage age is withheld until the current stage can be established.":"Durasi tahap belum dihitung karena tahap saat ini belum dapat dipastikan.",
+  "The LP route stopped at":"Alur LP dihentikan pada",
+  "The KHS process was closed on":"Proses KHS ditutup pada",
+  "The approval route stopped when the KHS was closed.":"Alur persetujuan berhenti saat KHS ditutup.",
+  "The LP approval route was not started.":"Alur persetujuan LP belum dimulai.",
+  "CLOSURE DATE":"TANGGAL PENUTUPAN",
+  "Reason:":"Alasan:",
+  "No additional notes recorded.":"Tidak ada catatan tambahan.",
+  "Closed by":"Ditutup oleh",
+  "Reopened":"Dibuka kembali",
+  "Workflow:":"Alur kerja:",
+  "KHS closed as Not Proceeded.":"KHS ditutup dengan status Tidak Dilanjutkan.",
+  "KHS reopened.":"KHS berhasil dibuka kembali.",
+  "Record updated.":"Data berhasil diperbarui.",
+  "Record created.":"Data berhasil dibuat.",
+  "No changes to save.":"Tidak ada perubahan untuk disimpan.",
+  "Saving…":"Menyimpan…",
+  "Closing…":"Menutup…",
+  "Reopening…":"Membuka kembali…",
+  "Unable to close KHS.":"KHS tidak dapat ditutup.",
+  "Unable to reopen KHS.":"KHS tidak dapat dibuka kembali.",
+  "Request failed":"Permintaan gagal",
+  "A JSON object is required.":"Diperlukan objek JSON.",
+  "KHS not found.":"Data KHS tidak ditemukan.",
+  "Request not found.":"Data permintaan tidak ditemukan.",
+  "Only a Not Proceeded KHS can be reopened.":"Hanya KHS berstatus Tidak Dilanjutkan yang dapat dibuka kembali.",
+  "This KHS is already marked as Not Proceeded.":"KHS ini sudah berstatus Tidak Dilanjutkan.",
+  "A fully injected KHS cannot be closed as Not Proceeded.":"KHS yang sudah fully injected tidak dapat ditutup sebagai Tidak Dilanjutkan.",
+  "Closure date cannot be in the future.":"Tanggal penutupan tidak boleh di masa depan.",
+  "Closure date cannot precede the original request date.":"Tanggal penutupan tidak boleh lebih awal daripada tanggal permintaan awal.",
+  "Closure date cannot precede the latest recorded milestone.":"Tanggal penutupan tidak boleh lebih awal daripada milestone terakhir yang tercatat.",
+  "Add a note when selecting Other.":"Tambahkan catatan jika memilih Lainnya.",
+  "Select a supported closure reason.":"Pilih alasan penutupan yang tersedia.",
+  "Reopen this KHS before editing its milestones.":"Buka kembali KHS sebelum mengubah milestone.",
+  "This KHS is already marked as Not Proceeded.":"KHS ini sudah berstatus Tidak Dilanjutkan.",
+  "No evidence documents uploaded yet.":"Belum ada dokumen bukti yang diunggah.",
+  "Upload evidence":"Unggah bukti",
+  "Upload complete.":"Unggah selesai.",
+  "The file could not be uploaded.":"File tidak dapat diunggah.",
+  "No activity matches the current filters.":"Tidak ada aktivitas yang sesuai dengan filter.",
+  "No import batches yet.":"Belum ada batch impor.",
+  "No file selected":"Belum ada file yang dipilih",
+  "Upload edited KHS workbook":"Unggah workbook KHS yang telah diperbarui",
+  "Preview and validate":"Pratinjau dan validasi",
+  "Review validation result.":"Tinjau hasil validasi.",
+  "Confirm Import":"Konfirmasi Impor",
+  "Import confirmed.":"Impor dikonfirmasi.",
+  "Import preview":"Pratinjau impor",
+  "Please choose a workbook first.":"Pilih workbook terlebih dahulu.",
+  "The workbook could not be validated.":"Workbook tidak dapat divalidasi.",
+  "The import could not be completed.":"Impor tidak dapat diselesaikan.",
+  "Request ID is required.":"Request ID wajib diisi.",
+  "Vendor name is required.":"Nama vendor wajib diisi.",
+  "Select request":"Pilih permintaan",
+  "Select executor":"Pilih pelaksana",
+  "Search":"Cari",
+  "LP status":"Status LP",
+  "Contract type":"Jenis kontrak",
+  "Waiting for":"Menunggu",
+  "Workflow stage":"Tahap alur kerja",
+  "Process status":"Status proses",
+  "Queue":"Antrean",
+  "Needs attention":"Perlu perhatian",
+  "Approval role":"Peran pemberi persetujuan",
+  "Clear all":"Hapus semua filter",
+  "No results":"Tidak ada hasil",
+  "Details":"Detail",
+  "REQUEST / KHS":"PERMINTAAN / KHS",
+  "Request Date":"Tanggal Permintaan",
+  "Contract Status":"Status Kontrak",
+  "Renewal Alert":"Peringatan Perpanjangan",
+  "Contract status":"Status kontrak",
+  "Renewal alert":"Peringatan perpanjangan",
+  "Contract term":"Jangka waktu kontrak",
+  "Time remaining":"Sisa waktu",
+  "Injection started":"Injeksi dimulai",
+  "Fully injected":"Injeksi penuh",
+  "No contract dates":"Tanggal kontrak belum tersedia",
+  "Dates required":"Tanggal diperlukan",
+  "Upcoming":"Akan Datang",
+  "Expired":"Kedaluwarsa",
+  "Active":"Aktif",
+  "Not fully injected":"Belum fully injected",
+  "Renewal action due":"Tindakan perpanjangan diperlukan",
+  "Open navigation":"Buka navigasi",
+  "Close navigation":"Tutup navigasi",
+  "Switch to Bahasa Indonesia":"Ubah ke Bahasa Indonesia",
+  "Switch to English":"Ubah ke bahasa Inggris",
+  "Search activity history":"Cari riwayat aktivitas",
+  "All activities":"Semua aktivitas",
+  "Page":"Halaman",
+  "records":"data",
+  "activities":"aktivitas",
+  "batches":"batch",
+  "contracts":"kontrak",
+  "days":"hari",
+  "day":"hari"
+});
+
+const originalTextNodes = new WeakMap();
+const originalAttributes = new WeakMap();
+let currentLanguage = "en";
+let languageObserver = null;
+
+function translateText(value, language = currentLanguage) {
+  if (!value || language !== "id") return value;
+  const leading = (value.match(/^\s*/) || [""])[0];
+  const trailing = (value.match(/\s*$/) || [""])[0];
+  const core = value.slice(leading.length, value.length - trailing.length || value.length);
+  if (!core) return value;
+  if (Object.prototype.hasOwnProperty.call(I18N_ID, core)) return leading + I18N_ID[core] + trailing;
+
+  let match = core.match(/^(\d+) days? in stage$/i);
+  if (match) return leading + match[1] + (match[1] === "1" ? " hari dalam tahap" : " hari dalam tahap") + trailing;
+  match = core.match(/^Stopped after (\d+) days?$/i);
+  if (match) return leading + "Dihentikan setelah " + match[1] + " hari" + trailing;
+  match = core.match(/^(\d+) days? remaining$/i);
+  if (match) return leading + "tersisa " + match[1] + " hari" + trailing;
+  match = core.match(/^(\d+) days? overdue$/i);
+  if (match) return leading + "terlambat " + match[1] + " hari" + trailing;
+  match = core.match(/^Since (.+)$/);
+  if (match) return leading + "Sejak " + match[1] + trailing;
+  match = core.match(/^Updated (.+)$/);
+  if (match) return leading + "Diperbarui " + match[1] + trailing;
+  match = core.match(/^Oldest in stage: (\d+) days?$/i);
+  if (match) return leading + "Paling lama di tahap: " + match[1] + " hari" + trailing;
+  match = core.match(/^(\d+) of (\d+) stages have records · (\d+) records assigned to a workflow stage$/);
+  if (match) return leading + match[1] + " dari " + match[2] + " tahap memiliki data · " + match[3] + " data berada pada tahap alur kerja" + trailing;
+  match = core.match(/^Show (\d+) empty stages$/);
+  if (match) return leading + "Tampilkan " + match[1] + " tahap kosong" + trailing;
+  match = core.match(/^Page (\d+) of (\d+) · (\d+) records$/);
+  if (match) return leading + "Halaman " + match[1] + " dari " + match[2] + " · " + match[3] + " data" + trailing;
+  match = core.match(/^Page (\d+) of (\d+) · (\d+) activities$/);
+  if (match) return leading + "Halaman " + match[1] + " dari " + match[2] + " · " + match[3] + " aktivitas" + trailing;
+  match = core.match(/^Page (\d+) of (\d+) · (\d+) contracts$/);
+  if (match) return leading + "Halaman " + match[1] + " dari " + match[2] + " · " + match[3] + " kontrak" + trailing;
+  match = core.match(/^Page (\d+) · (\d+) batches$/);
+  if (match) return leading + "Halaman " + match[1] + " · " + match[2] + " batch" + trailing;
+  match = core.match(/^Page (\d+) of (\d+)$/);
+  if (match) return leading + "Halaman " + match[1] + " dari " + match[2] + trailing;
+  match = core.match(/^(\d+) fully injected$/);
+  if (match) return leading + match[1] + " sudah fully injected" + trailing;
+  match = core.match(/^(\d+) record(s)? at this stage$/);
+  if (match) return leading + match[1] + " data pada tahap ini" + trailing;
+  match = core.match(/^(\d+) without a start date$/);
+  if (match) return leading + match[1] + " tanpa tanggal mulai" + trailing;
+  match = core.match(/^Workflow: (.+)$/);
+  if (match) return leading + "Alur kerja: " + translateText(match[1], language) + trailing;
+  match = core.match(/^Request failed \((\d+)\)$/);
+  if (match) return leading + "Permintaan gagal (" + match[1] + ")" + trailing;
+  return value;
+}
+
+function translateNode(node, language) {
+  if (!originalTextNodes.has(node)) originalTextNodes.set(node, node.nodeValue);
+  const original = originalTextNodes.get(node);
+  const translated = translateText(original, language);
+  if (node.nodeValue !== translated) node.nodeValue = translated;
+}
+
+function rememberAndTranslateAttribute(element, name, language) {
+  let values = originalAttributes.get(element);
+  if (!values) {
+    values = new Map();
+    originalAttributes.set(element, values);
+  }
+  if (!values.has(name)) values.set(name, element.getAttribute(name));
+  const original = values.get(name);
+  const translated = translateText(original, language);
+  if (element.getAttribute(name) !== translated) element.setAttribute(name, translated);
+}
+
+function translateSubtree(root, language = currentLanguage) {
+  if (!root) return;
+  const attributes = ["placeholder", "aria-label", "aria-description", "title"];
+  const elements = [];
+  if (root.nodeType === Node.ELEMENT_NODE) elements.push(root);
+  if (root.querySelectorAll) elements.push(...root.querySelectorAll("*"));
+  elements.forEach((element) => {
+    attributes.forEach((name) => {
+      if (element.hasAttribute(name)) rememberAndTranslateAttribute(element, name, language);
+    });
+  });
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      const parent = node.parentElement;
+      if (!parent || parent.closest("script,style")) return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_ACCEPT;
+    }
+  });
+  const nodes = [];
+  while (walker.nextNode()) nodes.push(walker.currentNode);
+  nodes.forEach((node) => translateNode(node, language));
+}
+
+function setLanguage(language) {
+  currentLanguage = language === "id" ? "id" : "en";
+  try { localStorage.setItem("khs-dashboard-language", currentLanguage); } catch (_) {}
+  document.documentElement.lang = currentLanguage;
+  document.documentElement.dataset.language = currentLanguage;
+  document.title = currentLanguage === "id" ? "Pemantauan & Pelacakan Kontrak" : "Contract Monitoring & Tracking";
+  translateSubtree(document.body, currentLanguage);
+  const button = $("languageToggle");
+  if (button) {
+    button.textContent = currentLanguage === "en" ? "ID" : "EN";
+    button.setAttribute("aria-label", currentLanguage === "en" ? "Switch to Bahasa Indonesia" : "Switch to English");
+    button.title = currentLanguage === "en" ? "Switch to Bahasa Indonesia" : "Switch to English";
+  }
+}
+
+function initLanguageSwitcher() {
+  try {
+    const saved = localStorage.getItem("khs-dashboard-language");
+    currentLanguage = saved === "id" ? "id" : "en";
+  } catch (_) {
+    currentLanguage = "en";
+  }
+  const button = $("languageToggle");
+  if (button) {
+    button.addEventListener("click", () => setLanguage(currentLanguage === "en" ? "id" : "en"));
+  }
+  if (!languageObserver && document.body) {
+    languageObserver = new MutationObserver((records) => {
+      if (currentLanguage !== "id") return;
+      records.forEach((record) => {
+        record.addedNodes.forEach((node) => {
+          if (node.nodeType === Node.ELEMENT_NODE || node.nodeType === Node.TEXT_NODE) {
+            translateSubtree(node, currentLanguage);
+          }
+        });
+      });
+    });
+    languageObserver.observe(document.body, { childList: true, subtree: true });
+  }
+  setLanguage(currentLanguage);
+}
+
 const state = {
   page: "overview",
   requestPage: 1,
@@ -1795,6 +2459,7 @@ function bind() {
 
 document.addEventListener("DOMContentLoaded", () => {
   observeResponsiveTables();
+  initLanguageSwitcher();
   bind();
   const initial = window.location.hash.replace("#", "");
   go(["overview", "requests", "register", "lp", "contracts", "workflow", "imports", "activity"].indexOf(initial) >= 0 ? initial : "overview");
