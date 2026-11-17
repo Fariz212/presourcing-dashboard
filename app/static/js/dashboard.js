@@ -905,6 +905,7 @@ const itemFields = [
   ["khs_inject_start_date", "KHS injection start", "date"],
   ["khs_inject_completion_date", "KHS fully injected date", "date"],
   ["waiting_for", "Currently waiting for", "text"],
+  ["action_owner", "Action owner / PIC", "text"],
   ["waiting_reason", "Waiting reason / next action", "textarea"],
   ["remarks", "Remarks", "textarea"]
 ];
@@ -915,7 +916,7 @@ const itemFieldGroups = [
   { id:"commercial-approvals", title:"Commercial & MI approvals", description:"Commercial checkpoints and approvals required before LP circulation.", fields:["boq_confirmation_date","negotiation_date","final_negotiation_date","mi_head_approval_date","mi_sm_approval_date","mi_gm_approval_date","legal_submission_date"] },
   { id:"lp-circulation", title:"LP Circulation", description:"Record each submission, completion, and approval date only when supported by evidence.", fields:["lp_circulation_start_date","lp_contract_team_completion_date","lp_junior_manager_approval_date","lp_senior_manager_approval_date","lp_gm_scm_approval_date","lp_completion_date"] },
   { id:"khs-injection", title:"KHS Injection", description:"This phase starts only after Director-signed LP completion.", fields:["khs_inject_start_date","khs_inject_completion_date"] },
-  { id:"coordination", title:"Coordination & next action", description:"Who currently holds the action, why it is waiting, and contextual notes.", fields:["waiting_for","waiting_reason","remarks"] }
+  { id:"coordination", title:"Coordination & next action", description:"Who currently holds the action, why it is waiting, and contextual notes.", fields:["waiting_for","action_owner","waiting_reason","remarks"] }
 ];
 
 const requestFields = [
@@ -1446,11 +1447,91 @@ function renderWorkflowCards() {
   }).join("") : '<div class="empty-state">No workflow stages currently contain records.</div>';
 }
 
+
+function slaStatusLabel(status) {
+  return ({
+    not_configured: "Not configured",
+    age_unavailable: "Age unavailable",
+    on_track: "On track",
+    due_soon: "Due soon",
+    overdue: "Overdue",
+    escalation_due: "Escalation due"
+  })[status] || status || "—";
+}
+
+function renderOperationsAnalytics(operations, followUps) {
+  if (!operations || !operations.data) {
+    ["opsActiveWip","opsOver30","opsAgeUnavailable","opsSlaOverdue","opsEscalations","opsFollowUpsOverdue"]
+      .forEach((id) => set(id, "—"));
+    emptyRow("operationsStageBody", 12, "Operations analytics are temporarily unavailable.");
+    return;
+  }
+  const summary = operations.data.summary || {};
+  set("operationsAsOf", "As of " + fmt(operations.as_of_date));
+  set("opsActiveWip", summary.active_wip || 0);
+  set("opsOver30", summary.older_than_30_days || 0);
+  set("opsAgeUnavailable", summary.stage_age_unavailable || 0);
+  set("opsSlaOverdue", summary.sla_overdue_records || 0);
+  set("opsEscalations", summary.escalation_records || 0);
+  set("opsFollowUpsOverdue", summary.follow_ups_overdue || 0);
+  const configured = (operations.data.stages || []).filter((row) => row.sla_configured).length;
+  set("slaConfigurationStatus", configured
+    ? configured + " stages configured"
+    : "SLA not configured");
+  const target = $("operationsStageBody");
+  const rows = operations.data.stages || [];
+  if (target) target.innerHTML = rows.length ? rows.map((row) => {
+    const status = row.sla_status || "not_configured";
+    const policy = row.target_days == null ? "No target configured"
+      : "Target " + row.target_days + "d" +
+        (row.warning_after_days == null ? "" : " · warn " + row.warning_after_days + "d") +
+        (row.escalation_after_days == null ? "" : " · escalate " + row.escalation_after_days + "d");
+    return '<tr><td><strong>' + esc(row.stage_name) + '</strong><span class="cell-secondary">' +
+      esc(policy) + '</span></td><td>' + esc(row.wip_count) + '</td>' +
+      '<td>' + esc(row.median_age_days == null ? "—" : row.median_age_days + "d") + '</td>' +
+      '<td>' + esc(row.p90_age_days == null ? "—" : row.p90_age_days + "d") + '</td>' +
+      '<td>' + esc(row.age_0_7) + '</td><td>' + esc(row.age_8_14) + '</td>' +
+      '<td>' + esc(row.age_15_30) + '</td><td>' + esc(row.age_over_30) + '</td>' +
+      '<td>' + esc(row.oldest_age_days == null ? "—" : row.oldest_age_days + "d") + '</td>' +
+      '<td><span class="status-badge status-sla-' + esc(status) + '">' + esc(slaStatusLabel(status)) + '</span></td>' +
+      '<td>' + esc(row.overdue_count || 0) + '</td><td>' + esc(row.escalation_count || 0) + '</td></tr>';
+  }).join("") : '<tr><td colspan="12" class="table-message">No active WIP records.</td></tr>';
+  renderOperationsFollowUps(followUps && followUps.data ? followUps.data : []);
+}
+
+function renderOperationsFollowUps(rows) {
+  const body = $("operationsFollowUpBody");
+  if (!body) return;
+  if (!rows.length) {
+    emptyRow("operationsFollowUpBody", 7, "No open follow-ups are scheduled.");
+    return;
+  }
+  const actionable = rows.filter((row) => row.status === "OPEN" && !row.stage_changed);
+  body.innerHTML = actionable.length ? actionable.map((row) => {
+    const dueState = Number(row.days_from_due) > 0 ? "Overdue"
+      : Number(row.days_from_due) === 0 ? "Due today" : "Upcoming";
+    return '<tr><td><strong>' + esc(fmt(row.due_date)) + '</strong><span class="cell-secondary">' +
+      esc(dueState) + '</span></td><td><strong>' + esc(row.khs_id) + '</strong><span class="cell-secondary">' +
+      esc(row.vendor_name || "—") + '</span></td><td>' + esc(row.stage_name || row.stage_code) +
+      '</td><td>' + esc(row.follow_up_to || row.action_owner || "Unassigned") + '</td><td>' +
+      esc(row.note) + '</td><td><span class="status-badge ' +
+      (Number(row.days_from_due) > 0 ? "status-warning" : "status-in_progress") + '">' +
+      esc(dueState) + '</span></td><td><button type="button" class="view-button" data-complete-followup="' +
+      esc(row.id) + '">Complete</button> <button type="button" class="view-button" data-view-khs="' +
+      esc(row.khs_id) + '">Open KHS</button></td></tr>';
+  }).join("") : '<tr><td colspan="7" class="table-message">No current-stage follow-ups. Stage-moved reminders remain in record history.</td></tr>';
+}
+
 async function loadWorkflow() {
-  const result = await api("/api/dashboard/workflow");
-  state.workflowRows = result.data || [];
+  const [workflow, operations, followUps] = await Promise.all([
+    api("/api/dashboard/workflow"),
+    api("/api/dashboard/operations/overview"),
+    api("/api/dashboard/operations/follow-ups?status=OPEN")
+  ]);
+  state.workflowRows = workflow.data || [];
   state.showEmptyWorkflowStages = false;
   renderWorkflowCards();
+  renderOperationsAnalytics(operations, followUps);
 }
 
 async function loadLPCirculation() {
@@ -1778,6 +1859,123 @@ function renderLPTimeline(record) {
           : "";
     notice.hidden = !noticeText;
     notice.textContent = noticeText;
+  }
+}
+
+
+function renderWorkbenchFollowUps(rows) {
+  const list = $("followUpList");
+  if (!list) return;
+  if (!rows || !rows.length) {
+    list.innerHTML = '<p class="muted">No follow-ups have been scheduled for this KHS.</p>';
+    return;
+  }
+  list.innerHTML = rows.map((row) => {
+    const open = row.status === "OPEN";
+    return '<article class="follow-up-item ' + (open ? "follow-up-open" : "follow-up-closed") + '">' +
+      '<div class="follow-up-item-main"><strong>' + esc(fmt(row.due_date)) + ' · ' +
+      esc(row.follow_up_to || "Unassigned") + '</strong><p>' + esc(row.note) + '</p>' +
+      '<small>' + esc(row.stage_code) + ' · ' + esc(row.status) + '</small></div>' +
+      (open ? '<div class="follow-up-item-actions"><button type="button" class="view-button" data-complete-followup="' +
+        esc(row.id) + '">Complete</button><button type="button" class="view-button" data-cancel-followup="' +
+        esc(row.id) + '">Cancel</button></div>' : "") +
+      '</article>';
+  }).join("");
+}
+
+function refreshGuidedProgressControl(record) {
+  const button = $("updateProgressButton");
+  const definition = record.guided_progress;
+  if (button) {
+    button.hidden = !definition;
+    button.textContent = definition ? "Update: " + definition.label : "No pending milestone";
+  }
+  const schedule = $("scheduleFollowUpButton");
+  if (schedule) schedule.hidden = record.process_status !== "ACTIVE" ||
+    record.workflow_status === "completed";
+  set("progressKhsLabel", record.khs_id);
+  set("progressMilestoneLabel", definition ? definition.label : "No guided milestone available");
+  if ($("followUpTo")) $("followUpTo").value = record.action_owner || "";
+}
+
+function openGuidedProgressDialog() {
+  const record = state.detail;
+  if (!record || !record.guided_progress) return;
+  $("progressKhsLabel").textContent = record.khs_id;
+  $("progressMilestoneLabel").value = record.guided_progress.label;
+  $("progressMilestoneDate").value = localDateInputValue();
+  $("progressNote").value = "";
+  $("progressError").hidden = true;
+  $("progressDialog").showModal();
+}
+
+async function submitGuidedProgress(event) {
+  event.preventDefault();
+  const record = state.detail;
+  if (!record || !record.guided_progress) return;
+  const button = $("confirmProgress");
+  const error = $("progressError");
+  const data = Object.fromEntries(new FormData($("progressForm")).entries());
+  if (error) { error.hidden = true; error.textContent = ""; }
+  button.disabled = true;
+  button.textContent = "Saving…";
+  try {
+    await api("/api/dashboard/khs/" + encodeURIComponent(record.khs_id) + "/progress",
+      jsonOptions("POST", data));
+    $("progressDialog").close();
+    toast("Progress updated.", true);
+    await Promise.all([loadOverview(), loadRegisterIfReady()]);
+    if (state.page === "workflow") await loadWorkflow();
+    if (state.page === "lp") await loadLPCirculation();
+    await openDetails(record.khs_id);
+  } catch (err) {
+    if (error) { error.textContent = err.message; error.hidden = false; }
+    toast(err.message);
+  } finally {
+    button.disabled = false;
+    button.textContent = "Save progress";
+  }
+}
+
+async function submitWorkbenchFollowUp(event) {
+  event.preventDefault();
+  const record = state.detail;
+  if (!record) return;
+  const button = $("saveFollowUpButton");
+  const data = Object.fromEntries(new FormData($("followUpForm")).entries());
+  button.disabled = true;
+  button.textContent = "Scheduling…";
+  try {
+    await api("/api/dashboard/khs/" + encodeURIComponent(record.khs_id) + "/follow-ups",
+      jsonOptions("POST", data));
+    toast("Follow-up scheduled.", true);
+    const fresh = await api("/api/dashboard/khs/" + encodeURIComponent(record.khs_id));
+    state.detail = fresh.data;
+    renderWorkbenchFollowUps(fresh.follow_ups || []);
+    refreshGuidedProgressControl(fresh.data);
+    if (state.page === "workflow") await loadWorkflow();
+  } catch (err) {
+    toast(err.message);
+  } finally {
+    button.disabled = false;
+    button.textContent = "Schedule follow-up";
+  }
+}
+
+async function updateFollowUpStatus(id, action) {
+  try {
+    const result = await api("/api/dashboard/operations/follow-ups/" + encodeURIComponent(id) + "/" + action,
+      jsonOptions("POST", {}));
+    toast(action === "complete" ? "Follow-up completed." : "Follow-up cancelled.", true);
+    if (state.page === "workflow") await loadWorkflow();
+    if (state.detail && result.data && result.data.khs_id === state.detail.khs_id) {
+      const fresh = await api("/api/dashboard/khs/" + encodeURIComponent(state.detail.khs_id));
+      state.detail = fresh.data;
+      renderWorkbenchFollowUps(fresh.follow_ups || []);
+      refreshGuidedProgressControl(fresh.data);
+    }
+  } catch (err) {
+    toast(err.message);
   }
 }
 
@@ -2143,11 +2341,16 @@ async function openDetails(id) {
     renderContractDetail(r);
     renderProcessDurationHistory(r);
     refreshClosureControls(r);
+    refreshGuidedProgressControl(r);
+    renderWorkbenchFollowUps(result.follow_ups || []);
+    $("followUpDueDate").value = localDateInputValue();
+    $("followUpNote").value = "";
 
     const detailGroups = [
       { title:"Supplier & request", items:[
         ["Request subject",r.request_subject],["Request ID",r.request_id],
-        ["Vendor",r.vendor_name],["Executor",r.executor_name || r.executor_code],["Contract type",r.subtype]
+        ["Vendor",r.vendor_name],["Executor",r.executor_name || r.executor_code],["Contract type",r.subtype],
+        ["Action owner / PIC",r.action_owner]
       ]},
       { title:"Commercial & approval history", items:[
         ["Dispatch",r.dispatch_date],["BOQ confirmation",r.boq_confirmation_date],
@@ -2541,6 +2744,32 @@ function bind() {
   $("documentUploadForm").addEventListener("submit", uploadEvidence);
   $("closureForm").addEventListener("submit", submitKhsClosure);
   $("reopenForm").addEventListener("submit", submitKhsReopen);
+  $("progressForm").addEventListener("submit", submitGuidedProgress);
+  $("followUpForm").addEventListener("submit", submitWorkbenchFollowUp);
+  $("updateProgressButton").addEventListener("click", openGuidedProgressDialog);
+  $("scheduleFollowUpButton").addEventListener("click", () => {
+    $("followUpSection").scrollIntoView({behavior:"smooth",block:"start"});
+    $("followUpDueDate").focus();
+  });
+  $("closeProgressDialog").addEventListener("click", () => $("progressDialog").close());
+  $("cancelProgress").addEventListener("click", () => $("progressDialog").close());
+  $("refreshOperationsButton").addEventListener("click", () => loadWorkflow().catch((err) => toast(err.message)));
+  document.querySelectorAll("[data-workbench-target]").forEach((button) => button.addEventListener("click", () => {
+    const target = $(button.dataset.workbenchTarget);
+    if (target) target.scrollIntoView({behavior:"smooth",block:"start"});
+  }));
+  $("operationsFollowUpBody").addEventListener("click", (event) => {
+    const complete = event.target.closest("[data-complete-followup]");
+    if (complete) updateFollowUpStatus(complete.dataset.completeFollowup, "complete");
+    const open = event.target.closest("[data-view-khs]");
+    if (open) openDetails(open.dataset.viewKhs);
+  });
+  $("followUpList").addEventListener("click", (event) => {
+    const complete = event.target.closest("[data-complete-followup]");
+    const cancel = event.target.closest("[data-cancel-followup]");
+    if (complete) updateFollowUpStatus(complete.dataset.completeFollowup, "complete");
+    if (cancel) updateFollowUpStatus(cancel.dataset.cancelFollowup, "cancel");
+  });
   $("closeKhsButton").addEventListener("click", () => {
     if (!state.detail) return;
     $("closureKhsLabel").textContent = state.detail.khs_id;
