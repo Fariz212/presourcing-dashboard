@@ -1006,8 +1006,25 @@ GUIDED_STAGE_FIELD = {
 }
 
 
-def _guided_progress_definition(record):
+
+def _workflow_stage_identity(record):
+    """Return the exact operational sub-stage that owns actions and reminders."""
     stage = record.get("workflow_stage_code") or record.get("current_stage_code")
+    if stage == "LP_CIRCULATION":
+        stage_key = record.get("lp_stage_key") or ""
+    elif stage == "KHS_INJECTION":
+        stage_key = (
+            "khs_injection"
+            if _date_only(record.get("khs_inject_start_date")) is not None
+            else "injection_preparation"
+        )
+    else:
+        stage_key = stage or ""
+    return stage, stage_key
+
+
+def _guided_progress_definition(record):
+    stage, stage_key = _workflow_stage_identity(record)
     field = GUIDED_STAGE_FIELD.get(stage)
     lp_fields = {
         "contract_team": "lp_contract_team_completion_date",
@@ -1019,7 +1036,11 @@ def _guided_progress_definition(record):
     if stage == "LP_CIRCULATION":
         field = lp_fields.get(record.get("lp_stage_key"))
     elif stage == "KHS_INJECTION":
-        field = "khs_inject_completion_date" if _date_only(record.get("khs_inject_start_date")) else "khs_inject_start_date"
+        field = (
+            "khs_inject_completion_date"
+            if stage_key == "khs_injection"
+            else "khs_inject_start_date"
+        )
     if not field or record.get(field) is not None:
         return None
     previous = {
@@ -1045,7 +1066,7 @@ def _guided_progress_definition(record):
         "field": field,
         "label": GUIDED_MILESTONE_LABELS[field],
         "stage_code": stage,
-        "stage_key": (record.get("lp_stage_key") if stage == "LP_CIRCULATION" else stage) or "",
+        "stage_key": stage_key,
         "previous_milestone": previous,
         "current_stage_started_on": started.isoformat() if started else None,
     }
@@ -2353,16 +2374,8 @@ def update_khs(khs_id):
             if before_derived:
                 cur.execute(REGISTER_BASE_QUERY + " WHERE k.khs_id=%s", (khs_id,))
                 after_derived = cur.fetchone()
-                before_stage_identity = (
-                    before_derived["workflow_stage_code"],
-                    (before_derived.get("lp_stage_key") if before_derived["workflow_stage_code"] == "LP_CIRCULATION"
-                     else before_derived["workflow_stage_code"]) or "",
-                )
-                after_stage_identity = (
-                    after_derived["workflow_stage_code"],
-                    (after_derived.get("lp_stage_key") if after_derived["workflow_stage_code"] == "LP_CIRCULATION"
-                     else after_derived["workflow_stage_code"]) or "",
-                ) if after_derived else None
+                before_stage_identity = _workflow_stage_identity(before_derived)
+                after_stage_identity = _workflow_stage_identity(after_derived) if after_derived else None
                 if after_derived and before_stage_identity != after_stage_identity:
                     conn.execute(
                         """UPDATE khs_follow_ups
@@ -2894,9 +2907,13 @@ def operations_overview():
                        JOIN (""" + REGISTER_BASE_QUERY + """) AS register ON register.khs_id=k.khs_id
                        WHERE f.status='OPEN' AND k.process_status='ACTIVE'
                          AND f.stage_code=register.workflow_stage_code
-                         AND f.stage_key=CASE WHEN register.workflow_stage_code='LP_CIRCULATION'
-                                               THEN COALESCE(register.lp_stage_key,'')
-                                               ELSE register.workflow_stage_code END""",
+                         AND f.stage_key=CASE
+                             WHEN register.workflow_stage_code='LP_CIRCULATION'
+                               THEN COALESCE(register.lp_stage_key,'')
+                             WHEN register.workflow_stage_code='KHS_INJECTION'
+                               THEN CASE WHEN register.khs_inject_start_date IS NULL
+                                         THEN 'injection_preparation' ELSE 'khs_injection' END
+                             ELSE register.workflow_stage_code END""",
                     (today, today, today),
                 )
                 follow_up_summary = dict(cur.fetchone())
@@ -2959,7 +2976,12 @@ def list_khs_follow_ups():
                                    WHEN 'director' THEN 'LP Director Sign-off'
                                    ELSE sc.stage_name
                                END
-                           ELSE sc.stage_name END AS stage_name,
+                           ELSE CASE
+                               WHEN register.workflow_stage_code='KHS_INJECTION'
+                                 AND register.khs_inject_start_date IS NULL
+                               THEN 'Injection Preparation'
+                               ELSE sc.stage_name
+                           END END AS stage_name,
                            f.due_date, f.follow_up_to, f.note, f.status,
                            f.created_at, f.created_by, f.completed_at,
                            k.vendor_name, k.action_owner,
@@ -2968,7 +2990,10 @@ def list_khs_follow_ups():
                              f.stage_code <> register.workflow_stage_code
                              OR f.stage_key <> CASE
                                  WHEN register.workflow_stage_code='LP_CIRCULATION'
-                                 THEN COALESCE(register.lp_stage_key,'')
+                                   THEN COALESCE(register.lp_stage_key,'')
+                                 WHEN register.workflow_stage_code='KHS_INJECTION'
+                                   THEN CASE WHEN register.khs_inject_start_date IS NULL
+                                             THEN 'injection_preparation' ELSE 'khs_injection' END
                                  ELSE register.workflow_stage_code
                              END
                            ) AS stage_changed,
@@ -3038,10 +3063,7 @@ def create_khs_follow_up(khs_id):
                 if record is None:
                     return jsonify(success=False, message="KHS not found."),404
                 record = dict(record)
-            stage_code = record.get("workflow_stage_code")
-            stage_key = (
-                record.get("lp_stage_key") if stage_code == "LP_CIRCULATION" else stage_code
-            ) or ""
+            stage_code, stage_key = _workflow_stage_identity(record)
             if stage_code in (None, "COMPLETED", "NOT_PROCEEDED"):
                 return jsonify(success=False, code="NO_ACTIVE_STAGE",
                                message="This KHS has no active workflow stage."),409
