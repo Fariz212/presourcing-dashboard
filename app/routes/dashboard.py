@@ -2066,6 +2066,42 @@ def create_khs():
         return jsonify(success=False,message="Unable to create KHS."),500
 
 
+
+LP_FOLLOW_UP_STAGE_LABELS = {
+    "contract_team": "LP Contract Team",
+    "junior_manager": "LP Junior Manager Vendor Management",
+    "senior_manager": "LP Senior Manager Strategic Sourcing",
+    "general_manager": "LP GM SCM",
+    "director": "LP Director Sign-off",
+}
+
+
+def _follow_up_detail_projection(row, current_stage_code, current_lp_stage_key, today=None):
+    """Add human-readable stage and due-state metadata to KHS workbench reminders."""
+    today = today or _jakarta_today()
+    result = _row_dict(dict(row))
+    stage_code = result.get("stage_code")
+    stage_key = result.get("stage_key") or ""
+    if stage_code == "LP_CIRCULATION":
+        result["stage_name"] = LP_FOLLOW_UP_STAGE_LABELS.get(stage_key, "LP Circulation")
+        current_stage_key = current_lp_stage_key or ""
+    else:
+        result["stage_name"] = str(stage_code or "").replace("_", " ").title() or "Unknown stage"
+        current_stage_key = current_stage_code or ""
+    result["stage_changed"] = (
+        stage_code != current_stage_code or stage_key != current_stage_key
+    )
+    due_date = _date_only(result.get("due_date"))
+    result["days_from_due"] = (today - due_date).days if due_date else None
+    result["due_state"] = (
+        "overdue" if result["days_from_due"] is not None and result["days_from_due"] > 0
+        else "due_today" if result["days_from_due"] == 0
+        else "upcoming" if result["days_from_due"] is not None
+        else "date_unavailable"
+    )
+    return result
+
+
 @dashboard_bp.get("/khs/<path:khs_id>")
 def khs_detail(khs_id):
     try:
@@ -2116,7 +2152,14 @@ def khs_detail(khs_id):
             success=True,
             data=_register_enriched(item, include_duration_history=True),
             history=[_row_dict(x) for x in history],
-            follow_ups=[_row_dict(x) for x in follow_ups],
+            follow_ups=[
+                _follow_up_detail_projection(
+                    x,
+                    item.get("workflow_stage_code"),
+                    item.get("lp_stage_key"),
+                )
+                for x in follow_ups
+            ],
             documents=document_rows,
         ), 200
     except Exception:
