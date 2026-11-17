@@ -526,6 +526,30 @@ const I18N_ID = Object.freeze({
   "contracts":"kontrak",
   "days":"hari",
   "day":"hari",
+  "NOT_PROCEEDED":"Tidak Dilanjutkan",
+  "NO_MUTUAL_AGREEMENT":"Tidak tercapai kesepakatan",
+  "REQUESTER_WITHDRAWAL":"Ditarik oleh pemohon",
+  "VENDOR_DECLINED":"Vendor menolak",
+  "INTERNAL_REJECTION":"Ditolak secara internal",
+  "DUPLICATE":"Duplikat",
+  "OTHER":"Lainnya",
+  "MI Senior Manager Approval":"Persetujuan Manajer Senior MI",
+  "MI General Manager Approval":"Persetujuan General Manager MI",
+  "Invalid dates":"Tanggal tidak valid",
+  "Action required · 1 month":"Perlu tindakan · 1 bulan",
+  "Renewal watch · 3 months":"Pemantauan perpanjangan · 3 bulan",
+  "Renewal preparation · 6 months":"Persiapan perpanjangan · 6 bulan",
+  "Closed · duration unavailable":"Ditutup · durasi tidak tersedia",
+  "Open records →":"Buka data →",
+  "In progress":"Sedang Berjalan",
+  "not started":"Belum Dimulai",
+  "completed":"Selesai",
+  "in progress":"Sedang Berjalan",
+  "active":"Aktif",
+  "expired":"Kedaluwarsa",
+  "upcoming":"Akan datang",
+  "missing dates":"Tanggal belum lengkap",
+  "invalid dates":"Tanggal tidak valid",
   "Request date":"Tanggal permintaan",
   "Request subject":"Subjek permintaan",
   "Requester / owner":"Pemohon / PIC",
@@ -651,6 +675,10 @@ const I18N_ID = Object.freeze({
   "REQUEST":"Permintaan"
 });
 
+const I18N_ID_LOWER = Object.freeze(
+  Object.fromEntries(Object.entries(I18N_ID).map(([key, value]) => [key.toLowerCase(), value]))
+);
+
 const originalTextNodes = new WeakMap();
 const originalAttributes = new WeakMap();
 let currentLanguage = "en";
@@ -662,7 +690,9 @@ function translateText(value, language = currentLanguage) {
   const trailing = (value.match(/\s*$/) || [""])[0];
   const core = value.slice(leading.length, value.length - trailing.length || value.length);
   if (!core) return value;
-  if (Object.prototype.hasOwnProperty.call(I18N_ID, core)) return leading + I18N_ID[core] + trailing;
+  const exactTranslation = I18N_ID[core];
+  const matchedTranslation = exactTranslation || I18N_ID_LOWER[core.toLowerCase()];
+  if (matchedTranslation) return leading + matchedTranslation + trailing;
 
   let match = core.match(/^(\d+) days? in stage$/i);
   if (match) return leading + match[1] + (match[1] === "1" ? " hari dalam tahap" : " hari dalam tahap") + trailing;
@@ -676,6 +706,8 @@ function translateText(value, language = currentLanguage) {
   if (match) return leading + "tersisa " + match[1] + " hari" + trailing;
   match = core.match(/^(\d+) days? overdue$/i);
   if (match) return leading + "terlambat " + match[1] + " hari" + trailing;
+  match = core.match(/^Closed (.+)$/);
+  if (match) return leading + "Ditutup " + match[1] + trailing;
   match = core.match(/^Since (.+)$/);
   if (match) return leading + "Sejak " + match[1] + trailing;
   match = core.match(/^Updated (.+)$/);
