@@ -15,6 +15,12 @@ class DocumentCursor:
         self.connection = connection
         self.row = row
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        return False
+
     def execute(self, query, params=None):
         params = params or ()
         if "FROM khs_documents WHERE id=%s" in query:
@@ -80,7 +86,19 @@ class DocumentPool:
 
 def make_document_client(monkeypatch, tmp_path, *, khs_exists=True, max_content_length=2 * 1024 * 1024):
     pool = DocumentPool(khs_exists=khs_exists)
+    pool.audit_records = []
+
+    def capture_audit(_connection, entity_type, entity_id, action, before, after):
+        pool.audit_records.append({
+            "entity_type": entity_type,
+            "entity_id": entity_id,
+            "action": action,
+            "before": before,
+            "after": after,
+        })
+
     monkeypatch.setattr(dashboard_module, "get_db_pool", lambda: pool)
+    monkeypatch.setattr(dashboard_module, "_audit", capture_audit)
     app = Flask(__name__)
     app.config.update(
         TESTING=True,
@@ -112,11 +130,11 @@ def test_document_upload_and_download_round_trip_verifies_checksum(monkeypatch, 
     assert stored_path.is_file()
     assert stored_path.read_bytes() == original
     assert stored["file_sha256"] == sha256(original).hexdigest()
-    assert len(pool.connection_object.audit_entries) == 1
-    audit_payload = pool.connection_object.audit_entries[0][4]
-    audit_changes = getattr(audit_payload, "obj", audit_payload)
-    assert audit_changes["after"]["file_sha256"] == sha256(original).hexdigest()
-    assert audit_changes["after"]["file_size_bytes"] == len(original)
+    assert len(pool.audit_records) == 1
+    audit_record = pool.audit_records[0]
+    assert audit_record["action"] == "DOCUMENT_UPLOADED"
+    assert audit_record["after"]["file_sha256"] == sha256(original).hexdigest()
+    assert audit_record["after"]["file_size_bytes"] == len(original)
 
     downloaded = client.get(data["download_url"])
     assert downloaded.status_code == 200
