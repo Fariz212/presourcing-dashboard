@@ -737,10 +737,10 @@ async function loadContractLifecycle() {
       const badge = lifecycleBadgeClass(statusValue);
       const operationalStatus = r.contract_operational_status;
       const operationalBadge = contractOperationalBadgeClass(operationalStatus);
-      return "<tr><td><span class=\"cell-primary\">" + esc(r.khs_id) + "</span>" +
-        "<span class=\"cell-secondary\">" + esc(r.vendor_name) + "</span></td>" +
-        "<td><span class=\"cell-primary\">" + esc(r.request_subject || "Untitled request") + "</span>" +
-        "<span class=\"cell-secondary\">" + esc(r.request_id) + "</span></td>" +
+      return "<tr><td><span class=\"cell-primary\" data-no-translate>" + esc(r.khs_id) + "</span>" +
+        "<span class=\"cell-secondary\" data-no-translate>" + esc(r.vendor_name) + "</span></td>" +
+        "<td><span class=\"cell-primary\" data-no-translate>" + esc(r.request_subject || "Untitled request") + "</span>" +
+        "<span class=\"cell-secondary\" data-no-translate>" + esc(r.request_id) + "</span></td>" +
         "<td>" + esc(fmt(r.khs_inject_completion_date)) + "</td>" +
         "<td>" + esc(fmt(r.contract_start_date)) + " – " + esc(fmt(r.contract_end_date)) + "</td>" +
         "<td>" + esc(r.contract_duration_label || "—") + "</td>" +
@@ -933,9 +933,9 @@ async function loadActivity() {
   if (!result.data.length) emptyRow("activityBody", 6, "No activity matches the current filters.");
   else body.innerHTML = result.data.map((r) => {
     const changes = typeof r.changes === "string" ? r.changes : JSON.stringify(r.changes || {});
-    return "<tr><td>" + esc(fmt(r.occurred_at)) + "</td><td data-no-translate>" + esc(r.entity_type) + "</td><td data-no-translate>" +
-      esc(r.entity_id) + "</td><td data-no-translate>" + esc(r.action) + "</td><td data-no-translate>" + esc(r.actor) +
-      '<td data-no-translate title="' + esc(changes) + '">' + esc(changes.length > 90 ? changes.slice(0, 90) + "…" : changes) + "</td></tr>";
+    return "<tr><td>" + esc(fmt(r.occurred_at)) + "</td><td><span data-no-translate>" + esc(r.entity_type) + "</span></td><td><span data-no-translate>" +
+      esc(r.entity_id) + "</span></td><td><span data-no-translate>" + esc(r.action) + "</span></td><td><span data-no-translate>" + esc(r.actor) +
+      "</span></td><td><span data-no-translate title=\"" + esc(changes) + "\">" + esc(changes.length > 90 ? changes.slice(0, 90) + "…" : changes) + "</span></td></tr>";
   }).join("");
   const p = result.pagination || {};
   set("activityPagination", "Page " + p.page + " of " + p.total_pages + " · " + p.total_records + " activities");
@@ -952,7 +952,7 @@ async function loadImportHistory() {
     const inserted = Number(r.inserted_requests || 0) + Number(r.inserted_items || 0);
     const updated = Number(r.updated_requests || 0) + Number(r.updated_items || 0);
     const unchanged = Number(r.unchanged_requests || 0) + Number(r.unchanged_items || 0);
-    return "<tr><td data-no-translate>" + esc(r.id) + "</td><td data-no-translate>" + esc(r.original_file_name) + "</td><td>" +
+    return "<tr><td><span data-no-translate>" + esc(r.id) + "</span></td><td><span data-no-translate>" + esc(r.original_file_name) + "</span></td><td>" +
       esc(r.status) + "</td><td>" + esc(r.total_rows) + "</td><td>" + inserted +
       "</td><td>" + updated + "</td><td>" + unchanged + "</td><td>" + esc(fmt(r.uploaded_at)) + "</td></tr>";
   }).join("");
@@ -1166,8 +1166,8 @@ async function openDetails(id) {
         '<section class="detail-group detail-group-wide"><h4>Recent activity</h4>' +
         '<ol class="detail-history-list">' +
         history.slice(0, 5).map((entry) =>
-          "<li><time>" + esc(fmt(entry.occurred_at)) + "</time><strong>" +
-          esc(entry.action) + "</strong><span>" + esc(entry.actor) + "</span></li>"
+          "<li><time>" + esc(fmt(entry.occurred_at)) + "</time><strong data-no-translate>" +
+          esc(entry.action) + "</strong><span data-no-translate>" + esc(entry.actor) + "</span></li>"
         ).join("") + "</ol></section>"
       );
     }
@@ -1176,8 +1176,8 @@ async function openDetails(id) {
     const documentList = $("documentList");
     if (documentList) {
       documentList.innerHTML = documents.length ? documents.map((doc) =>
-        '<div class="document-row"><div class="document-meta"><strong>' + esc(doc.original_file_name) +
-        '</strong><small>' + esc(doc.document_type) + " · " + esc(fmt(doc.uploaded_at)) +
+        '<div class="document-row"><div class="document-meta"><strong data-no-translate>' + esc(doc.original_file_name) +
+        '</strong><small data-no-translate>' + esc(doc.document_type) + " · " + esc(fmt(doc.uploaded_at)) +
         '</small></div><a class="view-button" href="' + esc(doc.download_url) + '">Download</a></div>'
       ).join("") : '<p class="muted">No evidence documents uploaded yet.</p>';
     }
