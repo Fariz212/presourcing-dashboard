@@ -7,6 +7,7 @@ from app.routes.dashboard import (
     _guided_progress_definition,
     _workflow_stage_identity,
     _operations_stage_query,
+    _operations_sla_query,
     _operations_stage_totals,
     _rank_operations_stages,
     _sla_status_for_age,
@@ -109,6 +110,21 @@ def test_guided_progress_rejects_chronology_and_lp_gate_violations():
     assert _guided_progress_date_error(lp_record, "lp_circulation_start_date", date(2026, 11, 11))[0] == "MI_GM_REQUIRED"
 
 
+
+
+
+def test_sla_policy_query_is_separate_from_phase1_wip_query():
+    wip_query = _operations_stage_query(date(2026, 11, 17))
+    sla_query = _operations_sla_query(date(2026, 11, 17))
+    assert "khs_stage_sla_policies" not in wip_query
+    assert "khs_follow_ups" not in wip_query
+    assert "khs_stage_sla_policies" in sla_query
+    assert "COALESCE(policy.target_days, stage.default_sla_days)" in sla_query
+    assert "policy.warning_after_days" in sla_query
+    assert "policy.escalation_after_days" in sla_query
+    assert "milestone_chronology_valid IS TRUE" in sla_query
+
+
 def test_sla_status_does_not_invent_due_dates_when_policy_is_missing():
     assert _sla_status_for_age(45) == "not_configured"
     assert _sla_status_for_age(None, target_days=10) == "age_unavailable"
@@ -162,9 +178,6 @@ def test_operations_totals_reconcile_with_stage_age_buckets_including_future_dat
         "active_wip": 7,
         "older_than_30_days": 3,
         "stage_age_unavailable": 3,
-        "sla_overdue_records": 3,
-        "escalation_records": 1,
-        "sla_not_configured_stages": 1,
     }
 
 

@@ -328,23 +328,50 @@ SELECT
         ELSE NULL
     END AS current_stage_started_on,
 
-    NOT (
-        (r.request_date IS NOT NULL AND k.dispatch_date IS NOT NULL AND r.request_date > k.dispatch_date)
-        OR (k.dispatch_date IS NOT NULL AND k.boq_confirmation_date IS NOT NULL AND k.dispatch_date > k.boq_confirmation_date)
-        OR (k.boq_confirmation_date IS NOT NULL AND k.negotiation_date IS NOT NULL AND k.boq_confirmation_date > k.negotiation_date)
-        OR (k.negotiation_date IS NOT NULL AND k.final_negotiation_date IS NOT NULL AND k.negotiation_date > k.final_negotiation_date)
-        OR (k.final_negotiation_date IS NOT NULL AND k.mi_head_approval_date IS NOT NULL AND k.final_negotiation_date > k.mi_head_approval_date)
-        OR (k.mi_head_approval_date IS NOT NULL AND k.mi_sm_approval_date IS NOT NULL AND k.mi_head_approval_date > k.mi_sm_approval_date)
-        OR (k.mi_sm_approval_date IS NOT NULL AND k.mi_gm_approval_date IS NOT NULL AND k.mi_sm_approval_date > k.mi_gm_approval_date)
-        OR (k.mi_gm_approval_date IS NOT NULL AND k.legal_submission_date IS NOT NULL AND k.mi_gm_approval_date > k.legal_submission_date)
-        OR (k.legal_submission_date IS NOT NULL AND k.lp_circulation_start_date IS NOT NULL AND k.legal_submission_date > k.lp_circulation_start_date)
-        OR (k.lp_circulation_start_date IS NOT NULL AND k.lp_contract_team_completion_date IS NOT NULL AND k.lp_circulation_start_date > k.lp_contract_team_completion_date)
-        OR (k.lp_contract_team_completion_date IS NOT NULL AND k.lp_junior_manager_approval_date IS NOT NULL AND k.lp_contract_team_completion_date > k.lp_junior_manager_approval_date)
-        OR (k.lp_junior_manager_approval_date IS NOT NULL AND k.lp_senior_manager_approval_date IS NOT NULL AND k.lp_junior_manager_approval_date > k.lp_senior_manager_approval_date)
-        OR (k.lp_senior_manager_approval_date IS NOT NULL AND k.lp_gm_scm_approval_date IS NOT NULL AND k.lp_senior_manager_approval_date > k.lp_gm_scm_approval_date)
-        OR (k.lp_gm_scm_approval_date IS NOT NULL AND k.lp_completion_date IS NOT NULL AND k.lp_gm_scm_approval_date > k.lp_completion_date)
-        OR (k.lp_completion_date IS NOT NULL AND k.khs_inject_start_date IS NOT NULL AND k.lp_completion_date > k.khs_inject_start_date)
-        OR (k.khs_inject_start_date IS NOT NULL AND k.khs_inject_completion_date IS NOT NULL AND k.khs_inject_start_date > k.khs_inject_completion_date)
+    NOT EXISTS (
+        SELECT 1
+        FROM (VALUES
+        (1, r.request_date),
+        (2, k.dispatch_date),
+        (3, k.boq_confirmation_date),
+        (4, k.negotiation_date),
+        (5, k.final_negotiation_date),
+        (6, k.mi_head_approval_date),
+        (7, k.mi_sm_approval_date),
+        (8, k.mi_gm_approval_date),
+        (9, k.legal_submission_date),
+        (10, k.lp_circulation_start_date),
+        (11, k.lp_contract_team_completion_date),
+        (12, k.lp_junior_manager_approval_date),
+        (13, k.lp_senior_manager_approval_date),
+        (14, k.lp_gm_scm_approval_date),
+        (15, k.lp_completion_date),
+        (16, k.khs_inject_start_date),
+        (17, k.khs_inject_completion_date)
+        ) AS earlier(sequence_no, milestone_date)
+        JOIN (VALUES
+        (1, r.request_date),
+        (2, k.dispatch_date),
+        (3, k.boq_confirmation_date),
+        (4, k.negotiation_date),
+        (5, k.final_negotiation_date),
+        (6, k.mi_head_approval_date),
+        (7, k.mi_sm_approval_date),
+        (8, k.mi_gm_approval_date),
+        (9, k.legal_submission_date),
+        (10, k.lp_circulation_start_date),
+        (11, k.lp_contract_team_completion_date),
+        (12, k.lp_junior_manager_approval_date),
+        (13, k.lp_senior_manager_approval_date),
+        (14, k.lp_gm_scm_approval_date),
+        (15, k.lp_completion_date),
+        (16, k.khs_inject_start_date),
+        (17, k.khs_inject_completion_date)
+        ) AS later(sequence_no, milestone_date)
+          ON later.sequence_no > earlier.sequence_no
+        WHERE earlier.milestone_date IS NOT NULL
+          AND later.milestone_date IS NOT NULL
+          AND earlier.milestone_date > later.milestone_date
     ) AS milestone_chronology_valid,
 
     (
@@ -2849,9 +2876,6 @@ def _operations_stage_totals(stage_rows):
         "active_wip": sum(int(row.get("wip_count") or 0) for row in stage_rows),
         "older_than_30_days": sum(int(row.get("age_over_30") or 0) for row in stage_rows),
         "stage_age_unavailable": sum(int(row.get("age_unavailable") or 0) for row in stage_rows),
-        "sla_overdue_records": sum(int(row.get("overdue_count") or 0) for row in stage_rows),
-        "escalation_records": sum(int(row.get("escalation_count") or 0) for row in stage_rows),
-        "sla_not_configured_stages": sum(1 for row in stage_rows if row.get("target_days") is None),
     }
 
 
@@ -2892,14 +2916,6 @@ def _operations_stage_query(as_of):
             (percentile_disc(0.9) WITHIN GROUP (ORDER BY wip.stage_age_days)
                 FILTER (WHERE wip.stage_age_days IS NOT NULL))::int AS p90_age_days,
             MAX(wip.stage_age_days)::int AS oldest_age_days,
-            NULL::int AS warning_after_days,
-            stage.default_sla_days AS target_days,
-            NULL::int AS escalation_after_days,
-            COUNT(wip.khs_id) FILTER (
-                WHERE stage.default_sla_days IS NOT NULL
-                  AND wip.stage_age_days >= stage.default_sla_days
-            )::int AS overdue_count,
-            0::int AS escalation_count
         FROM khs_stage_config AS stage
         LEFT JOIN active_wip AS wip ON wip.current_stage_code = stage.stage_code
         WHERE stage.is_active = TRUE
@@ -2921,14 +2937,6 @@ def operations_overview():
         stage_rows = _rank_operations_stages(stage_rows)
         totals = _operations_stage_totals(stage_rows)
         for row in stage_rows:
-            age = row["oldest_age_days"]
-            row["sla_status"] = _sla_status_for_age(
-                age,
-                row.get("warning_after_days"),
-                row.get("target_days"),
-                row.get("escalation_after_days"),
-            )
-            row["sla_configured"] = row.get("target_days") is not None
         return jsonify(
             success=True,
             as_of_date=today.isoformat(),
@@ -2943,6 +2951,96 @@ def operations_overview():
         current_app.logger.exception("Operations overview query failed.")
         return jsonify(success=False, code="OPERATIONS_OVERVIEW_UNAVAILABLE",
                        message="Operations analytics are temporarily unavailable."),503
+
+
+
+
+
+def _operations_sla_query(as_of):
+    as_of_sql = f"DATE '{as_of.isoformat()}'"
+    return """
+        WITH register_state AS (
+            SELECT *
+            FROM (""" + REGISTER_BASE_QUERY + """) AS register
+        ),
+        active_wip AS (
+            SELECT
+                register.*,
+                CASE
+                    WHEN register.current_stage_started_on IS NOT NULL
+                     AND register.current_stage_started_on <= """ + as_of_sql + """
+                     AND register.milestone_chronology_valid IS TRUE
+                    THEN (""" + as_of_sql + """ - register.current_stage_started_on)::int
+                    ELSE NULL
+                END AS stage_age_days
+            FROM register_state AS register
+            WHERE register.process_status = 'ACTIVE'
+              AND register.workflow_status <> 'completed'
+              AND register.current_stage_code NOT IN ('COMPLETED', 'NOT_PROCEEDED')
+        )
+        SELECT
+            stage.stage_code,
+            stage.stage_name,
+            stage.sequence_number,
+            MAX(wip.stage_age_days)::int AS oldest_age_days,
+            policy.warning_after_days,
+            COALESCE(policy.target_days, stage.default_sla_days) AS target_days,
+            policy.escalation_after_days,
+            COUNT(wip.khs_id) FILTER (
+                WHERE COALESCE(policy.target_days, stage.default_sla_days) IS NOT NULL
+                  AND wip.stage_age_days >= COALESCE(policy.target_days, stage.default_sla_days)
+            )::int AS overdue_count,
+            COUNT(wip.khs_id) FILTER (
+                WHERE policy.escalation_after_days IS NOT NULL
+                  AND wip.stage_age_days >= policy.escalation_after_days
+            )::int AS escalation_count
+        FROM khs_stage_config AS stage
+        LEFT JOIN active_wip AS wip ON wip.current_stage_code = stage.stage_code
+        LEFT JOIN khs_stage_sla_policies AS policy ON policy.stage_code = stage.stage_code
+        WHERE stage.is_active = TRUE
+          AND stage.stage_code NOT IN ('COMPLETED', 'NOT_PROCEEDED')
+        GROUP BY stage.stage_code, stage.stage_name, stage.sequence_number, stage.default_sla_days,
+                 policy.warning_after_days, policy.target_days, policy.escalation_after_days
+        ORDER BY stage.sequence_number
+    """
+
+
+@dashboard_bp.get("/operations/sla-overview")
+def operations_sla_overview():
+    today = _jakarta_today()
+    try:
+        with get_db_pool().connection() as conn:
+            with conn.cursor(row_factory=dict_row) as cur:
+                cur.execute(_operations_sla_query(today))
+                stage_rows = [dict(row) for row in cur.fetchall()]
+        for row in stage_rows:
+            row["sla_status"] = _sla_status_for_age(
+                row.get("oldest_age_days"),
+                row.get("warning_after_days"),
+                row.get("target_days"),
+                row.get("escalation_after_days"),
+            )
+            row["sla_configured"] = row.get("target_days") is not None
+        summary = {
+            "sla_overdue_records": sum(int(row.get("overdue_count") or 0) for row in stage_rows),
+            "escalation_records": sum(int(row.get("escalation_count") or 0) for row in stage_rows),
+            "sla_not_configured_stages": sum(1 for row in stage_rows if row.get("target_days") is None),
+        }
+        return jsonify(
+            success=True,
+            as_of_date=today.isoformat(),
+            data={
+                "summary": summary,
+                "stages": [_row_dict(row) for row in stage_rows],
+            },
+        ), 200
+    except Exception:
+        current_app.logger.exception("Operations SLA overview query failed.")
+        return jsonify(
+            success=False,
+            code="OPERATIONS_SLA_OVERVIEW_UNAVAILABLE",
+            message="SLA policy analytics are temporarily unavailable.",
+        ), 503
 
 
 @dashboard_bp.get("/operations/follow-ups")

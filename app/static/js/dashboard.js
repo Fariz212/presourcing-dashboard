@@ -1598,16 +1598,21 @@ function slaStatusLabel(status) {
   })[status] || status || "—";
 }
 
-function renderOperationsAnalytics(operations, followUps) {
+function renderOperationsAnalytics(operations, followUps, sla) {
   const followUpRows = followUps && Array.isArray(followUps.data) ? followUps.data : null;
   const followUpsOverdue = followUpRows
     ? followUpRows.filter((row) => row.status === "OPEN" && !row.stage_changed && Number(row.days_from_due) > 0).length
     : "—";
+  const slaData = sla && sla.data ? sla.data : null;
+  const slaSummary = slaData ? (slaData.summary || {}) : {};
+  const slaByStage = new Map((slaData && Array.isArray(slaData.stages) ? slaData.stages : [])
+    .map((row) => [row.stage_code, row]));
   if (!operations || !operations.data) {
-    ["opsActiveWip","opsOver30","opsAgeUnavailable","opsSlaOverdue","opsEscalations"]
-      .forEach((id) => set(id, "—"));
+    ["opsActiveWip","opsOver30","opsAgeUnavailable"].forEach((id) => set(id, "—"));
+    set("opsSlaOverdue", slaData ? (slaSummary.sla_overdue_records || 0) : "—");
+    set("opsEscalations", slaData ? (slaSummary.escalation_records || 0) : "—");
     set("opsFollowUpsOverdue", followUpsOverdue);
-    emptyRow("operationsStageBody", 13, "Operations analytics are temporarily unavailable.");
+    emptyRow("operationsStageBody", 13, "WIP analytics are temporarily unavailable.");
     renderOperationsFollowUps(followUpRows);
     return;
   }
@@ -1616,21 +1621,22 @@ function renderOperationsAnalytics(operations, followUps) {
   set("opsActiveWip", summary.active_wip || 0);
   set("opsOver30", summary.older_than_30_days || 0);
   set("opsAgeUnavailable", summary.stage_age_unavailable || 0);
-  set("opsSlaOverdue", summary.sla_overdue_records || 0);
-  set("opsEscalations", summary.escalation_records || 0);
+  set("opsSlaOverdue", slaData ? (slaSummary.sla_overdue_records || 0) : "—");
+  set("opsEscalations", slaData ? (slaSummary.escalation_records || 0) : "—");
   set("opsFollowUpsOverdue", followUpsOverdue);
-  const configured = (operations.data.stages || []).filter((row) => row.sla_configured).length;
-  set("slaConfigurationStatus", configured
-    ? configured + " stages configured"
-    : "SLA not configured");
+  const configured = slaData ? (slaData.stages || []).filter((row) => row.sla_configured).length : 0;
+  set("slaConfigurationStatus", !slaData ? "SLA data unavailable"
+    : configured ? configured + " stages configured" : "SLA not configured");
   const target = $("operationsStageBody");
   const rows = operations.data.stages || [];
   if (target) target.innerHTML = rows.length ? rows.map((row) => {
-    const status = row.sla_status || "not_configured";
-    const policy = row.target_days == null ? "No target configured"
-      : "Target " + row.target_days + "d" +
-        (row.warning_after_days == null ? "" : " · warn " + row.warning_after_days + "d") +
-        (row.escalation_after_days == null ? "" : " · escalate " + row.escalation_after_days + "d");
+    const slaRow = slaByStage.get(row.stage_code);
+    const status = slaRow ? (slaRow.sla_status || "not_configured") : "age_unavailable";
+    const policy = !slaData ? "SLA policy data unavailable"
+      : !slaRow || slaRow.target_days == null ? "No target configured"
+      : "Target " + slaRow.target_days + "d" +
+        (slaRow.warning_after_days == null ? "" : " · warn " + slaRow.warning_after_days + "d") +
+        (slaRow.escalation_after_days == null ? "" : " · escalate " + slaRow.escalation_after_days + "d");
     const stageButton = '<button type="button" class="analytics-filter analytics-stage-filter" data-operations-stage="' +
       esc(row.stage_code) + '" aria-label="Filter KHS by ' + esc(row.stage_name) + '">' +
       (row.bottleneck_rank ? '<span class="bottleneck-rank">#' + esc(row.bottleneck_rank) + '</span> ' : '') +
@@ -1651,7 +1657,8 @@ function renderOperationsAnalytics(operations, followUps) {
       '<td>' + ageButton("unavailable", row.age_unavailable, "age unavailable") + '</td>' +
       '<td>' + esc(row.oldest_age_days == null ? "—" : row.oldest_age_days + "d") + '</td>' +
       '<td><span class="status-badge status-sla-' + esc(status) + '">' + esc(slaStatusLabel(status)) + '</span></td>' +
-      '<td>' + esc(row.overdue_count || 0) + '</td><td>' + esc(row.escalation_count || 0) + '</td></tr>';
+      '<td>' + esc(slaRow ? (slaRow.overdue_count || 0) : "—") + '</td><td>' +
+      esc(slaRow ? (slaRow.escalation_count || 0) : "—") + '</td></tr>';
   }).join("") : '<tr><td colspan="12" class="table-message">No active WIP records.</td></tr>';
   renderOperationsFollowUps(followUpRows);
 }
@@ -1688,12 +1695,16 @@ async function loadWorkflow() {
     api("/api/dashboard/workflow"),
     api("/api/dashboard/operations/overview")
   ]);
-  // Phase 4 follow-ups are intentionally optional for the Phase 1 WIP view.
-  const followUps = await api("/api/dashboard/operations/follow-ups?status=OPEN").catch(() => null);
+  // Phase 4 SLA and follow-up services are optional overlays. Their failure
+  // must never block the Phase 1 workflow and WIP-aging view.
+  const [sla, followUps] = await Promise.all([
+    api("/api/dashboard/operations/sla-overview").catch(() => null),
+    api("/api/dashboard/operations/follow-ups?status=OPEN").catch(() => null)
+  ]);
   state.workflowRows = workflow.data || [];
   state.showEmptyWorkflowStages = false;
   renderWorkflowCards();
-  renderOperationsAnalytics(operations, followUps);
+  renderOperationsAnalytics(operations, followUps, sla);
 }
 
 async function loadLPCirculation() {

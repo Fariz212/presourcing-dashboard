@@ -37,6 +37,7 @@ def test_dashboard_exposes_operations_analytics_and_workbench_controls(monkeypat
     assert script.status_code == 200
     for marker in (
         b"/api/dashboard/operations/overview",
+        b"/api/dashboard/operations/sla-overview",
         b"/api/dashboard/operations/follow-ups",
         b"/progress",
         b"/follow-ups",

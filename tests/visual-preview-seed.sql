@@ -4,10 +4,10 @@
 INSERT INTO khs_requests (
     request_id, request_date, request_subject, requester_owner
 ) VALUES
-    ('REQ-VIS-001', DATE '2026-11-10', 'Cloud Infrastructure & Managed Services', 'IT Procurement'),
-    ('REQ-VIS-002', DATE '2026-10-02', 'Network Connectivity and MPLS Renewal', 'Technology Sourcing'),
-    ('REQ-VIS-003', DATE '2026-09-18', 'Enterprise Software Licensing', 'Digital Workplace'),
-    ('REQ-VIS-004', DATE '2026-11-03', 'Facilities and Workplace Services', 'General Procurement')
+    ('REQ-VIS-001', DATE '2026-08-01', 'Cloud Infrastructure & Managed Services', 'IT Procurement'),
+    ('REQ-VIS-002', DATE '2026-07-01', 'Network Connectivity and MPLS Renewal', 'Technology Sourcing'),
+    ('REQ-VIS-003', DATE '2026-06-01', 'Enterprise Software Licensing', 'Digital Workplace'),
+    ('REQ-VIS-004', DATE '2026-04-01', 'Facilities and Workplace Services', 'General Procurement')
 ON CONFLICT (request_id) DO NOTHING;
 
 INSERT INTO khs_items (
