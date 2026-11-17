@@ -213,7 +213,7 @@ function pattern(value, lang) {
     if((m=/^Page (\d+) of (\d+) · (\d+) activities$/.exec(value))) return "Halaman "+m[1]+" dari "+m[2]+" · "+m[3]+" aktivitas";
     if((m=/^Page (\d+) · (\d+) batches$/.exec(value))) return "Halaman "+m[1]+" · "+m[2]+" batch";
     if((m=/^(\d+) records checked$/.exec(value))) return m[1]+" data diperiksa";
-    if((m=/^(\d+) issue\\(s\\)$/.exec(value))) return m[1]+" masalah";
+    if((m=/^(\d+) issue\(s\)$/.exec(value))) return m[1]+" masalah";
   } else {
     if((m=/^(\d+) hari di tahap$/.exec(value))) return m[1]+(m[1]==="1"?" day in stage":" days in stage");
     if((m=/^(\d+) hari$/.exec(value))) return m[1]+" days";
@@ -235,7 +235,7 @@ function tr(value,lang){
   if(!trimmed)return original;
   const result=lang==="id"?(Object.prototype.hasOwnProperty.call(EN_ID,trimmed)?EN_ID[trimmed]:pattern(trimmed,lang)):(Object.prototype.hasOwnProperty.call(ID_EN,trimmed)?ID_EN[trimmed]:pattern(trimmed,lang));
   if(result===trimmed)return original;
-  return (original.match(/^\\s*/)||[""])[0]+result+(original.match(/\\s*$/)||[""])[0];
+  return (original.match(/^\s*/)||[""])[0]+result+(original.match(/\s*$/)||[""])[0];
 }
 function skip(el){return !el||!!el.closest("script,style,textarea,input,[contenteditable='true'],[data-no-translate],.user-content,.raw-data");}
 function walk(root,lang){
@@ -245,11 +245,11 @@ function walk(root,lang){
   if(root.nodeType!==1&&root!==document)return;
   const target=root===document?document.body:root;
   if(!target)return;
-  if(target.nodeType===1&&!skip(target))ATTRS.forEach(a=>{if(target.hasAttribute(a))target.setAttribute(a,tr(target.getAttribute(a),lang));});
+  if(target.nodeType===1&&!skip(target))ATTRS.forEach(a=>{if(target.hasAttribute(a)){const before=target.getAttribute(a),after=tr(before,lang);if(after!==before)target.setAttribute(a,after);}});
   const tree=document.createTreeWalker(target,NodeFilter.SHOW_TEXT),nodes=[];
   while(tree.nextNode())nodes.push(tree.currentNode);
   nodes.forEach(n=>{if(!skip(n.parentElement))n.nodeValue=tr(n.nodeValue,lang);});
-  target.querySelectorAll(ATTRS.map(a=>"["+a+"]").join(",")).forEach(n=>{if(!skip(n))ATTRS.forEach(a=>{if(n.hasAttribute(a))n.setAttribute(a,tr(n.getAttribute(a),lang));});});
+  target.querySelectorAll(ATTRS.map(a=>"["+a+"]").join(",")).forEach(n=>{if(!skip(n))ATTRS.forEach(a=>{if(n.hasAttribute(a)){const before=n.getAttribute(a),after=tr(before,lang);if(after!==before)n.setAttribute(a,after);}});});
 }
 function getLanguage(){try{return localStorage.getItem("khs-language")==="en"?"en":"id";}catch(_){return "id";}}
 function setLanguage(language){
@@ -265,7 +265,7 @@ document.addEventListener("DOMContentLoaded",()=>{
   document.querySelectorAll("[data-khs-language]").forEach(b=>b.addEventListener("click",()=>{lang=b.dataset.khsLanguage==="en"?"en":"id";setLanguage(lang);}));
   const observer=new MutationObserver(ms=>ms.forEach(m=>{
     if(m.type==="childList")m.addedNodes.forEach(n=>walk(n,lang));
-    else if(m.type==="attributes")ATTRS.forEach(a=>{if(m.target.hasAttribute&&m.target.hasAttribute(a))m.target.setAttribute(a,tr(m.target.getAttribute(a),lang));});
+    else if(m.type==="attributes")ATTRS.forEach(a=>{if(m.target.hasAttribute&&m.target.hasAttribute(a)){const before=m.target.getAttribute(a),after=tr(before,lang);if(after!==before)m.target.setAttribute(a,after);}});
   }));
   observer.observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:ATTRS});
 });
