@@ -130,7 +130,10 @@ def test_operations_aging_query_uses_active_milestone_ages_and_descriptive_bucke
     assert "BETWEEN 0 AND 7" in query
     assert "BETWEEN 8 AND 14" in query
     assert "BETWEEN 15 AND 30" in query
-    assert "wip.stage_age_days >= COALESCE(policy.target_days, stage.default_sla_days)" in query
+    assert "wip.stage_age_days >= stage.default_sla_days" in query
+    assert "register.milestone_chronology_valid IS TRUE" in query
+    assert "khs_stage_sla_policies" not in query
+    assert "khs_follow_ups" not in query
     assert "stage.stage_code NOT IN ('COMPLETED', 'NOT_PROCEEDED')" in query
 
 
@@ -140,7 +143,10 @@ def test_operations_totals_reconcile_with_stage_age_buckets_including_future_dat
     totals = _operations_stage_totals([
         {
             "wip_count": 3,
-            "age_over_30": 2,
+            "age_0_7": 1,
+            "age_8_14": 0,
+            "age_15_30": 0,
+            "age_over_30": 1,
             "age_unavailable": 1,
             "overdue_count": 0,
             "escalation_count": 0,
@@ -148,8 +154,11 @@ def test_operations_totals_reconcile_with_stage_age_buckets_including_future_dat
         },
         {
             "wip_count": 4,
-            "age_over_30": 1,
-            "age_unavailable": 2,
+            "age_0_7": 0,
+            "age_8_14": 1,
+            "age_15_30": 2,
+            "age_over_30": 0,
+            "age_unavailable": 1,
             "overdue_count": 3,
             "escalation_count": 1,
             "target_days": 10,
@@ -163,6 +172,19 @@ def test_operations_totals_reconcile_with_stage_age_buckets_including_future_dat
         "escalation_records": 1,
         "sla_not_configured_stages": 1,
     }
+
+
+def test_operations_bucket_counts_reconcile_exactly_to_stage_wip():
+    stage_rows = [
+        {"wip_count": 5, "age_0_7": 1, "age_8_14": 1, "age_15_30": 1, "age_over_30": 1, "age_unavailable": 1},
+        {"wip_count": 3, "age_0_7": 0, "age_8_14": 1, "age_15_30": 0, "age_over_30": 2, "age_unavailable": 0},
+    ]
+    for row in stage_rows:
+        bucket_total = sum(
+            int(row.get(key) or 0)
+            for key in ("age_0_7", "age_8_14", "age_15_30", "age_over_30", "age_unavailable")
+        )
+        assert bucket_total == row["wip_count"]
 
 
 def test_bottleneck_ranking_uses_wip_then_p90_then_oldest_and_leaves_empty_stages_unranked():

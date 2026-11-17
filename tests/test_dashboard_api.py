@@ -1070,6 +1070,7 @@ def test_khs_register_filters_wip_by_stage_and_age_band(make_client):
     assert "register.process_status = 'ACTIVE'" in count_query
     assert "register.workflow_status <> 'completed'" in count_query
     assert "register.current_stage_code = %s" in count_query
+    assert "register.milestone_chronology_valid IS TRUE" in count_query
     assert "(%s::date - register.current_stage_started_on) >= 31" in count_query
     assert count_params[0] == "MI_GM_APPROVAL"
     assert len(count_params) == 3
@@ -1089,7 +1090,8 @@ def test_khs_register_filters_records_with_unavailable_stage_age(make_client):
     )
     assert (
         "register.current_stage_started_on IS NULL "
-        "OR register.current_stage_started_on > %s"
+        "OR register.current_stage_started_on > %s "
+        "OR register.milestone_chronology_valid IS FALSE"
     ) in query
     assert len(params) == 2
     assert params[0] == "MI_GM_APPROVAL"

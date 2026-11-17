@@ -328,6 +328,25 @@ SELECT
         ELSE NULL
     END AS current_stage_started_on,
 
+    NOT (
+        (r.request_date IS NOT NULL AND k.dispatch_date IS NOT NULL AND r.request_date > k.dispatch_date)
+        OR (k.dispatch_date IS NOT NULL AND k.boq_confirmation_date IS NOT NULL AND k.dispatch_date > k.boq_confirmation_date)
+        OR (k.boq_confirmation_date IS NOT NULL AND k.negotiation_date IS NOT NULL AND k.boq_confirmation_date > k.negotiation_date)
+        OR (k.negotiation_date IS NOT NULL AND k.final_negotiation_date IS NOT NULL AND k.negotiation_date > k.final_negotiation_date)
+        OR (k.final_negotiation_date IS NOT NULL AND k.mi_head_approval_date IS NOT NULL AND k.final_negotiation_date > k.mi_head_approval_date)
+        OR (k.mi_head_approval_date IS NOT NULL AND k.mi_sm_approval_date IS NOT NULL AND k.mi_head_approval_date > k.mi_sm_approval_date)
+        OR (k.mi_sm_approval_date IS NOT NULL AND k.mi_gm_approval_date IS NOT NULL AND k.mi_sm_approval_date > k.mi_gm_approval_date)
+        OR (k.mi_gm_approval_date IS NOT NULL AND k.legal_submission_date IS NOT NULL AND k.mi_gm_approval_date > k.legal_submission_date)
+        OR (k.legal_submission_date IS NOT NULL AND k.lp_circulation_start_date IS NOT NULL AND k.legal_submission_date > k.lp_circulation_start_date)
+        OR (k.lp_circulation_start_date IS NOT NULL AND k.lp_contract_team_completion_date IS NOT NULL AND k.lp_circulation_start_date > k.lp_contract_team_completion_date)
+        OR (k.lp_contract_team_completion_date IS NOT NULL AND k.lp_junior_manager_approval_date IS NOT NULL AND k.lp_contract_team_completion_date > k.lp_junior_manager_approval_date)
+        OR (k.lp_junior_manager_approval_date IS NOT NULL AND k.lp_senior_manager_approval_date IS NOT NULL AND k.lp_junior_manager_approval_date > k.lp_senior_manager_approval_date)
+        OR (k.lp_senior_manager_approval_date IS NOT NULL AND k.lp_gm_scm_approval_date IS NOT NULL AND k.lp_senior_manager_approval_date > k.lp_gm_scm_approval_date)
+        OR (k.lp_gm_scm_approval_date IS NOT NULL AND k.lp_completion_date IS NOT NULL AND k.lp_gm_scm_approval_date > k.lp_completion_date)
+        OR (k.lp_completion_date IS NOT NULL AND k.khs_inject_start_date IS NOT NULL AND k.lp_completion_date > k.khs_inject_start_date)
+        OR (k.khs_inject_start_date IS NOT NULL AND k.khs_inject_completion_date IS NOT NULL AND k.khs_inject_start_date > k.khs_inject_completion_date)
+    ) AS milestone_chronology_valid,
+
     (
         k.lp_circulation_start_date IS NOT NULL
         AND (
@@ -954,13 +973,15 @@ def _register_enriched(row, today=None, include_duration_history=False):
     if row.get("workflow_status") == "completed":
         stage_started = None
     record["current_stage_started_on"] = stage_started.isoformat() if stage_started else None
+    chronology_valid = record.get("milestone_chronology_valid", True) is not False
     age_end = _date_only(row.get("closure_date")) if row.get("process_status") == "NOT_PROCEEDED" else today
     record["current_stage_age_days"] = (
         (age_end - stage_started).days
-        if stage_started and age_end and age_end >= stage_started else None
+        if chronology_valid and stage_started and age_end and age_end >= stage_started else None
     )
     record["current_stage_age_status"] = (
-        "stopped" if row.get("process_status") == "NOT_PROCEEDED"
+        "history_inconsistent" if not chronology_valid
+        else "stopped" if row.get("process_status") == "NOT_PROCEEDED"
         else "completed" if row.get("workflow_status") == "completed" else "in_progress"
     )
     record["contract_lifecycle"] = _contract_lifecycle_data(row, today=today)
@@ -1349,7 +1370,8 @@ def khs_register():
             filters.append(
                 "(" + wip_only +
                 " AND (register.current_stage_started_on IS NULL "
-                "OR register.current_stage_started_on > %s))"
+                "OR register.current_stage_started_on > %s "
+                "OR register.milestone_chronology_valid IS FALSE))"
             )
             params.append(_jakarta_today())
         else:
@@ -1363,6 +1385,7 @@ def khs_register():
                 "(" + wip_only +
                 " AND register.current_stage_started_on IS NOT NULL "
                 "AND register.current_stage_started_on <= %s "
+                "AND register.milestone_chronology_valid IS TRUE "
                 "AND (%s::date - register.current_stage_started_on) " +
                 ranges[age_band] + ")"
             )
@@ -2845,6 +2868,7 @@ def _operations_stage_query(as_of):
                 CASE
                     WHEN register.current_stage_started_on IS NOT NULL
                      AND register.current_stage_started_on <= """ + as_of_sql + """
+                     AND register.milestone_chronology_valid IS TRUE
                     THEN (""" + as_of_sql + """ - register.current_stage_started_on)::int
                     ELSE NULL
                 END AS stage_age_days
@@ -2868,24 +2892,19 @@ def _operations_stage_query(as_of):
             (percentile_disc(0.9) WITHIN GROUP (ORDER BY wip.stage_age_days)
                 FILTER (WHERE wip.stage_age_days IS NOT NULL))::int AS p90_age_days,
             MAX(wip.stage_age_days)::int AS oldest_age_days,
-            policy.warning_after_days,
-            COALESCE(policy.target_days, stage.default_sla_days) AS target_days,
-            policy.escalation_after_days,
+            NULL::int AS warning_after_days,
+            stage.default_sla_days AS target_days,
+            NULL::int AS escalation_after_days,
             COUNT(wip.khs_id) FILTER (
-                WHERE COALESCE(policy.target_days, stage.default_sla_days) IS NOT NULL
-                  AND wip.stage_age_days >= COALESCE(policy.target_days, stage.default_sla_days)
+                WHERE stage.default_sla_days IS NOT NULL
+                  AND wip.stage_age_days >= stage.default_sla_days
             )::int AS overdue_count,
-            COUNT(wip.khs_id) FILTER (
-                WHERE policy.escalation_after_days IS NOT NULL
-                  AND wip.stage_age_days >= policy.escalation_after_days
-            )::int AS escalation_count
+            0::int AS escalation_count
         FROM khs_stage_config AS stage
         LEFT JOIN active_wip AS wip ON wip.current_stage_code = stage.stage_code
-        LEFT JOIN khs_stage_sla_policies AS policy ON policy.stage_code = stage.stage_code
         WHERE stage.is_active = TRUE
           AND stage.stage_code NOT IN ('COMPLETED', 'NOT_PROCEEDED')
-        GROUP BY stage.stage_code, stage.stage_name, stage.sequence_number, stage.default_sla_days,
-                 policy.warning_after_days, policy.target_days, policy.escalation_after_days
+        GROUP BY stage.stage_code, stage.stage_name, stage.sequence_number, stage.default_sla_days
         ORDER BY stage.sequence_number
     """
 
@@ -2899,26 +2918,6 @@ def operations_overview():
             with conn.cursor(row_factory=dict_row) as cur:
                 cur.execute(_operations_stage_query(today))
                 stage_rows = [dict(row) for row in cur.fetchall()]
-                cur.execute(
-                    """SELECT COUNT(*)::int AS total_open,
-                              COUNT(*) FILTER (WHERE due_date < %s)::int AS overdue,
-                              COUNT(*) FILTER (WHERE due_date = %s)::int AS due_today,
-                              COUNT(*) FILTER (WHERE due_date > %s)::int AS upcoming
-                       FROM khs_follow_ups f
-                       JOIN khs_items k ON k.khs_id=f.khs_id
-                       JOIN (""" + REGISTER_BASE_QUERY + """) AS register ON register.khs_id=k.khs_id
-                       WHERE f.status='OPEN' AND k.process_status='ACTIVE'
-                         AND f.stage_code=register.workflow_stage_code
-                         AND f.stage_key=CASE
-                             WHEN register.workflow_stage_code='LP_CIRCULATION'
-                               THEN COALESCE(register.lp_stage_key,'')
-                             WHEN register.workflow_stage_code='KHS_INJECTION'
-                               THEN CASE WHEN register.khs_inject_start_date IS NULL
-                                         THEN 'injection_preparation' ELSE 'khs_injection' END
-                             ELSE register.workflow_stage_code END""",
-                    (today, today, today),
-                )
-                follow_up_summary = dict(cur.fetchone())
         stage_rows = _rank_operations_stages(stage_rows)
         totals = _operations_stage_totals(stage_rows)
         for row in stage_rows:
@@ -2934,15 +2933,8 @@ def operations_overview():
             success=True,
             as_of_date=today.isoformat(),
             data={
-                "summary": {
-                    **totals,
-                    "follow_ups_open": follow_up_summary["total_open"],
-                    "follow_ups_due_today": follow_up_summary["due_today"],
-                    "follow_ups_overdue": follow_up_summary["overdue"],
-                    "follow_ups_upcoming": follow_up_summary["upcoming"],
-                },
+                "summary": totals,
                 "stages": [_row_dict(row) for row in stage_rows],
-                "follow_ups": follow_up_summary,
                 "aging_bucket_note": "Aging buckets (0-7, 8-14, 15-30, 31+ days) are descriptive, not SLA targets.",
                 "bottleneck_basis": "Occupied stages are ranked by WIP count, then P90 stage age, then oldest stage age. This is an operational triage order, not proof of root cause.",
             },

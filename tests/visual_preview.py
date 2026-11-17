@@ -462,6 +462,38 @@ def main() -> int:
                 raise AssertionError("WIP analytics did not return active work-in-progress records.")
             if page.locator("#operationsStageBody .bottleneck-rank").count() == 0:
                 raise AssertionError("No bottleneck ranks were rendered for occupied workflow stages.")
+
+            # Every active WIP record must reconcile to exactly one age bucket.
+            bucket_totals = {"0_7": 0, "8_14": 0, "15_30": 0, "31_plus": 0, "unavailable": 0}
+            stage_rows = page.locator("#operationsStageBody tr")
+            for index in range(stage_rows.count()):
+                cells = stage_rows.nth(index).locator("td")
+                if cells.count() < 10:
+                    continue
+                wip_count = int(cells.nth(1).locator("button").inner_text().strip())
+                bucket_cells = [("0_7", 4), ("8_14", 5), ("15_30", 6), ("31_plus", 7), ("unavailable", 8)]
+                stage_bucket_total = 0
+                for band, cell_index in bucket_cells:
+                    value = int(cells.nth(cell_index).locator("button").inner_text().strip())
+                    bucket_totals[band] += value
+                    stage_bucket_total += value
+                if stage_bucket_total != wip_count:
+                    raise AssertionError(
+                        f"Age buckets do not reconcile for {cells.nth(0).inner_text()}: "
+                        f"{stage_bucket_total} buckets vs {wip_count} WIP."
+                    )
+                median_text = cells.nth(2).inner_text().strip().removesuffix("d")
+                p90_text = cells.nth(3).inner_text().strip().removesuffix("d")
+                oldest_text = cells.nth(9).inner_text().strip().removesuffix("d")
+                if median_text != "—":
+                    median, p90, oldest = int(median_text), int(p90_text), int(oldest_text)
+                    if not (median <= p90 <= oldest):
+                        raise AssertionError(
+                            f"Percentile/oldest ordering is invalid for {cells.nth(0).inner_text()}."
+                        )
+            if any(value == 0 for value in bucket_totals.values()):
+                raise AssertionError(f"Visual fixtures did not exercise every age bucket: {bucket_totals}")
+
             with page.expect_response(
                 lambda response: "/api/dashboard/khs?" in response.url
                 and "age_band=31_plus" in response.url
@@ -479,7 +511,33 @@ def main() -> int:
                 raise AssertionError("The active register age-band filter was not displayed.")
             if "MI GM APPROVAL" not in active_filters:
                 raise AssertionError("The active register stage filter was not displayed.")
-            print("WIP analytics browser check passed: active WIP, bottleneck rank, unconfigured SLA state, and stage + 31+ day register drill-down.")
+
+            page.locator('a.nav-link[data-page="workflow"]').click()
+            page.locator("#page-workflow.active").wait_for(state="visible", timeout=10_000)
+            unavailable_drilldown = page.locator(
+                '#operationsStageBody [data-operations-stage="NEGOTIATION"][data-operations-age-band="unavailable"]'
+            )
+            unavailable_drilldown.wait_for(state="visible", timeout=10_000)
+            with page.expect_response(
+                lambda response: "/api/dashboard/khs?" in response.url
+                and "age_band=unavailable" in response.url
+                and "stage=NEGOTIATION" in response.url
+            ) as unavailable_filter_response:
+                unavailable_drilldown.click()
+            if unavailable_filter_response.value.status != 200:
+                raise AssertionError(
+                    f"Inconsistent-history register drill-down returned {unavailable_filter_response.value.status}."
+                )
+            page.locator("#page-register.active").wait_for(state="visible", timeout=10_000)
+            invalid_row = page.locator('#registerBody [data-view-khs="KHS-AGING-INVALID"]')
+            invalid_row.wait_for(state="visible", timeout=10_000)
+            if "History needs review" not in invalid_row.locator("xpath=ancestor::tr").inner_text():
+                raise AssertionError("Chronologically inconsistent history was not labelled for review.")
+
+            print(
+                "WIP analytics browser check passed: bucket reconciliation, median/P90/oldest ordering, "
+                "all five aging bands, normal 31+ drill-down, and inconsistent-history drill-down."
+            )
             try:
                 # Phase 2 browser validation: reject an out-of-order date, then
                 # record the next allowed MI milestone and verify the derived next step.

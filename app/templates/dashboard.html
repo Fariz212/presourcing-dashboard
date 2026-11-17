@@ -196,7 +196,7 @@
   <div class="operations-kpi-grid">
     <article class="operations-kpi"><span>Active WIP</span><strong id="opsActiveWip">—</strong><small>Open workflow records</small></article>
     <article class="operations-kpi"><span>Over 30 days</span><strong id="opsOver30">—</strong><small>Descriptive aging bucket</small></article>
-    <article class="operations-kpi"><span>Age unavailable</span><strong id="opsAgeUnavailable">—</strong><small>Missing stage start date</small></article>
+    <article class="operations-kpi"><span>Age unavailable</span><strong id="opsAgeUnavailable">—</strong><small>Missing, future or inconsistent stage-start history</small></article>
     <article class="operations-kpi"><span>SLA overdue</span><strong id="opsSlaOverdue">—</strong><small>Only configured policies</small></article>
     <article class="operations-kpi"><span>Escalation due</span><strong id="opsEscalations">—</strong><small>Only configured policies</small></article>
     <article class="operations-kpi"><span>Follow-ups overdue</span><strong id="opsFollowUpsOverdue">—</strong><small>In-app reminders</small></article>
@@ -204,7 +204,7 @@
   <div class="panel operations-table-panel">
     <div class="panel-heading"><div><h3>Stage aging profile</h3><p>Median, P90 and oldest age help identify where work accumulates.</p></div><span class="status-badge status-neutral" id="slaConfigurationStatus">SLA not configured</span></div>
     <div class="table-wrap"><table class="operational-table"><thead><tr><th>WORKFLOW STAGE / BOTTLENECK RANK</th><th>WIP</th><th>MEDIAN</th><th>P90</th><th>0–7 DAYS</th><th>8–14 DAYS</th><th>15–30 DAYS</th><th>31+ DAYS</th><th>AGE UNAVAILABLE</th><th>OLDEST</th><th>SLA SIGNAL</th><th>OVERDUE</th><th>ESCALATION</th></tr></thead><tbody id="operationsStageBody"><tr><td colspan="13" class="table-message">Loading aging profile…</td></tr></tbody></table></div>
-    <p class="muted operations-note">Select a stage or any age count to open the matching KHS Register worklist. Aging buckets are descriptive, not SLA targets. Configure stage SLA thresholds only after the responsible business owners approve them. Missing start dates are not assigned an estimated age.</p>
+    <p class="muted operations-note">Select a stage or any age count to open the matching KHS Register worklist. Aging buckets are descriptive, not SLA targets. Configure stage SLA thresholds only after the responsible business owners approve them. Missing, future-dated or chronologically inconsistent stage history is not assigned an estimated age.</p>
   </div>
   <div class="panel operations-table-panel">
     <div class="panel-heading"><div><h3>Follow-up &amp; escalation inbox</h3><p>Scheduled follow-ups due today, overdue, or upcoming for active KHS records.</p></div><button class="secondary-button" id="refreshOperationsButton" type="button">Refresh operations</button></div>
